@@ -1,0 +1,49 @@
+# check a pull request that adds or changes a community contribution (contrib/OM-<ulid>/{place.geojson,meta.json}):
+# runs scripts/validate_contribution.py on every contribution directory the PR touches. a rejected contribution
+# fails the check; warnings (name collisions, repaired geometry) are printed in the log only. see CONTRIBUTING.md.
+#
+# runs on a GitHub-hosted runner with a read-only token and no secrets, because a PR (possibly from a fork) supplies
+# the files being parsed. it never publishes anything: the build that stamps merged contributions into the
+# `contributions` collection is a maintainer step (future work).
+name: validate-contribution
+
+on:
+  pull_request:
+    paths:
+      - 'contrib/**'
+      - 'scripts/validate_contribution.py'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: changed contribution directories
+        id: changed
+        run: |
+          base="origin/${{ github.base_ref }}"
+          # top-level entries of contrib/ the PR touches; a deleted directory is not validated
+          git diff --name-only "$base"...HEAD -- contrib/ | cut -d/ -f1-2 | sort -u > changed_dirs.txt
+          : > to_check.txt
+          while read -r d; do
+            if [ -d "$d" ]; then
+              echo "$d" >> to_check.txt
+            elif [ -f "$d" ] && [ "$d" != "contrib/README.md" ]; then
+              echo "::error::$d is a file; contributions are directories contrib/OM-<ulid>/"
+              exit 1
+            fi
+          done < changed_dirs.txt
+          echo "contributions to check:"; cat to_check.txt
+          echo "count=$(wc -l < to_check.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: validate
+        if: steps.changed.outputs.count != '0'
+        run: xargs uv run --group dev python scripts/validate_contribution.py < to_check.txt

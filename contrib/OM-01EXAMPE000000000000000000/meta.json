@@ -1,0 +1,10 @@
+{
+  "name": "Example Reef (documentation example)",
+  "place_type": "habitat",
+  "license": "CC0-1.0",
+  "attribution": "Example Contributor, documentation example only",
+  "contributor_orcid": "0000-0002-1825-0097",
+  "source_url": "https://example.org/example-reef",
+  "description": "A made-up 0.1 degree box off Point Conception that shows the contribution format. Not a real place.",
+  "example": true
+}
