@@ -216,3 +216,20 @@ def test_local_mode_cli(tmp_path):
 @pytest.mark.parametrize("n,s", [(0, "0 B"), (3, "3 B"), (2048, "2 KB"), (4300000, "4.1 MB"), (int(21.3 * 1024 ** 3), "21.3 GB")])
 def test_fmt_size(n, s):
     assert bp.fmt_size(n) == s
+
+
+def test_parent_lists_every_child_directory():
+    """regression: a parent page lists ALL immediate child prefixes, however many (and however
+    large) the siblings are -- gazetteer/ must show every collection, not just the biggest two."""
+    names = [f"coll_{i:02d}" for i in range(30)]
+    objs = [bp.Obj(f"gazetteer/{n}/file.json", 10, "2026-10-08T10:00:00+00:00") for n in names]
+    # two siblings big enough to span many listing pages
+    objs += [bp.Obj(f"gazetteer/{b}/sub{j}/f{k}.tif", 1, "2026-10-08T10:00:00+00:00")
+             for b in ("rasters", "stats") for j in range(40) for k in range(30)]
+    objs += [bp.Obj("gazetteer/README.md", 5, "2026-10-08T10:00:00+00:00")]
+    pg = bp.build_pages(objs, {}, ["gazetteer/"])
+    h = pg["gazetteer/index.html"]
+    dirs = re.findall(r"<tr><td><a href='" + re.escape(SITE) + r"/gazetteer/([^/']+)/'>", h)
+    assert dirs == sorted(names + ["rasters", "stats"])
+    for d in dirs:
+        assert f"gazetteer/{d}/index.html" in pg
