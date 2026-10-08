@@ -25,6 +25,9 @@ def fetch_source(src: dict, cache: Path, delay: float = 0.5, s=None) -> SourceRe
     return fetch.fetch_shapefile_zip(src, cache, s=s)
   if src["kind"] == "calcofi_positions":
     return calcofi.fetch_calcofi(src, cache, s=s)
+  if src["kind"] == "wfs":
+    from .fetch_wfs import fetch_wfs   # OGC WFS 2.0 GeoJSON (Marine Regions product layers)
+    return fetch_wfs(src, delay=max(delay, 1.0), s=s)
   raise ValueError(f"unknown source kind {src['kind']}")
 
 
@@ -124,6 +127,9 @@ def detect(cfg: dict, base_url: str, s=None) -> dict:
       if p["data_last_edit"] is None:               # no edit date served: compare the payload itself
         p["checksum"] = fetch.fetch_arcgis(src, s=s).checksum
       probes.append(p)
+    elif src["kind"] == "wfs":
+      from .fetch_wfs import probe_wfs      # layer title (product version) + feature count
+      probes.append(probe_wfs(s, src))
     else:
       probes.append(fetch.probe_shapefile_zip(s, src))
   reason = changed_sources(cfg, published, probes)

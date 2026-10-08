@@ -1,0 +1,60 @@
+# mr_ecs: Marine Regions (VLIZ) Extended Continental Shelves (147 features), CC BY 4.0
+slug: mr_ecs
+title: Marine Regions Extended Continental Shelves
+description: >-
+  Extended Continental Shelves (legal continental shelf beyond 200 NM), version 2 (2024-10-10), from the VLIZ
+  Maritime Boundaries Geodatabase: areas submitted to or recommended by the UN Commission on the Limits of the
+  Continental Shelf (CLCS), deposited with DOALOS, or claimed by non-parties or through other mechanisms
+  (`pol_type`). 147 features. Marine Regions states the data has no legal value whatsoever and is not meant to
+  be used for legal, economic (resource exploration) or navigational purposes; it expresses no opinion on the
+  legal status of any country, territory or area or its delimitation. Source: Marine Regions WFS layer
+  MarineRegions:ecs (geo.vliz.be). Cite as: Flanders Marine Institute (2024). Maritime Boundaries Geodatabase:
+  Extended Continental Shelves, version 2. Available online at https://www.marineregions.org/.
+  https://doi.org/10.14284/697.
+authority: MRGID
+place_type: ecs
+version: 1.0.0
+cadence: monthly
+license: CC-BY-4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+license_note: >-
+  Marine Regions licenses its products under CC BY 4.0 since Maritime Boundaries version 11 (2019):
+  https://www.marineregions.org/disclaimer.php
+attribution: >-
+  Flanders Marine Institute (2024). Maritime Boundaries Geodatabase: Extended Continental Shelves, version 2.
+  Available online at https://www.marineregions.org/. https://doi.org/10.14284/697. Database: Flanders Marine
+  Institute (2026): MarineRegions.org. Available online at www.marineregions.org. Consulted on 2026-10-08. CC BY
+  4.0. Processed by Ocean Metrics.
+providers:
+  - {name: Flanders Marine Institute (VLIZ), roles: [producer, licensor], url: "https://www.marineregions.org/"}
+source_page: https://www.marineregions.org/downloads.php
+place_id:
+  template: "MRGID:{mrgid}{mr_part}"
+  pattern: '^MRGID:\d+(:[a-z0-9-]+)?$'
+name: "{geoname}"
+source_id: "{mrgid}"
+status:
+  value: current
+  source: https://www.marineregions.org/downloads.php
+  date: data_last_edit
+column_docs:
+  mrgid: Marine Regions Geographic IDentifier of the record (integer); resolves at the mrgid_uri
+  mrgid_uri: canonical Marine Regions URI of the record (http://marineregions.org/mrgid/{mrgid}); content-negotiated
+  mr_product: Marine Regions data product (Maritime Boundaries Geodatabase layer) the feature comes from
+  mr_product_version: version of that product
+  mr_product_doi: DOI of that product version (https://doi.org/{doi}); cite it
+  mr_license: licence of the product (CC-BY-4.0)
+  mr_modified: release date of the product version (the WFS serves no per-feature edit date)
+  mr_part: "':'-suffix that keeps place_id unique when two features share an MRGID; empty for the first or only feature"
+sources:
+  - kind: wfs
+    url: https://geo.vliz.be/geoserver/MarineRegions/wfs
+    type_name: MarineRegions:ecs
+    expected_count: 147
+    page_size: 10
+    mr:
+      product: "Maritime Boundaries Geodatabase: Extended Continental Shelves"
+      version: "2"
+      doi: "10.14284/697"
+      license: CC-BY-4.0
+      released: "2024-10-10"

@@ -18,6 +18,10 @@ def _unwrap_ring(coords: np.ndarray) -> np.ndarray:
   xy = np.array(coords, dtype=float)[:, :2]
   dx = np.diff(xy[:, 0])
   steps = np.where(dx > 180, -360.0, np.where(dx < -180, 360.0, 0.0))
+  # a -180 -> 180 edge along a pole (y = +/-90) is a real edge of the planar polygon (the cap around the pole), not a
+  # dateline jump: keep it, so the ring stays closed (Marine Regions High Seas / Arctic Ocean are drawn this way)
+  at_pole = (np.abs(xy[:-1, 1]) >= 90 - 1e-9) & (np.abs(xy[1:, 1]) >= 90 - 1e-9)
+  steps = np.where(at_pole, 0.0, steps)
   xy[1:, 0] += np.cumsum(steps)
   if abs(xy[-1, 0] - xy[0, 0]) > 1e-9:
     raise NotImplementedError("ring encircles a pole; antimeridian split is not supported for it")
@@ -107,9 +111,11 @@ def max_edge_span(geom) -> float:
   span = 0.0
   for poly in _polygons(geom):
     for ring in [poly.exterior, *poly.interiors]:
-      xs = np.asarray(ring.coords)[:, 0]
-      if len(xs) > 1:
-        span = max(span, float(np.abs(np.diff(xs)).max()))
+      xy = np.asarray(ring.coords)
+      if len(xy) > 1:
+        dx = np.abs(np.diff(xy[:, 0]))
+        at_pole = (np.abs(xy[:-1, 1]) >= 90 - 1e-9) & (np.abs(xy[1:, 1]) >= 90 - 1e-9)  # pole edges are real edges
+        span = max(span, float(np.where(at_pole, 0.0, dx).max()))
   return span
 
 

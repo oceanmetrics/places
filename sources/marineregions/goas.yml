@@ -1,0 +1,74 @@
+# mr_goas: Marine Regions (VLIZ) Global Oceans and Seas (10 features), CC BY 4.0
+slug: mr_goas
+title: Marine Regions Global Oceans and Seas
+description: >-
+  Global Oceans and Seas, version 1 (2021-12-14): the boundaries between the 10 main oceans and seas (Arctic,
+  North and South Atlantic, North and South Pacific, Southern and Indian oceans, Baltic Sea, Mediterranean
+  Region, South China and Eastern Archipelagic Seas), largely from IHO Special Publication 23 (1953). The layer
+  carries no MRGID; each feature is keyed to the gazetteer record of the same name and extent (IHO Sea Area or
+  General Sea Area), see `mrgid`. Marine Regions states the data has no legal value whatsoever and is not
+  meant to be used for legal, economic (resource exploration) or navigational purposes; it expresses no opinion
+  on the legal status of any country, territory or area or its delimitation. Source: Marine Regions WFS layer
+  MarineRegions:goas (geo.vliz.be). Cite as: Flanders Marine Institute (2021). Global Oceans and Seas, version
+  1. Available online at https://www.marineregions.org/. https://doi.org/10.14284/542.
+authority: MRGID
+place_type: ocean_sea
+version: 1.0.0
+cadence: monthly
+license: CC-BY-4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+license_note: >-
+  Marine Regions licenses its products under CC BY 4.0 since Maritime Boundaries version 11 (2019):
+  https://www.marineregions.org/disclaimer.php
+attribution: >-
+  Flanders Marine Institute (2021). Global Oceans and Seas, version 1. Available online at
+  https://www.marineregions.org/. https://doi.org/10.14284/542. Database: Flanders Marine Institute (2026):
+  MarineRegions.org. Available online at www.marineregions.org. Consulted on 2026-10-08. CC BY 4.0. Processed by
+  Ocean Metrics.
+providers:
+  - {name: Flanders Marine Institute (VLIZ), roles: [producer, licensor], url: "https://www.marineregions.org/"}
+source_page: https://www.marineregions.org/downloads.php
+place_id:
+  template: "MRGID:{mrgid}{mr_part}"
+  pattern: '^MRGID:\d+(:[a-z0-9-]+)?$'
+name: "{name}"
+source_id: "{mrgid}"
+status:
+  value: current
+  source: https://www.marineregions.org/downloads.php
+  date: data_last_edit
+column_docs:
+  mrgid: Marine Regions Geographic IDentifier of the record (integer); resolves at the mrgid_uri
+  mrgid_uri: canonical Marine Regions URI of the record (http://marineregions.org/mrgid/{mrgid}); content-negotiated
+  mr_product: Marine Regions data product (Maritime Boundaries Geodatabase layer) the feature comes from
+  mr_product_version: version of that product
+  mr_product_doi: DOI of that product version (https://doi.org/{doi}); cite it
+  mr_license: licence of the product (CC-BY-4.0)
+  mr_modified: release date of the product version (the WFS serves no per-feature edit date)
+  mr_part: "':'-suffix that keeps place_id unique when two features share an MRGID; empty for the first or only feature"
+sources:
+  - kind: wfs
+    url: https://geo.vliz.be/geoserver/MarineRegions/wfs
+    type_name: MarineRegions:goas
+    expected_count: 10
+    page_size: 10
+    sort_by: name
+    mrgid:
+      lookup_field: name
+      map:
+        Arctic Ocean: 1906
+        Southern Ocean: 1907
+        North Atlantic Ocean: 1912
+        South Atlantic Ocean: 1914
+        North Pacific Ocean: 1908
+        South Pacific Ocean: 1910
+        Indian Ocean: 1904
+        Baltic Sea: 2401
+        Mediterranean Region: 4278
+        South China and Easter Archipelagic Seas: 4331
+    mr:
+      product: "Global Oceans and Seas"
+      version: "1"
+      doi: "10.14284/542"
+      license: CC-BY-4.0
+      released: "2021-12-14"
