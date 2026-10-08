@@ -27,3 +27,7 @@ dist/
 .DS_Store
 .env
 .claude/
+.claude/notes
+.claude/plans
+.claude/plans_todo
+.claude/plans_done
