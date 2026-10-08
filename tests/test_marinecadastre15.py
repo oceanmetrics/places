@@ -1,5 +1,5 @@
-"""the MarineCadastre first-15 collections: id patterns per authority, licence on every row, line geometry rules,
-and checks on the staged outputs (skipped for a collection that was not built)."""
+"""the MarineCadastre first-15 collections (13 here: the MPA Inventory is `mpa_inventory`, see test_mpa_gebco.py): id
+patterns per authority, licence on every row, line geometry rules, and checks on the staged outputs (skipped for a collection that was not built)."""
 import re
 
 import pyarrow.parquet as pq
@@ -22,7 +22,7 @@ CFGS = load_all(ROOT / "sources")
 
 # slug -> (features served 2026-10-08, geometry type id: 5 MultiLineString / 6 MultiPolygon)
 MC15 = {
-  "noaa_sanctuaries": (47, 6), "noaa_mpa_inventory": (981, 6), "noaa_nerrs": (30, 6), "noaa_marine_monuments": (32, 6),
+  "noaa_sanctuaries": (47, 6), "noaa_nerrs": (30, 6), "noaa_marine_monuments": (32, 6),
   "noaa_state_lateral_boundaries": (19, 5), "noaa_state_submerged_lands": (483, 6), "noaa_maritime_limits": (246, 5),
   "noaa_hapc": (237, 6), "noaa_esa_critical_habitat": (2114, 6), "fws_critical_habitat_final": (803, 6),
   "fws_critical_habitat_proposed": (70, 6), "noaa_vessel_routing_measures": (327, 6), "noaa_submarine_cables": (2816, 6),
@@ -31,7 +31,6 @@ MC15 = {
 # slug -> (authority, a valid example id, an id that must not match)
 IDS = {
   "noaa_sanctuaries": ("ONMS", "ONMS:chumash-heritage-national-marine-sanctuary", "ONMS:Chumash"),
-  "noaa_mpa_inventory": ("MPA", "MPA:AK25", "MPA:"),
   "noaa_nerrs": ("NERRS", "NERRS:ACE", "NERRS:ace"),
   "noaa_marine_monuments": ("MC", "MC:monuments:mariana-trench", "MC:monument:x"),
   "noaa_state_lateral_boundaries": ("MC", "MC:state_lateral:23-33", "MC:state_lateral:23 - 33"),
@@ -56,8 +55,13 @@ def staged(slug):
 
 # config rules --------------------------------------------------------------------------------------------------------
 
-def test_all_fourteen_configs_are_present_and_valid():
-  assert set(MC15) <= set(CFGS)
+def test_all_thirteen_configs_are_present_and_valid():
+  assert len(MC15) == 13 and set(MC15) <= set(CFGS)
+
+
+def test_noaa_mpa_inventory_is_retired_in_favour_of_mpa_inventory():
+  # same 981 MPA Center polygons; mpa_inventory (MPAINV: ids) is the one collection
+  assert "noaa_mpa_inventory" not in CFGS and CFGS["mpa_inventory"]["authority"] == "MPAINV"
 
 
 @pytest.mark.parametrize("slug", sorted(MC15))
@@ -251,3 +255,12 @@ def test_staged_nmfs_critical_habitat_statuses_are_the_three_source_values():
   d = staged("noaa_esa_critical_habitat")
   st = set(pq.read_table(d / "places.parquet", columns=["status"]).column("status").to_pylist())
   assert st == {"final", "proposed", "designated"}
+
+
+def test_maritime_limits_description_carries_the_not_for_legal_use_notice():
+  # the item's own warning must travel with the collection (STAC description), not only the licence note
+  assert "NOT FOR LEGAL USE" in CFGS["noaa_maritime_limits"]["description"]
+  d = STAGING / "noaa_maritime_limits" / "collection.json"
+  if d.exists():
+    import json
+    assert "NOT FOR LEGAL USE" in json.loads(d.read_text())["description"]

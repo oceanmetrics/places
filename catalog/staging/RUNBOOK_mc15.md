@@ -10,7 +10,7 @@ Built on the Mac mini (tmux `om`, windows `mc15` and `mc15b`, log `~/Github/ocea
 | digest # | layer | outcome |
 |---|---|---|
 | 1 | National Marine Sanctuaries | `noaa_sanctuaries` |
-| 2 | NOAA MPA Inventory | `noaa_mpa_inventory` (see the duplicate note below) |
+| 2 | NOAA MPA Inventory | RETIRED here: built as `mpa_inventory` (`MPAINV:` ids, RUNBOOK_mpa_gebco.md); see the retirement note below |
 | 3 | National Estuarine Research Reserves | `noaa_nerrs` |
 | 4 | Marine National Monuments | `noaa_marine_monuments` |
 | 5 | State waters | two collections: `noaa_state_lateral_boundaries` (lines) and `noaa_state_submerged_lands` (polygons) |
@@ -30,7 +30,6 @@ Built on the Mac mini (tmux `om`, windows `mc15` and `mc15b`, log `~/Github/ocea
 | slug | authority / id | place_type | n | parquet | pmtiles | build (mini) | licence review |
 |---|---|---|---|---|---|---|---|
 | `noaa_sanctuaries` | `ONMS:<site>[:<section>]` | protected_area | 47 | 5.5 MB | 3.1 MB | 14 s | clear |
-| `noaa_mpa_inventory` | `MPA:<Site_ID>` | protected_area | 981 | 68.8 MB | 21.7 MB | 198 s | REVIEW: compiled from state/other agencies |
 | `noaa_nerrs` | `NERRS:<sitecode>` | protected_area | 30 | 1.9 MB | 0.5 MB | 2 s | clear |
 | `noaa_marine_monuments` | `MC:monuments:<site>` | protected_area | 32 | 2.1 MB | 2.5 MB | 16 s | clear |
 | `noaa_state_lateral_boundaries` | `MC:state_lateral:<fips-fips>` | jurisdiction (lines) | 19 | 30 kB | 17 kB | 1 s | clear |
@@ -64,7 +63,6 @@ NERRS, monuments, lateral boundaries, submerged lands, vessel routing, cables, d
 
 | slug | item `licenseInfo` | `accessInformation` | note |
 |---|---|---|---|
-| `noaa_mpa_inventory` | not for navigation; MPA Center not liable; not legal documents; not better than the sources | NOAA ONMS MPA Center | boundaries come from state and other managers: Tier 1 for the NOAA compilation, confirm before publishing |
 | `noaa_maritime_limits` | "NOT FOR LEGAL USE ... internal purposes ... not the official depiction" | DOC / NOAA / NOS / Coast Survey | surface the warning in the UI; item last modified 2020, data v4.0 (2013) |
 | `noaa_hapc` | no-warranty disclaimer only | long NOAA Fisheries / Councils list (shortened in the row, full in provenance) | no explicit PD statement; federal work; confirm |
 | `noaa_esa_critical_habitat` | "not the official legal definitions" | EMPTY | attribution falls back to "NOAA Fisheries ..." (the item owner is a NOAA account): unverified, per the digest's fallback rule |
@@ -89,8 +87,9 @@ NERRS, monuments, lateral boundaries, submerged lands, vessel routing, cables, d
    (Alaska and Marianas limits cross the dateline: staged bbox -180..180).
 5. **Paging**: the NOAA/Esri servers time out on large polygon pages; `page_size` is 200 (25 for FWS), 0.5 s between pages (about 2 req/s or less).
    Raw pages are cached in `cache/` on the mini (FWS final alone is about 800 MB; delete after publishing).
-6. **Duplicate source**: another session staged `catalog/staging/mpa_inventory` (RUNBOOK_mpa_gebco.md) from the same MPA Center data; `noaa_mpa_inventory`
-   here comes from the MarineCadastre item (`eb2b36ae...`, 981 features). Publish only one of them.
+6. **RETIRED 2026-10-08: `noaa_mpa_inventory`** (`MPA:` ids, same 981 MPA Center polygons) duplicated `mpa_inventory` (`MPAINV:` ids, the plan's
+   prefix, kept). Its yml `sources/noaa/mpa_inventory.yml` now holds the `mpa_inventory` config, its `catalog/staging/noaa_mpa_inventory/` was deleted,
+   and its tests removed (this collection set is now 13 layers).
 7. **Heavy files**: `fws_critical_habitat_final` (245 MB parquet / 75 MB tiles) and `fws_critical_habitat_proposed` (71 MB for 70 features) carry
    very detailed geometry for species that are mostly terrestrial; consider simplification or leaving them out of the first publish.
 8. The first-15 list's cables are called lines; the service serves polygons (cable areas).

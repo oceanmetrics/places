@@ -7,11 +7,23 @@ from gazetteer.config import load_all, validate_config
 
 EXPECTED = {"boem_wind_leases", "boem_wind_planning_rescinded", "boem_ocs_planning", "boem_program_11_draft",
             "boem_pacific_og_leases", "noaa_aoa_socal"}
+ALL = EXPECTED | {"calcofi_lines", "calcofi_stations", "fws_critical_habitat_final", "fws_critical_habitat_proposed",
+                  "gebco_undersea", "mpa_inventory", "mr_contiguous_zones", "mr_ecs", "mr_eez", "mr_goas", "mr_high_seas",
+                  "mr_territorial_seas", "mr_world_heritage_marine", "noaa_esa_critical_habitat", "noaa_hapc",
+                  "noaa_marine_monuments", "noaa_maritime_limits", "noaa_nerrs", "noaa_sanctuaries",
+                  "noaa_state_lateral_boundaries", "noaa_state_submerged_lands", "noaa_submarine_cables",
+                  "noaa_vessel_routing_measures", "usace_danger_zones"}
 CFGS = load_all(ROOT / "sources")
 
 
 def test_six_collections_are_configured():
   assert EXPECTED <= set(CFGS)  # other collections may be added alongside
+
+
+def test_the_whole_collection_set_is_configured_and_retired_slugs_are_gone():
+  assert len(ALL) == 30 and ALL <= set(CFGS)
+  assert "noaa_mpa_inventory" not in CFGS  # retired: duplicate of mpa_inventory (MPAINV: ids)
+  assert len({c["authority"] + ":" + c["slug"] for c in CFGS.values()}) == len(CFGS)
 
 
 @pytest.mark.parametrize("slug", sorted(EXPECTED))
