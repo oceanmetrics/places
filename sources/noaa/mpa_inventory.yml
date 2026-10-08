@@ -34,7 +34,6 @@ status:
   date: data_last_edit
 # a small tile payload (every property is repeated in each tile a polygon touches); the full record is in the GeoParquet
 spatial_sort: true
-row_group_size: 100
 tile_properties: [place_id, name, place_type, status, source_id, State, Gov_Level, Prot_Lvl, Fish_Rstr, Mgmt_Agen]
 column_docs:
   place_id: "prefixed, unique id: MPAINV:<Site_ID> (e.g. MPAINV:CA123)"

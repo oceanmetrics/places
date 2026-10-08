@@ -138,7 +138,7 @@ def build_rows(cfg: dict, results: list[SourceResult], version: str | None = Non
   all_ids = [r["place_id"] for r in rows]
   if len(set(all_ids)) != len(all_ids):
     raise ValueError("place_id is not unique across the collection's sources")
-  if cfg.get("spatial_sort"):     # cluster neighbours so a reader can skip row groups (set `row_group_size` to match)
+  if cfg.get("spatial_sort"):     # cluster neighbours so a reader can skip row groups (row groups are tiny, see auto_row_group_size)
     rows = [rows[i] for i in morton_order([r["_geom"] for r in rows])]
   return rows, fields, dropped
 
@@ -180,10 +180,42 @@ def geo_metadata(table: pa.Table) -> dict:
     "covering": {"bbox": {k: ["bbox", k] for k in ("xmin", "ymin", "xmax", "ymax")}}}}}
 
 
-def write_geoparquet(table: pa.Table, path: Path, provenance: dict, row_group_size: int = 2000) -> dict:
-  """write GeoParquet 1.1 (zstd) with the geo metadata and the provenance record; returns the geo metadata."""
+# row groups ----
+# a place lookup is a range read: the client fetches the footer, keeps the row groups whose place_id min/max admit the id,
+# and reads those. so groups must be small (each group's place_id range near-exact, its bytes small), but every group
+# adds ~ncols x FOOTER_BYTES_PER_COLUMN to the footer that every reader downloads once. auto_row_group_size picks the
+# smallest group (1, 2, 3, ... rows) that keeps the footer under FOOTER_BUDGET; the row ORDER is untouched (spatial_sort
+# keeps the per-group bbox tight).
+FOOTER_BUDGET = 1 << 20           # at most ~1 MB of footer, and at most FOOTER_SHARE of the table's own bytes
+FOOTER_SHARE = 0.10
+FOOTER_BYTES_PER_COLUMN = 70      # measured: ~3.9 kB of footer per row group of the 55-column mpa_inventory
+STATS_COLUMNS = ["place_id", "bbox.xmin", "bbox.ymin", "bbox.xmax", "bbox.ymax"]   # the only statistics a reader prunes on
+
+
+def auto_row_group_size(table: pa.Table) -> int:
+  """rows per row group: as few as the footer budget allows (1 for most polygon/line layers), all rows when tiny.
+
+  budget = min(FOOTER_BUDGET, FOOTER_SHARE x table bytes); groups = budget / (columns x FOOTER_BYTES_PER_COLUMN);
+  rows per group = ceil(rows / groups). a table whose budget cannot pay for a second group stays one group.
+  """
+  n = table.num_rows
+  if n <= 1:
+    return max(n, 1)
+  budget = min(FOOTER_BUDGET, FOOTER_SHARE * table.nbytes)
+  groups = int(budget // (table.num_columns * FOOTER_BYTES_PER_COLUMN))
+  return n if groups <= 1 else -(-n // min(groups, n))
+
+
+def write_geoparquet(table: pa.Table, path: Path, provenance: dict, row_group_size: int | None = None) -> dict:
+  """write GeoParquet 1.1 (zstd) with the geo metadata and the provenance record; returns the geo metadata.
+
+  `row_group_size` None picks auto_row_group_size (small groups, so a getPlace by place_id is a real range read);
+  a config's `row_group_size` overrides it. pyarrow writes any group size (DuckDB cannot go below 2048 rows).
+  statistics are kept only for place_id and the bbox fields, which keeps the footer small.
+  """
   geo = geo_metadata(table)
   meta = {b"geo": json.dumps(geo).encode(), b"gazetteer:provenance": json.dumps(provenance).encode()}
   path.parent.mkdir(parents=True, exist_ok=True)
-  pq.write_table(table.replace_schema_metadata(meta), path, compression="zstd", row_group_size=row_group_size)
+  pq.write_table(table.replace_schema_metadata(meta), path, compression="zstd",
+                 row_group_size=row_group_size or auto_row_group_size(table), write_statistics=STATS_COLUMNS)
   return geo

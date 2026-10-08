@@ -91,3 +91,46 @@ def test_check_parquet_passes_a_good_file_and_flags_a_missing_licence(tmp_path):
   bad = tmp_path / "bad.parquet"
   write_geoparquet(to_table(rows, fields), bad, {"sources": []})
   assert any("empty license" in p for p in check_parquet(bad, cfg))
+
+
+# row groups: a getPlace is a range read, so groups are small and the footer stays bounded ----
+def _wide_table(n, cols=30, payload=2000):
+  import pyarrow as pa
+  data = {"place_id": [f"T:{i:05d}" for i in range(n)], "geom_type": ["Polygon"] * n}
+  for c in range(cols - 4):
+    data[f"c{c}"] = ["x"] * n
+  data["bbox"] = pa.StructArray.from_arrays([pa.array([float(i)] * n) for i in range(4)], names=["xmin", "ymin", "xmax", "ymax"])
+  data["geometry"] = pa.array([b"g" * payload] * n, type=pa.binary())
+  return pa.table(data)
+
+
+def test_auto_row_group_size_is_one_row_for_a_modest_polygon_layer():
+  from gazetteer.table import auto_row_group_size
+  assert auto_row_group_size(_wide_table(300, payload=100_000)) == 1
+
+
+def test_auto_row_group_size_grows_when_the_footer_budget_runs_out():
+  from gazetteer.table import FOOTER_BUDGET, FOOTER_BYTES_PER_COLUMN, auto_row_group_size
+  t = _wide_table(3000, payload=100_000)
+  rg = auto_row_group_size(t)
+  assert rg > 1 and -(-t.num_rows // rg) * t.num_columns * FOOTER_BYTES_PER_COLUMN <= FOOTER_BUDGET
+
+
+def test_auto_row_group_size_keeps_a_tiny_table_in_one_group():
+  from gazetteer.table import auto_row_group_size
+  t = _wide_table(40, payload=10)
+  assert auto_row_group_size(t) == 40
+
+
+def test_written_row_groups_prune_a_place_id_lookup(tmp_path):
+  """regression: one 5 MB row group (or Morton groups with overlapping place_id ranges) made getPlace read the whole file."""
+  t = _wide_table(300, payload=50_000)
+  write_geoparquet(t, tmp_path / "p.parquet", {})
+  md = pq.ParquetFile(tmp_path / "p.parquet").metadata
+  assert md.num_row_groups == 300 and all(md.row_group(i).num_rows == 1 for i in range(md.num_row_groups))
+  pid = next(j for j in range(md.row_group(0).num_columns) if md.row_group(0).column(j).path_in_schema == "place_id")
+  hit = [i for i in range(md.num_row_groups)
+         if md.row_group(i).column(pid).statistics.min <= "T:00123" <= md.row_group(i).column(pid).statistics.max]
+  assert hit == [123]
+  # statistics only for place_id and bbox: the name-like columns carry none (a small footer)
+  assert not md.row_group(0).column(1).is_stats_set

@@ -40,7 +40,6 @@ status:
   source: https://www.gebco.net/data-products/undersea-feature-names
   date: data_last_edit
 spatial_sort: true
-row_group_size: 500
 tile_maxzoom: 8   # features are small (a seamount is 10-50 km): -zg would stop at z5
 tile_properties: [place_id, name, place_type, status, source_id, geom_type, component, TYPE]
 column_docs:

@@ -56,7 +56,7 @@ def build_layer(cfg: dict, staging: Path, cache: Path, version: str | None = Non
   rows, fields, dropped = build_rows(cfg, results, version)
   table = to_table(rows, fields)
   prov = provenance_record(cfg, results, len(rows), dropped, version, now)
-  geo = write_geoparquet(table, out / "places.parquet", prov, cfg.get("row_group_size") or 2000)
+  geo = write_geoparquet(table, out / "places.parquet", prov, cfg.get("row_group_size"))
   tiles.build_pmtiles(out / "places.parquet", out / "places.pmtiles", slug, cfg["title"],
                       cfg["description"], cfg["attribution"], cfg.get("tile_properties"), cfg.get("tile_maxzoom"))
   header, _ = tiles.read_pmtiles(out / "places.pmtiles")
