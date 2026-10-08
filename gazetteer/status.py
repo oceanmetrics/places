@@ -38,6 +38,7 @@ def resolve_status(cfg_status: dict, attrs: dict, data_last_edit: str | None, ov
                    overlay_key_field: str | None = None) -> tuple[str, str, str]:
   """(status, status_source, status_date) for one row.
 
+  value: a literal, or 'field:NAME' (a native attribute, lower-cased; `default` when empty).
   date: a literal ('2025-07-30'), 'data_last_edit' (the source's last edit day) or 'field:NAME' (a native
   date attribute). an overlay row (matched on the exact overlay_key_field value) wins over the default.
   """
@@ -48,7 +49,10 @@ def resolve_status(cfg_status: dict, attrs: dict, data_last_edit: str | None, ov
     date = _iso_date(attrs.get(spec[6:]))
   else:
     date = spec
-  result = (cfg_status["value"], cfg_status["source"], date)
+  value = cfg_status["value"]
+  if str(value).startswith("field:"):             # status from a native attribute (lower-cased), else `default`
+    value = str(attrs.get(value[6:]) or "").strip().lower() or cfg_status.get("default", "unknown")
+  result = (value, cfg_status["source"], date)
   if overlay and overlay_key_field:
     hit = overlay.get(str(attrs.get(overlay_key_field) or "").strip())
     if hit:

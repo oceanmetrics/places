@@ -1,0 +1,37 @@
+# noaa_sanctuaries: NOAA National Marine Sanctuaries (47), MarineCadastre first-15 layer 1
+slug: noaa_sanctuaries
+title: NOAA National Marine Sanctuaries
+description: >-
+  The 18 national marine sanctuaries and marine national monument sanctuary units of the National Marine
+  Sanctuary System (47 polygons: multi-part sites such as Channel Islands and Flower Garden Banks have one
+  polygon per `unitname` section). `cfrsection` and `citation` give the designating regulation.
+authority: ONMS
+place_type: protected_area
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA); the AGOL item carries NOAA's 17 U.S.C. 403 notice (material 'not subject
+  to copyright protection within the United States'; foreign copyrights may apply). Credit NOAA, do not imply
+  endorsement.
+attribution: >-
+  National Oceanic and Atmospheric Administration (NOAA), Office of National Marine Sanctuaries (ONMS), via
+  MarineCadastre.gov. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Office of National Marine Sanctuaries (ONMS), roles: [producer, licensor], url: "https://sanctuaries.noaa.gov"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=da25ca98e26b495a8a06cb72f120dfa6
+place_id: {template: "ONMS:{sitename|slug}{unitname|slug|prefix::}", pattern: "^ONMS:[a-z0-9-]+(:[a-z0-9-]+)?$"}
+name: "{sitename}{unitname|prefix: - }"
+source_id: "{sitename}{unitname|prefix: / }"
+status:
+  value: designated
+  source: https://www.arcgis.com/home/item.html?id=da25ca98e26b495a8a06cb72f120dfa6
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/NationalMarineSanctuaries/FeatureServer/0
+    item_id: da25ca98e26b495a8a06cb72f120dfa6
+    expected_count: 47
+    page_size: 200

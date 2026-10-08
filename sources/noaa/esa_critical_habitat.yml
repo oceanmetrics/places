@@ -1,0 +1,40 @@
+# noaa_esa_critical_habitat: NMFS ESA critical habitat (polygons) (2114), MarineCadastre first-15 layer 12a
+slug: noaa_esa_critical_habitat
+title: NMFS ESA critical habitat (polygons)
+description: >-
+  Critical habitat under the Endangered Species Act for species managed by NOAA's National Marine Fisheries
+  Service: the combined polygon layer All_critical_habitat_poly_20230724 (2,114 units; `CHSTATUS` Final,
+  Proposed or Designated becomes `status`). The 59,888-feature line layer is not staged. These data are not the
+  official legal definitions (50 CFR 226 is).
+authority: NMFS
+place_type: habitat
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NMFS). The item states: these spatial data are not the official legal
+  definitions of critical habitat; proposed and final rules and 50 CFR 226 are. The item has no
+  accessInformation, so the attribution is the owner organisation (NOAA Fisheries), unverified: review before
+  publishing.
+attribution: >-
+  NOAA Fisheries (National Marine Fisheries Service), ESA critical habitat geodatabase, via MarineCadastre.gov.
+  Public domain U.S. government work; not the official legal definition. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Fisheries Office of Protected Resources, roles: [producer, licensor], url: "https://www.fisheries.noaa.gov/national/endangered-species-conservation/critical-habitat"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=c898337a1072461aacbdd9ac1e67c840
+place_id: {template: "NMFS:CH:{ID|round}", pattern: "^NMFS:CH:\\d+(:part(-\\d+)?)?$", dedupe: {order: OBJECTID}}
+name: "{COMNAME} critical habitat - {UNIT}"
+source_id: "{ID|round}"
+status:
+  value: field:CHSTATUS
+  source: https://www.arcgis.com/home/item.html?id=c898337a1072461aacbdd9ac1e67c840
+  date: data_last_edit
+  default: unknown
+sources:
+  - kind: arcgis
+    url: https://services2.arcgis.com/C8EMgrsFcRFL6LrL/arcgis/rest/services/NMFS_ESA_Critical_Habitat_gdb/FeatureServer/1
+    item_id: c898337a1072461aacbdd9ac1e67c840
+    expected_count: 2114
+    page_size: 200

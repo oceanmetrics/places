@@ -67,7 +67,7 @@ def style_json(slug: str, max_zoom: int, geometry_type: str = "MultiPolygon") ->
       {"id": f"{slug}-circle", "type": "circle", "source": "data", "source-layer": slug,
        "paint": {"circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 2, 8, 5, 12, 7], "circle-color": "#0b6e99",
                  "circle-stroke-color": "#ffffff", "circle-stroke-width": 1, "circle-opacity": 0.9}}]}
-  if geometry_type == "LineString":
+  if geometry_type in ("LineString", "MultiLineString"):
     return {"version": 8, "name": "Default", "sources": src, "layers": [
       {"id": f"{slug}-line", "type": "line", "source": "data", "source-layer": slug,
        "paint": {"line-color": "#0b6e99", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1, 10, 2.5]}}]}

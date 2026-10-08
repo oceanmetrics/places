@@ -1,0 +1,38 @@
+# noaa_state_submerged_lands: U.S. state submerged lands (483), MarineCadastre first-15 layer 5b
+slug: noaa_state_submerged_lands
+title: U.S. state submerged lands
+description: >-
+  The 483 polygons of coastal submerged lands that the Submerged Lands Act (43 U.S.C. 1301 et seq.) grants to
+  the states (3 nautical miles; 9 for Texas, Puerto Rico and Florida's Gulf coast), i.e. the state side of the
+  federal / state split. The source carries no state or site name, only the statute (`statute`, `citation`,
+  `codification`); the place name is generic and the id is the source OBJECTID.
+authority: MC
+place_type: jurisdiction
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA); the AGOL item carries NOAA's 17 U.S.C. 403 notice (material 'not subject
+  to copyright protection within the United States'; foreign copyrights may apply). Credit NOAA, do not imply
+  endorsement.
+attribution: >-
+  National Oceanic and Atmospheric Administration (NOAA), Office for Coastal Management (OCM), via
+  MarineCadastre.gov. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [producer, licensor], url: "https://hub.marinecadastre.gov"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=dd9c717095344b41849de70192a40bb1
+place_id: {template: "MC:submerged_lands:{objectid}", pattern: "^MC:submerged_lands:\\d+$"}
+name: "State submerged lands {objectid}"
+source_id: "{objectid}"
+status:
+  value: in_force
+  source: https://www.arcgis.com/home/item.html?id=dd9c717095344b41849de70192a40bb1
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/USStateSubmergedLands/FeatureServer/0
+    item_id: dd9c717095344b41849de70192a40bb1
+    expected_count: 483
+    page_size: 200

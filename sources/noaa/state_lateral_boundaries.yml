@@ -1,0 +1,38 @@
+# noaa_state_lateral_boundaries: Offshore state lateral boundaries (lines) (19), MarineCadastre first-15 layer 5a
+slug: noaa_state_lateral_boundaries
+title: Offshore state lateral boundaries (lines)
+description: >-
+  The 19 lines that divide the offshore waters of adjacent coastal states (`statenames`, `statefips` as 'FIPS -
+  FIPS'), with the legal source of each (`boundarysource`: Supreme Court opinion, BOEM unofficial boundary,
+  ...). Lines, not polygons: the federal / state split is noaa_state_submerged_lands.
+authority: MC
+place_type: jurisdiction
+geometry_type: MultiLineString
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA); the AGOL item carries NOAA's 17 U.S.C. 403 notice (material 'not subject
+  to copyright protection within the United States'; foreign copyrights may apply). Credit NOAA, do not imply
+  endorsement.
+attribution: >-
+  National Oceanic and Atmospheric Administration (NOAA), Office for Coastal Management (OCM), via
+  MarineCadastre.gov. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [producer, licensor], url: "https://hub.marinecadastre.gov"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=fe504d46cb0549efb5ff6b2810dd9722
+place_id: {template: "MC:state_lateral:{statefips|slug}", pattern: "^MC:state_lateral:\\d+-\\d+$"}
+name: "{statenames} lateral boundary"
+source_id: "{statefips|slug}"
+status:
+  value: in_force
+  source: https://www.arcgis.com/home/item.html?id=fe504d46cb0549efb5ff6b2810dd9722
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/OffshoreStateLateralBoundaries/FeatureServer/0
+    item_id: fe504d46cb0549efb5ff6b2810dd9722
+    expected_count: 19
+    page_size: 1000

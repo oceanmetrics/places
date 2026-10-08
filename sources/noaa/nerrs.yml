@@ -1,0 +1,36 @@
+# noaa_nerrs: NOAA National Estuarine Research Reserves (30), MarineCadastre first-15 layer 3
+slug: noaa_nerrs
+title: NOAA National Estuarine Research Reserves
+description: >-
+  The 30 reserves of the National Estuarine Research Reserve System (NERRS), a NOAA-state partnership;
+  `sitecode` is the reserve's three-letter code, `leadagency` the managing state agency or university.
+authority: NERRS
+place_type: protected_area
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA); the AGOL item carries NOAA's 17 U.S.C. 403 notice (material 'not subject
+  to copyright protection within the United States'; foreign copyrights may apply). Credit NOAA, do not imply
+  endorsement.
+attribution: >-
+  National Oceanic and Atmospheric Administration (NOAA), Office for Coastal Management (OCM), via
+  MarineCadastre.gov. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Office for Coastal Management (NERRS), roles: [producer, licensor], url: "https://coast.noaa.gov/nerrs/"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=c3984675bafb4a4b9bb2b10e045fd76f
+place_id: {template: "NERRS:{sitecode}", pattern: "^NERRS:[A-Z]{3}$"}
+name: "{sitename}"
+source_id: "{sitecode}"
+status:
+  value: designated
+  source: https://www.arcgis.com/home/item.html?id=c3984675bafb4a4b9bb2b10e045fd76f
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/NationalEstuarineResearchReserveSystem/FeatureServer/0
+    item_id: c3984675bafb4a4b9bb2b10e045fd76f
+    expected_count: 30
+    page_size: 1000

@@ -1,0 +1,37 @@
+# noaa_marine_monuments: Marine National Monuments (32), MarineCadastre first-15 layer 4
+slug: noaa_marine_monuments
+title: Marine National Monuments
+description: >-
+  The units (`sitename`) of the five marine national monuments (`monumentname`) proclaimed under the Antiquities
+  Act: four in the Pacific, one in the Atlantic; managed by NOAA, the U.S. Fish and Wildlife Service and
+  partners.
+authority: MC
+place_type: protected_area
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA); the AGOL item carries NOAA's 17 U.S.C. 403 notice (material 'not subject
+  to copyright protection within the United States'; foreign copyrights may apply). Credit NOAA, do not imply
+  endorsement.
+attribution: >-
+  National Oceanic and Atmospheric Administration (NOAA), Office for Coastal Management (OCM), via
+  MarineCadastre.gov. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [producer, licensor], url: "https://hub.marinecadastre.gov"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=8816d191d02040ba9230b587a38b7aef
+place_id: {template: "MC:monuments:{sitename|slug}", pattern: "^MC:monuments:[a-z0-9-]+$"}
+name: "{sitename} ({monumentname})"
+source_id: "{sitename}"
+status:
+  value: designated
+  source: https://www.arcgis.com/home/item.html?id=8816d191d02040ba9230b587a38b7aef
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/MarineNationalMonuments/FeatureServer/0
+    item_id: 8816d191d02040ba9230b587a38b7aef
+    expected_count: 32
+    page_size: 200

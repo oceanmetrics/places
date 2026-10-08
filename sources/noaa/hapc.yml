@@ -1,0 +1,38 @@
+# noaa_hapc: NOAA Habitat Areas of Particular Concern (237), MarineCadastre first-15 layer 11b
+slug: noaa_hapc
+title: NOAA Habitat Areas of Particular Concern
+description: >-
+  Habitat Areas of Particular Concern (HAPCs): subsets of Essential Fish Habitat that are vulnerable or
+  ecologically important, designated by the regional Fishery Management Councils and NOAA Fisheries (237
+  polygons; `HAPC_Siten` site name, `Species`, `FisheryMan` plan). The id is the source FID. The companion EFH
+  layer is not staged: its item carries no licence text.
+authority: NMFS
+place_type: habitat
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA Fisheries). The item states only a no-warranty disclaimer (accuracy not
+  warranted, no responsibility assumed by NOAA). Treated as public domain under 17 U.S.C. 105; review before
+  publishing.
+attribution: >-
+  NOAA Fisheries regional offices, science centers and Fishery Management Councils (Habitat Protection
+  Division), via MarineCadastre.gov. Public domain; no warranty. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Fisheries Office of Habitat Conservation, roles: [producer, licensor], url: "https://www.fisheries.noaa.gov/topic/habitat-conservation"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=afac7b877f5e411a833597115376e23d
+place_id: {template: "NMFS:HAPC:{FID}", pattern: "^NMFS:HAPC:\\d+$"}
+name: "{HAPC_Siten}"
+source_id: "{FID}"
+status:
+  value: designated
+  source: https://www.arcgis.com/home/item.html?id=afac7b877f5e411a833597115376e23d
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://services2.arcgis.com/C8EMgrsFcRFL6LrL/arcgis/rest/services/HAPC/FeatureServer/0
+    item_id: afac7b877f5e411a833597115376e23d
+    expected_count: 237
+    page_size: 200

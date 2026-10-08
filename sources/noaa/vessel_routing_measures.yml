@@ -1,0 +1,38 @@
+# noaa_vessel_routing_measures: Vessel routing measures (TSS, fairways, precautionary areas) (327), MarineCadastre first-15 layer 13
+slug: noaa_vessel_routing_measures
+title: "Vessel routing measures (TSS, fairways, precautionary areas)"
+description: >-
+  IMO-adopted and USCG vessel routing measures in U.S. waters (327 polygons by `routetype`: traffic lanes,
+  separation zones, precautionary areas, fairways, areas to be avoided, two-way and recommended routes,
+  particularly sensitive sea areas), with the `cfrsection` and `citation` that establish each. The id is the
+  source OBJECTID.
+authority: MC
+place_type: navigation_measure
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA); the AGOL item carries NOAA's 17 U.S.C. 403 notice (material 'not subject
+  to copyright protection within the United States'; foreign copyrights may apply). Credit NOAA, do not imply
+  endorsement.
+attribution: >-
+  National Oceanic and Atmospheric Administration (NOAA), Office for Coastal Management (OCM), via
+  MarineCadastre.gov. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [producer, licensor], url: "https://hub.marinecadastre.gov"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=c609b171d3204e2eb9dbac60feb0f9f6
+place_id: {template: "MC:vrm:{objectid}", pattern: "^MC:vrm:\\d+$"}
+name: "{routetype} - {location}"
+source_id: "{objectid}"
+status:
+  value: in_force
+  source: https://www.arcgis.com/home/item.html?id=c609b171d3204e2eb9dbac60feb0f9f6
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/VesselRoutingMeasures/FeatureServer/0
+    item_id: c609b171d3204e2eb9dbac60feb0f9f6
+    expected_count: 327
+    page_size: 200

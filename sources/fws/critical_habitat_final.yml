@@ -1,0 +1,38 @@
+# fws_critical_habitat_final: USFWS final critical habitat (803), MarineCadastre first-15 layer 12b
+slug: fws_critical_habitat_final
+title: USFWS final critical habitat
+description: >-
+  U.S. Fish and Wildlife Service final Endangered Species Act critical habitat features (803; one feature per
+  listed entity, `entity_id`). The GIS files are not the legal source for the boundaries (the Federal Register
+  is); many unit attributes read 'Please check current species specific shapefile'. Mostly terrestrial and
+  freshwater; kept whole because the layer is the first-15 list's FWS critical habitat entry.
+authority: FWS
+place_type: habitat
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (USFWS). The item states: None. The GIS files are not the legal source for
+  determining critical habitat boundaries; the Service gives no warranty on accuracy, reliability or
+  completeness.
+attribution: >-
+  U.S. Fish and Wildlife Service (USFWS), via MarineCadastre.gov. Public domain; not the legal source for
+  critical habitat boundaries. Processed by Ocean Metrics.
+providers:
+  - {name: U.S. Fish and Wildlife Service, roles: [producer, licensor], url: "https://www.fws.gov/program/endangered-species"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=794de45b9d774d21aed3bf9b5313ee24
+place_id: {template: "FWS:CH:{entity_id}", pattern: "^FWS:CH:\\d+(:part(-\\d+)?)?$", dedupe: {order: OBJECTID}}
+name: "{comname} critical habitat (final)"
+source_id: "{entity_id}"
+status:
+  value: final
+  source: https://www.arcgis.com/home/item.html?id=794de45b9d774d21aed3bf9b5313ee24
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://services.arcgis.com/QVENGdaPbd4LUkLV/arcgis/rest/services/USFWS_Critical_Habitat/FeatureServer/0
+    item_id: 794de45b9d774d21aed3bf9b5313ee24
+    expected_count: 803
+    page_size: 25

@@ -16,8 +16,9 @@ from .config import source_setting
 from .fetch import SourceResult
 from .calcofi import clean_simple_geometry
 from .geom import clean_geometry
-from .mixed import clean_mixed_geometry, morton_order
 from .ids import build_place_ids, check_place_ids, suffix_duplicates
+from .mixed import clean_mixed_geometry, morton_order
+from .lines import clean_multiline_geometry
 from .fmt import render
 from .status import load_overlay, resolve_status, unmatched_overlay
 
@@ -91,8 +92,10 @@ def build_rows(cfg: dict, results: list[SourceResult], version: str | None = Non
     keep = []
     dropped += res.extra.get("dropped") or []
     for ft in res.features:
-      g = (clean_mixed_geometry(ft["geometry"]) if cfg.get("mixed_geometry") else clean_geometry(ft["geometry"])
-           if gtype == "MultiPolygon" else clean_simple_geometry(ft["geometry"], gtype))
+      g = (clean_mixed_geometry(ft["geometry"]) if cfg.get("mixed_geometry")
+           else clean_geometry(ft["geometry"]) if gtype == "MultiPolygon"
+           else clean_multiline_geometry(ft["geometry"]) if gtype == "MultiLineString"
+           else clean_simple_geometry(ft["geometry"], gtype))
       if g is None:
         dropped.append(f"{res.source_url}: dropped feature with no polygon (attributes: "
                        f"{ {k: v for k, v in ft['properties'].items() if v not in (None, '')} })")

@@ -1,0 +1,39 @@
+# noaa_submarine_cables: Submarine cable areas (2816), MarineCadastre first-15 layer 14
+slug: noaa_submarine_cables
+title: Submarine cable areas
+description: >-
+  The general footprint of commercial and research submarine cables in U.S. waters as 2,816 areas (polygons; the
+  first-15 list calls them lines). A cable area may hold one or more cables; most records carry no cable name
+  (`shortname`, `cablesystem`, `owner` mostly empty), so names fall back to a generic label plus the source
+  OBJECTID, which is the id. The native `status` (In Service, ...) is empty for 2,411 records, so `status` is
+  'charted'.
+authority: MC
+place_type: infrastructure
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA); the AGOL item carries NOAA's 17 U.S.C. 403 notice (material 'not subject
+  to copyright protection within the United States'; foreign copyrights may apply). Credit NOAA, do not imply
+  endorsement.
+attribution: >-
+  National Oceanic and Atmospheric Administration (NOAA), Office for Coastal Management (OCM), via
+  MarineCadastre.gov. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [producer, licensor], url: "https://hub.marinecadastre.gov"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=92482906ec41411cbe07da3d4d2a381b
+place_id: {template: "MC:cables:{objectid}", pattern: "^MC:cables:\\d+$"}
+name: "{shortname|default:Submarine cable area} ({objectid})"
+source_id: "{objectid}"
+status:
+  value: charted
+  source: https://www.arcgis.com/home/item.html?id=92482906ec41411cbe07da3d4d2a381b
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/SubmarineCables/FeatureServer/0
+    item_id: 92482906ec41411cbe07da3d4d2a381b
+    expected_count: 2816
+    page_size: 200

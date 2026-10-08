@@ -9,7 +9,9 @@ import numpy as np
 import pyarrow.parquet as pq
 import shapely
 
-from .mixed import MIXED_TYPE_IDS, max_span_any
+from .geom import max_edge_span
+from .lines import max_line_span
+from .mixed import MIXED_TYPE_IDS
 from .table import COMMON
 from .tiles import read_pmtiles
 
@@ -47,14 +49,14 @@ def check_parquet(path: Path, cfg: dict) -> list[str]:
   if cfg.get("mixed_geometry"):
     if set(shapely.get_type_id(geoms)) - MIXED_TYPE_IDS:
       problems.append("geometries are not all Multi* (MultiPoint / MultiLineString / MultiPolygon)")
-  elif set(shapely.get_type_id(geoms)) != {{"Point": 0, "LineString": 1, "MultiPolygon": 6}[gtype]}:
+  elif set(shapely.get_type_id(geoms)) != {{"Point": 0, "LineString": 1, "MultiLineString": 5, "MultiPolygon": 6}[gtype]}:
     problems.append(f"geometries are not all {gtype}")
   if [g.geom_type for g in geoms] != t.column("geom_type").to_pylist():
     problems.append("geom_type column does not match the geometry types")
   b = shapely.bounds(geoms)
   if b[:, 0].min() < -180 or b[:, 2].max() > 180 or b[:, 1].min() < -90 or b[:, 3].max() > 90:
     problems.append("coordinates outside [-180, 180] x [-90, 90]")
-  spans = [max_span_any(g) for g in geoms]
+  spans = [max(max_edge_span(g), max_line_span(g)) for g in geoms]
   if max(spans) > 180:
     problems.append(f"a ring jumps the antimeridian (edge span {max(spans):.1f} degrees)")
   bb = t.column("bbox").combine_chunks()

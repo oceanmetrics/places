@@ -36,7 +36,8 @@ def build_place_ids(cfg_id: dict, attrs: list[dict], maps: dict | None = None) -
 
   rule `lease`: BOEM:<normalised LEASE_NUMBER>; extra polygons of one lease (easements, split leases) get
   ':<lease type>[-n]', the commercial polygon (then lowest OBJECTID) keeping the bare id.
-  otherwise `template` is rendered per row and duplicates are an error.
+  otherwise `template` is rendered per row and duplicates are an error, unless `dedupe: {order: FIELD}` is set
+  (the lowest FIELD keeps the bare id, the others get ':part', ':part-2', ...).
   """
   if cfg_id.get("rule") == "lease":
     ids = [f"BOEM:{render('{LEASE_NUMBER|lease_number}', a)}" for a in attrs]
@@ -45,6 +46,10 @@ def build_place_ids(cfg_id: dict, attrs: list[dict], maps: dict | None = None) -
              for a in attrs]
     return suffix_duplicates(ids, labels, order)
   ids = [render(cfg_id["template"], a, maps) for a in attrs]
+  if cfg_id.get("dedupe"):
+    # `dedupe: {order: FIELD}`: of rows sharing an id the lowest FIELD keeps it; the others get ':part', ':part-2', ...
+    key = cfg_id["dedupe"]["order"]
+    return suffix_duplicates(ids, ["part"] * len(ids), [(a.get(key) is None, a.get(key) or 0) for a in attrs])
   dup = sorted({i for i in ids if ids.count(i) > 1})
   if dup:
     raise ValueError(f"duplicate place_id from template {cfg_id['template']!r}: {dup[:5]}")

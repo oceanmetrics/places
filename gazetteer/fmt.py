@@ -1,7 +1,8 @@
 """tiny template language for names, ids and source ids: "{FIELD}", "{FIELD|filter}", "{FIELD|map:table}".
 
 values are stripped; None becomes ''. filters: strip (default), lease_number, prefix:<text> (text + value when
-non-empty), map:<table> (lookup in the config's `maps`, a missing key keeps the value), slug.
+non-empty), map:<table> (lookup in the config's `maps`, a missing key keeps the value), slug,
+round (nearest integer), default:<text> (text when the value is empty).
 """
 from __future__ import annotations
 
@@ -40,6 +41,13 @@ def _apply(value: str, flt: str, maps: dict) -> str:
     return str(maps[arg].get(value, value))
   if name == "slug":
     return slug(value)
+  if name == "round":
+    try:
+      return str(int(round(float(value))))        # float ids with noise (100062107.99999999 -> 100062108)
+    except ValueError:
+      return value
+  if name == "default":
+    return value if value else arg
   raise ValueError(f"unknown template filter: {flt}")
 
 

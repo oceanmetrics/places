@@ -1,0 +1,57 @@
+# noaa_maritime_limits: U.S. maritime limits and boundaries (lines) (246), MarineCadastre first-15 layer 6
+slug: noaa_maritime_limits
+title: U.S. maritime limits and boundaries (lines)
+description: >-
+  NOAA Office of Coast Survey's U.S. Maritime Limits and Boundaries (v4.0) as lines: the 12 NM territorial sea
+  (`component` = territorial_sea_12nm, 87), the 24 NM contiguous zone (contiguous_zone_24nm, 63) and the 200 NM
+  EEZ and maritime boundaries with neighbours (eez_200nm, 96). Compiled to update the charted limits on NOAA
+  charts: NOT FOR LEGAL USE.
+authority: NOAA-OCS
+place_type: maritime_limit
+geometry_type: MultiLineString
+version: 1.0.0
+cadence: yearly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA Office of Coast Survey). The item states: NOT FOR LEGAL USE; created for
+  internal purposes to update charted limits; not the official depiction (see NOAA nautical charts). Surface
+  this next to the data.
+attribution: >-
+  Department of Commerce (DOC), National Oceanic and Atmospheric Administration (NOAA), National Ocean Service
+  (NOS), Office of Coast Survey (OCS). Public domain; not for legal use. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Office of Coast Survey, roles: [producer, licensor], url: "https://nauticalcharts.noaa.gov/data/us-maritime-limits-and-boundaries.html"}
+source_page: https://nauticalcharts.noaa.gov/data/us-maritime-limits-and-boundaries.html
+status:
+  value: in_force
+  source: https://www.arcgis.com/home/item.html?id=44f58c599b1e4f7192df9d4d10b7ddcf
+  date: "field:APPRV_DATE"
+sources:
+  - kind: arcgis
+    component: territorial_sea_12nm
+    url: https://maritimeboundaries.noaa.gov/arcgis/rest/services/MaritimeBoundaries/US_Maritime_Limits_Boundaries/MapServer/1
+    item_id: 44f58c599b1e4f7192df9d4d10b7ddcf
+    expected_count: 87
+    page_size: 1000
+    place_id: {template: "NOAA-OCS:{BOUND_ID}", pattern: "^NOAA-OCS:B\\d{4}$"}
+    name: "12 NM territorial sea limit, {REGION} ({BOUND_ID})"
+    source_id: "{BOUND_ID}"
+  - kind: arcgis
+    component: contiguous_zone_24nm
+    url: https://maritimeboundaries.noaa.gov/arcgis/rest/services/MaritimeBoundaries/US_Maritime_Limits_Boundaries/MapServer/2
+    item_id: 44f58c599b1e4f7192df9d4d10b7ddcf
+    expected_count: 63
+    page_size: 1000
+    place_id: {template: "NOAA-OCS:{BOUND_ID}", pattern: "^NOAA-OCS:B\\d{4}$"}
+    name: "24 NM contiguous zone limit, {REGION} ({BOUND_ID})"
+    source_id: "{BOUND_ID}"
+  - kind: arcgis
+    component: eez_200nm
+    url: https://maritimeboundaries.noaa.gov/arcgis/rest/services/MaritimeBoundaries/US_Maritime_Limits_Boundaries/MapServer/3
+    item_id: 44f58c599b1e4f7192df9d4d10b7ddcf
+    expected_count: 96
+    page_size: 1000
+    place_id: {template: "NOAA-OCS:{BOUND_ID}", pattern: "^NOAA-OCS:B\\d{4}$"}
+    name: "{FEAT_TYPE} (200 NM EEZ), {REGION} ({BOUND_ID})"
+    source_id: "{BOUND_ID}"

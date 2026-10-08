@@ -1,0 +1,38 @@
+# fws_critical_habitat_proposed: USFWS proposed critical habitat (70), MarineCadastre first-15 layer 12c
+slug: fws_critical_habitat_proposed
+title: USFWS proposed critical habitat
+description: >-
+  U.S. Fish and Wildlife Service proposed Endangered Species Act critical habitat features (70; one feature per
+  listed entity, `entity_id`). The GIS files are not the legal source for the boundaries (the Federal Register
+  is); many unit attributes read 'Please check current species specific shapefile'. Mostly terrestrial and
+  freshwater; kept whole because the layer is the first-15 list's FWS critical habitat entry.
+authority: FWS
+place_type: habitat
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (USFWS). The item states: None. The GIS files are not the legal source for
+  determining critical habitat boundaries; the Service gives no warranty on accuracy, reliability or
+  completeness.
+attribution: >-
+  U.S. Fish and Wildlife Service (USFWS), via MarineCadastre.gov. Public domain; not the legal source for
+  critical habitat boundaries. Processed by Ocean Metrics.
+providers:
+  - {name: U.S. Fish and Wildlife Service, roles: [producer, licensor], url: "https://www.fws.gov/program/endangered-species"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=794de45b9d774d21aed3bf9b5313ee24
+place_id: {template: "FWS:CHP:{entity_id}", pattern: "^FWS:CHP:\\d+(:part(-\\d+)?)?$", dedupe: {order: OBJECTID}}
+name: "{comname} critical habitat (proposed)"
+source_id: "{entity_id}"
+status:
+  value: proposed
+  source: https://www.arcgis.com/home/item.html?id=794de45b9d774d21aed3bf9b5313ee24
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://services.arcgis.com/QVENGdaPbd4LUkLV/arcgis/rest/services/USFWS_Critical_Habitat/FeatureServer/2
+    item_id: 794de45b9d774d21aed3bf9b5313ee24
+    expected_count: 70
+    page_size: 25

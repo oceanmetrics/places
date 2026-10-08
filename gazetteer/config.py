@@ -7,8 +7,11 @@ from pathlib import Path
 import yaml
 
 PLACE_TYPES = {"lease", "planning_area", "aoa", "station", "transect"}
+# MarineCadastre first-15 layers (sources/*/mc_*.yml): protected areas, jurisdictions, habitat, navigation, ...
+PLACE_TYPES |= {"protected_area", "jurisdiction", "maritime_limit", "habitat", "restricted_area", "navigation_measure",
+                "infrastructure"}
 KINDS = {"arcgis", "shapefile_zip", "calcofi_positions"}
-GEOMETRY_TYPES = {"MultiPolygon", "Point", "LineString"}  # collection-level `geometry_type`, default MultiPolygon
+GEOMETRY_TYPES = {"MultiPolygon", "Point", "LineString", "MultiLineString"}  # collection-level `geometry_type`, default MultiPolygon
 PLACE_TYPES |= {"eez", "territorial_sea", "contiguous_zone", "high_seas", "ecs", "ocean_sea", "world_heritage"}  # mr_* (Marine Regions)
 KINDS |= {"wfs"}                                                      # OGC WFS 2.0 GeoJSON (gazetteer/fetch_wfs.py)
 PLACE_TYPES |= {"mpa", "undersea_feature"}   # mpa_inventory, gebco_undersea
