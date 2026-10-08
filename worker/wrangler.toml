@@ -1,0 +1,40 @@
+# Cloudflare Worker fronting storage.oceanmetrics.io/gazetteer/* (see README.md for the runbook).
+# Nothing here has been deployed; every REPLACE_ value needs the Cloudflare account.
+name = "om-gazetteer"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# route once DNS for oceanmetrics.io lives in a Cloudflare zone (BEN-DOES)
+# routes = [{ pattern = "storage.oceanmetrics.io/*", zone_name = "oceanmetrics.io" }]
+
+[triggers]
+crons = ["*/15 * * * *"]   # usage rollup stub
+
+[vars]
+FULLFILE_BYTES = "16777216"   # un-ranged parquet GET over 16 MiB is flagged `fullfile`
+AE_DATASET     = "om_gazetteer"
+# CF_ACCOUNT_ID = "..."       # rollup only; set CF_API_TOKEN with `wrangler secret put CF_API_TOKEN`
+
+[[r2_buckets]]
+binding     = "BUCKET"
+bucket_name = "oceanmetrics-io-public"
+
+[[kv_namespaces]]
+binding = "KEYS"
+id      = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[[analytics_engine_datasets]]
+binding = "METRICS"
+dataset = "om_gazetteer"
+
+# keyless parquet/pmtiles: roughly one duckdb query's worth of ranged reads per ip per minute, tune from logs
+[[ratelimits]]
+name         = "ANON_LIMITER"
+namespace_id = "1001"
+simple       = { limit = 120, period = 60 }
+
+# per-key request rate; the byte cap is the real budget (KV usage totals)
+[[ratelimits]]
+name         = "KEY_LIMITER"
+namespace_id = "1002"
+simple       = { limit = 1200, period = 60 }
