@@ -34,6 +34,7 @@ place_id: {template: "CALCOFI:{line_id}_{station_id}", pattern: '^CALCOFI:\d{3}\
 name: "CalCOFI station {station_key}"
 source_id: "{station_key}"
 tile_maxzoom: 10
+tile_keep_all: true   # 113 points: draw every station from low zooms (default thinning keeps ~1 per tile below z10)
 tile_properties: [place_id, name, place_type, status, source_id, line, station, sta_type, in_core_75, sampling_pattern]
 column_docs:
   line_id: "zero-padded CalCOFI line number, e.g. 093.3"

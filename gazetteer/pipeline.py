@@ -58,7 +58,8 @@ def build_layer(cfg: dict, staging: Path, cache: Path, version: str | None = Non
   prov = provenance_record(cfg, results, len(rows), dropped, version, now)
   geo = write_geoparquet(table, out / "places.parquet", prov, cfg.get("row_group_size"))
   tiles.build_pmtiles(out / "places.parquet", out / "places.pmtiles", slug, cfg["title"],
-                      cfg["description"], cfg["attribution"], cfg.get("tile_properties"), cfg.get("tile_maxzoom"))
+                      cfg["description"], cfg["attribution"], cfg.get("tile_properties"), cfg.get("tile_maxzoom"),
+                      bool(cfg.get("tile_keep_all")))
   header, _ = tiles.read_pmtiles(out / "places.pmtiles")
   (out / "styles" / "default.json").write_text(json.dumps(stac.style_json(slug, header["max_zoom"], "Mixed" if cfg.get("mixed_geometry") else cfg.get("geometry_type", "MultiPolygon")), indent=2) + "\n")
   (out / "provenance.json").write_text(json.dumps(prov, indent=2, default=str) + "\n")

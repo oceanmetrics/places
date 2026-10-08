@@ -61,3 +61,37 @@ def test_pmtiles_reader_agrees_with_the_reference_implementation():
     assert (rh["min_zoom"], rh["max_zoom"]) == (header["min_zoom"], header["max_zoom"])
     assert rh["min_lon_e7"] / 1e7 == pytest.approx(header["bounds"][0])
     assert rh["max_lat_e7"] / 1e7 == pytest.approx(header["bounds"][3])
+
+
+def test_keep_all_turns_off_low_zoom_thinning():
+  thin = tippecanoe_cmd("in", "out", "s", "n", "d", "a")
+  keep = tippecanoe_cmd("in", "out", "s", "n", "d", "a", maxzoom=10, keep_all=True)
+  assert "--drop-densest-as-needed" in thin and "-r1" not in thin
+  assert "-r1" in keep and "--drop-densest-as-needed" not in keep and "-z10" in keep
+
+
+@needs_tippecanoe
+@pytest.mark.skipif(not shutil.which("tippecanoe-decode"), reason="tippecanoe-decode not installed")
+def test_keep_all_draws_every_point_at_low_zoom_regression(tmp_path):
+  """regression: calcofi_stations (113 points) kept ~1 station per tile below z10 under default thinning."""
+  import subprocess
+  import numpy as np
+  import pyarrow as pa
+  import shapely
+  from gazetteer.table import BBOX
+  rng = np.random.default_rng(1)
+  pts = [shapely.Point(-124 + float(a), 32 + float(b)) for a, b in rng.random((60, 2)) * 6]
+  b = shapely.bounds(np.array(pts, dtype=object))
+  t = pa.table({"place_id": [f"T:{i}" for i in range(60)], "geom_type": ["Point"] * 60,
+                "bbox": pa.StructArray.from_arrays([pa.array(b[:, i]) for i in range(4)], fields=list(BBOX)),
+                "geometry": pa.array(shapely.to_wkb(np.array(pts, dtype=object)), type=pa.binary())})
+  write_geoparquet(t, tmp_path / "p.parquet", {})
+
+  def at_z3(keep_all):
+    out = tmp_path / f"k{keep_all}.pmtiles"
+    build_pmtiles(tmp_path / "p.parquet", out, "t", "t", "t", "credit", ["place_id"], 10, keep_all)
+    txt = subprocess.run(["tippecanoe-decode", str(out), "3", "1", "3"], capture_output=True, text=True).stdout
+    return txt.count('"type": "Feature",')
+
+  assert at_z3(True) == 60
+  assert at_z3(False) < 60
