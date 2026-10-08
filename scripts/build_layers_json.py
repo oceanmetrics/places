@@ -48,7 +48,11 @@ LICENSE_URLS = {
 
 
 # helpers ----
-def geom_kind(geom_type: str | None) -> str:
+def geom_kind(geom_type: str | list | None) -> str:
+  """point | line | polygon, or `mixed` for a collection holding several kinds (geoparquet:geometry_type is then a list)."""
+  kinds = {geom_kind(g) for g in geom_type} if isinstance(geom_type, (list, tuple)) else None
+  if kinds is not None:
+    return kinds.pop() if len(kinds) == 1 else "mixed" if kinds else "polygon"
   g = (geom_type or "").lower()
   return "point" if "point" in g else "line" if "line" in g else "polygon"
 
@@ -69,7 +73,10 @@ def squash(s: str | None) -> str:
 
 def default_paint(kind: str, style: dict | None = None) -> dict:
   """per-geometry defaults, with the paint of any fill/line/circle layer in the collection's default style on top."""
-  paint = {k: dict(v) for k, v in PAINT[kind].items()}
+  kinds = ["polygon", "line", "point"] if kind == "mixed" else [kind]
+  paint = {k: dict(v) for knd in kinds for k, v in PAINT[knd].items()}
+  if kind == "mixed":  # one entry per drawn layer type; the polygon outline wins over the line default
+    paint["line"] = dict(PAINT["polygon"]["line"])
   for lyr in (style or {}).get("layers", []):
     t = lyr.get("type")
     if t in ("fill", "line", "circle") and isinstance(lyr.get("paint"), dict):
@@ -131,7 +138,7 @@ def layer_row(coll: dict, style: dict | None = None, version: str | None = None,
     "collection"      : slug,
     "pmtiles"         : pmtiles_url(slug, base),
     "source_layer"    : layers[0] if layers else slug,
-    "geom_type"       : geom_type,
+    "geom_type"       : geom_type if isinstance(geom_type, str) else geom_type[0] if len(geom_type) == 1 else "Mixed",
     "n"               : n,
     "updated"         : updated,
     "version"         : ver,

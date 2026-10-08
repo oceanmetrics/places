@@ -132,3 +132,13 @@ def test_main_offline_writes_manifest(tmp_path):
   assert bl.main(["--staging", str(tmp_path / "st"), "--out", str(out), "--no-remote"]) == 0
   m = json.loads(out.read_text())
   assert m["schema"] == 1 and [r["slug"] for r in m["layers"]] == ["acme_leases"]
+
+
+def test_mixed_geometry_collection_row_regression():
+  # gebco_undersea: geoparquet:geometry_type is a list (MultiLineString, MultiPoint, MultiPolygon); used to crash the build
+  coll = {**COLL, "id": "gebco_undersea", "geoparquet:geometry_type": ["MultiLineString", "MultiPoint", "MultiPolygon"]}
+  row = bl.layer_row(coll)
+  assert row["geom_type"] == "Mixed"
+  assert set(row["paint"]) == {"fill", "line", "circle"}
+  assert bl.geom_kind(["MultiPolygon"]) == "polygon" and bl.geom_kind(["Point", "MultiPoint"]) == "point"
+  assert bl.layer_row({**COLL, "geoparquet:geometry_type": ["MultiPolygon"]})["geom_type"] == "MultiPolygon"
