@@ -125,6 +125,30 @@ def test_bbox_and_type_fall_back_to_the_geometry_when_the_columns_are_absent(tmp
   assert rows[0]["name"] is None and rows[0]["license"] is None
 
 
+def test_dateline_crossing_place_gets_the_unwrapped_bbox_and_a_wrapped_centroid(tmp_path):
+  """regression: a place stored split at +/-180 had bbox -180..180, useless for fitBounds; xmax may now exceed 180."""
+  split = shapely.MultiPolygon([Polygon([(177, 10), (180, 10), (180, 14), (177, 14)]),      # east of the antimeridian cut
+                                Polygon([(-180, 10), (-161, 10), (-161, 14), (-180, 14)])])  # west part, 19 deg wide
+  plain = square(10, 10)
+  write_layer(tmp_path / "st" / "pm", {
+    "place_id": ["X:PM", "X:PLAIN"], "name": ["Crosser", "Plain"], "_geoms": [split, plain],
+  }, {"id": "pm", "gazetteer:authority": "X"})
+  _, stats, rows, _ = run(tmp_path / "st", tmp_path / "out")
+  by = {r["place_id"]: r for r in rows}
+  assert by["X:PM"]["bbox"] == {"xmin": 177.0, "ymin": 10.0, "xmax": 199.0, "ymax": 14.0}
+  # centroid on the unwrapped parts (area-weighted: x = 188), wrapped back into [-180, 180]; not near 0 as on the split parts
+  assert by["X:PM"]["centroid_lon"] == pytest.approx(-172.0) and by["X:PM"]["centroid_lat"] == pytest.approx(12.0)
+  assert by["X:PLAIN"]["bbox"] == {"xmin": 10.0, "ymin": 10.0, "xmax": 12.0, "ymax": 12.0}      # untouched
+  assert stats["bbox"][2] <= 180.0 and stats["bbox"][0] >= -180.0                                # STAC extent stays valid
+
+
+def test_unwrap_crossing_leaves_non_crossers_alone():
+  assert bi.unwrap_crossing(square(10, 10)) is None
+  two_east = shapely.MultiPolygon([square(170, 0), square(175, 0)])
+  assert bi.unwrap_crossing(two_east) is None
+  assert bi.unwrap_crossing(None) is None
+
+
 def test_crosswalk_maps_mpa_inventory_to_psgid_and_wdpa(staging, tmp_path):
   _, stats, _, xw = run(staging, tmp_path / "out")
   by = {r["place_id"]: r for r in xw}

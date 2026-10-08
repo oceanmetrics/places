@@ -35,6 +35,7 @@ ROW_GROUP = 5000
 INDEX_VERSION = "1.0.0"
 
 # schemas (plain utf8/double so hyparquet can range-read them) ----
+# the client fixture client/test/fixtures/index/places_index.parquet must mirror this schema (see make_fixtures.sh)
 BBOX_T = pa.struct([("xmin", pa.float64()), ("ymin", pa.float64()), ("xmax", pa.float64()), ("ymax", pa.float64())])
 INDEX_SCHEMA = pa.schema([
   ("place_id", pa.string()), ("name", pa.string()), ("authority", pa.string()), ("place_type", pa.string()),
@@ -64,6 +65,28 @@ GEOM_NAMES = {0: "Point", 1: "LineString", 2: "LinearRing", 3: "Polygon", 4: "Mu
 
 
 # helpers ----
+EDGE = 1e-6
+
+
+def unwrap_crossing(geom):
+  """a multi-part geometry stored split at the antimeridian, unwrapped to contiguous longitudes, else None.
+
+  mirrors the client's unwrapAntimeridian: it crosses when one part touches +180 and another -180; every part
+  whose longitude centre is west of 0 is then shifted by +360 (so 170..180 plus -180..-164 becomes 170..196).
+  """
+  if geom is None or shapely.is_empty(geom) or shapely.get_num_geometries(geom) < 2:
+    return None
+  parts = list(shapely.get_parts(geom))
+  b = shapely.bounds(parts)
+  if not ((b[:, 2] >= 180 - EDGE).any() and (b[:, 0] <= -180 + EDGE).any()):
+    return None
+  moved = [shapely.transform(p, lambda a: a + [360.0, 0.0]) if (b[i, 0] + b[i, 2]) / 2 < 0 else p
+           for i, p in enumerate(parts)]
+  out = shapely.GeometryCollection(moved)
+  x0, _, x1, _ = out.bounds
+  return out if x1 - x0 < 360 else None      # a part spanning the whole globe cannot be unwrapped usefully
+
+
 def squash(s) -> str | None:
   s = " ".join(str(s).split()) if s is not None else ""
   return s or None
@@ -227,8 +250,16 @@ def batch_rows(batch: pa.RecordBatch, src: Source) -> tuple[dict, list[dict]]:
       b = tuple(float(x) for x in bounds[i])
     c = None
     if geoms is not None and ok[i]:
-      pt = shapely.centroid(geoms[i])
-      c = (pt.x, pt.y)
+      # a place split at +/-180 has bbox -180..180 (useless for fitBounds): use the unwrapped bbox (xmax may exceed
+      # 180, e.g. 177..199) and a centroid taken on the unwrapped parts, wrapped back into [-180, 180]
+      u = unwrap_crossing(geoms[i]) if b is not None and b[0] <= -180 + EDGE and b[2] >= 180 - EDGE else None
+      if u is not None:
+        b = tuple(float(x) for x in u.bounds)
+        pt = shapely.centroid(u)
+        c = (pt.x - 360.0 if pt.x > 180 else pt.x, pt.y)
+      else:
+        pt = shapely.centroid(geoms[i])
+        c = (pt.x, pt.y)
     elif b is not None:
       c = ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)
     bbox.append(None if b is None else {"xmin": b[0], "ymin": b[1], "xmax": b[2], "ymax": b[3]})
@@ -332,7 +363,9 @@ def build(sources: list[Source], out: Path) -> dict:
             seen.setdefault(pid, src.slug)
           for b in index["bbox"]:
             if b:
-              ext = [min(ext[0], b["xmin"]), min(ext[1], b["ymin"]), max(ext[2], b["xmax"]), max(ext[3], b["ymax"])]
+              # the STAC extent stays within [-180, 180] although an unwrapped place bbox may exceed it
+              ext = [min(ext[0], max(b["xmin"], -180.0)), min(ext[1], b["ymin"]),
+                     max(ext[2], min(b["xmax"], 180.0)), max(ext[3], b["ymax"])]
           counts[src.slug] += batch.num_rows
           pend_i.append(index)
           pend_x.extend(xw)
@@ -365,7 +398,8 @@ def collection_json(stats: dict, out: Path) -> dict:
     "title": "Gazetteer index and crosswalk",
     "description": (
       "Geometry-free search index of every place in the Ocean Metrics gazetteer (one row per place: id, name, "
-      "authority, type, collection, bbox, centroid, area, licence, attribution, version) and a crosswalk from "
+      "authority, type, collection, bbox, centroid, area, licence, attribution, version; a place cut at the "
+      "antimeridian has an unwrapped bbox whose xmax may exceed 180) and a crosswalk from "
       "place_id to external identifiers (MarineRegions MRGID, ProtectedSeas PSGID, WDPA, NOAA MPA Inventory, "
       "MPAtlas, Wikidata, Overture GERS). Read by the client with range requests to search and resolve places "
       "without loading any geometry. Rebuilt by scripts/build_index.py whenever a collection is published. The "
@@ -414,8 +448,8 @@ One row per place ({sum(stats["counts"].values())} rows, row groups of {ROW_GROU
 | place_type | utf8 | |
 | geom_type | utf8 | Point, LineString, Polygon, Multi* |
 | collection | utf8 | slug; the PMTiles/GeoParquet live at `<base><collection>/` |
-| bbox | struct | xmin, ymin, xmax, ymax (double); antimeridian geometries are split, so xmin may be -180 and xmax 180 |
-| centroid_lon, centroid_lat | double | planar centroid of the stored geometry (bbox centre if absent) |
+| bbox | struct | xmin, ymin, xmax, ymax (double). Convention: a place stored split at the antimeridian has the UNWRAPPED bbox, western parts shifted +360, so **xmax may exceed 180** (e.g. 177..199); fit bounds with it as is, wrap a longitude back with `((x + 540) % 360) - 180`. Other places have the stored bbox |
+| centroid_lon, centroid_lat | double | planar centroid of the stored geometry (bbox centre if absent); in [-180, 180] also for split places |
 | area_km2 | double | null where the source has none |
 | license, attribution, version, updated | utf8 | per row, from the collection |
 
