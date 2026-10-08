@@ -1,0 +1,14 @@
+{
+  "extends": "@tsconfig/svelte/tsconfig.json",
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "esnext",
+    "types": ["svelte", "vite/client"],
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "moduleDetection": "force",
+    "paths": { "@oceanmetrics/places": ["../client/src/index.ts"] }
+  },
+  "include": ["src/**/*.ts", "src/**/*.svelte"]
+}
