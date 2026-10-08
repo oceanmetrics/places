@@ -29,7 +29,9 @@ COPY (
 CREATE TEMP TABLE aoa AS
 SELECT * FROM (VALUES
   ('AOA:N1', 'AOA', 'N1', 'Northern aquaculture area', 'aoa', 'identified', 'POLYGON((-123 36,-122 36,-122 37,-123 37,-123 36))'),
-  ('AOA:S2', 'AOA', 'S2', 'Southern aquaculture area', 'aoa', 'identified', 'POLYGON((-119 32,-118 32,-118 33,-119 33,-119 32))')
+  ('AOA:S2', 'AOA', 'S2', 'Southern aquaculture area', 'aoa', 'identified', 'POLYGON((-119 32,-118 32,-118 33,-119 33,-119 32))'),
+  -- the same place_id as in fx_leases, in another collection (BOEM:OCS-P 0562 is in two live collections)
+  ('FX:C-3', 'AOA', 'C-3', 'Charlie lease (AOA copy)', 'lease', 'identified', 'POLYGON((-90 28,-89 28,-89 29,-90 29,-90 28))')
 ) t(place_id, authority, source_id, name, place_type, status, wkt);
 COPY (
   SELECT place_id, authority, source_id, name, place_type, status,
@@ -40,18 +42,32 @@ COPY (
   ORDER BY place_id
 ) TO 'fx_aoa/places.parquet' (FORMAT parquet, ROW_GROUP_SIZE 2, COMPRESSION snappy);
 
--- the index: no geometry, zstd (exercises hyparquet-compressors)
+-- the index: no geometry, zstd (exercises hyparquet-compressors).
+-- THIS MUST MIRROR the output of scripts/build_index.py (INDEX_SCHEMA): same columns, order and types as the LIVE
+-- https://storage.oceanmetrics.io/gazetteer/index/places_index.parquet. (the old fixture had `centroid DOUBLE[]` and
+-- TIMESTAMPTZ `updated`, which the live index never had, so the tests passed while production read null centroids.)
+-- check against the live schema with:
+--   duckdb -c "DESCRIBE SELECT * FROM read_parquet('https://storage.oceanmetrics.io/gazetteer/index/places_index.parquet')"
+-- place_id varchar, name varchar, authority varchar, place_type varchar, geom_type varchar, collection varchar,
+-- bbox struct(xmin double, ymin double, xmax double, ymax double), centroid_lon double, centroid_lat double,
+-- area_km2 double, license varchar, attribution varchar, version varchar, updated varchar.
+-- a place cut at the antimeridian (FX:PM) carries the UNWRAPPED bbox (xmax beyond 180), as build_index.py writes it.
 COPY (
-  SELECT place_id, name, authority, place_type, bbox,
-         [(bbox.xmin + bbox.xmax) / 2, (bbox.ymin + bbox.ymax) / 2] AS centroid,
-         area_km2,
-         'CC-PDDC' AS license,
-         CASE authority WHEN 'FX' THEN 'Fixture Agency, via MarineCadastre. Processed by Ocean Metrics.'
-                        ELSE 'NOAA AOA program. Processed by Ocean Metrics.' END AS attribution,
-         CASE authority WHEN 'FX' THEN '1.0.3' ELSE '2.0.0' END AS version,
-         TIMESTAMPTZ '2026-10-01 12:00:00+00' AS updated
-  FROM (SELECT * FROM read_parquet('fx_leases/places.parquet') UNION ALL BY NAME SELECT * FROM read_parquet('fx_aoa/places.parquet'))
-  ORDER BY place_id
+  SELECT place_id::VARCHAR AS place_id, name::VARCHAR AS name, authority::VARCHAR AS authority, place_type::VARCHAR AS place_type,
+         CASE WHEN place_id = 'FX:PM' THEN 'MultiPolygon' ELSE 'Polygon' END::VARCHAR AS geom_type,
+         collection::VARCHAR AS collection,
+         CASE WHEN place_id = 'FX:PM' THEN {'xmin': 170.0, 'ymin': 20.0, 'xmax': 196.0, 'ymax': 22.0}
+              ELSE {'xmin': bbox.xmin, 'ymin': bbox.ymin, 'xmax': bbox.xmax, 'ymax': bbox.ymax} END AS bbox,
+         (CASE WHEN place_id = 'FX:PM' THEN -179.8 ELSE (bbox.xmin + bbox.xmax) / 2 END)::DOUBLE AS centroid_lon, ((bbox.ymin + bbox.ymax) / 2)::DOUBLE AS centroid_lat,
+         area_km2::DOUBLE AS area_km2,
+         'CC-PDDC'::VARCHAR AS license,
+         (CASE collection WHEN 'fx_leases' THEN 'Fixture Agency, via MarineCadastre. Processed by Ocean Metrics.'
+                          ELSE 'NOAA AOA program. Processed by Ocean Metrics.' END)::VARCHAR AS attribution,
+         (CASE collection WHEN 'fx_leases' THEN '1.0.3' ELSE '2.0.0' END)::VARCHAR AS version,
+         '2026-10-01T12:00:00Z'::VARCHAR AS updated
+  FROM (SELECT 'fx_leases' AS collection, * FROM read_parquet('fx_leases/places.parquet')
+        UNION ALL BY NAME SELECT 'fx_aoa' AS collection, * FROM read_parquet('fx_aoa/places.parquet'))
+  ORDER BY collection, place_id
 ) TO 'index/places_index.parquet' (FORMAT parquet, ROW_GROUP_SIZE 4, COMPRESSION zstd);
 
 -- a larger collection (600 small polygons) so a lookup by id can be shown to read a fraction of the file
@@ -73,3 +89,6 @@ t = pq.read_table("fx_big/places.parquet")
 pq.write_table(t, "fx_big/places.parquet", row_group_size=50, compression="snappy")
 print("fx_big row groups:", pq.ParquetFile("fx_big/places.parquet").num_row_groups)
 PY
+
+# layers.json also at the root of the fixture base: the client falls back to it when index/layers.json is 404/403
+cp index/layers.json layers.json

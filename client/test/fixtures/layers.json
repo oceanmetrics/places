@@ -1,0 +1,135 @@
+{
+ "schema": 1,
+ "generated": "2026-10-08T00:00:00Z",
+ "base": "https://storage.oceanmetrics.io/gazetteer/",
+ "layers": [
+  {
+   "slug": "fx_leases",
+   "title": "Fixture leases",
+   "collection": "fx_leases",
+   "pmtiles": "https://storage.oceanmetrics.io/gazetteer/fx_leases/places.pmtiles",
+   "source_layer": "fx_leases",
+   "geom_type": "MultiPolygon",
+   "n": 6,
+   "updated": "2026-10-01T12:00:00Z",
+   "version": "1.0.3",
+   "paint": {
+    "fill": {
+     "fill-color": "#e08a1e",
+     "fill-opacity": 0.45
+    },
+    "line": {
+     "line-color": "#a85f00",
+     "line-width": 1
+    }
+   },
+   "authority": "FX",
+   "place_type": "lease",
+   "bbox": [
+    -180,
+    20,
+    180,
+    40
+   ],
+   "attribution": "Fixture Agency, via MarineCadastre. Processed by Ocean Metrics.",
+   "attribution_html": "<a href=\"https://fixture.example/\">Fixture Agency</a>, via MarineCadastre. Processed by Ocean Metrics.",
+   "license": "CC-PDDC",
+   "license_url": "https://www.usa.gov/publicdomain/label/1.0/",
+   "citation": "Fixture Agency, via MarineCadastre. Processed by Ocean Metrics. Fixture leases."
+  },
+  {
+   "slug": "fx_aoa",
+   "title": "Fixture AOAs",
+   "collection": "fx_aoa",
+   "pmtiles": "https://storage.oceanmetrics.io/gazetteer/fx_aoa/places.pmtiles",
+   "source_layer": "fx_aoa",
+   "geom_type": "MultiPolygon",
+   "n": 2,
+   "updated": "2026-10-01T12:00:00Z",
+   "version": "1.0.3",
+   "paint": {
+    "fill": {
+     "fill-color": "#e08a1e",
+     "fill-opacity": 0.45
+    },
+    "line": {
+     "line-color": "#a85f00",
+     "line-width": 1
+    }
+   },
+   "authority": "AOA",
+   "place_type": "aoa",
+   "bbox": [
+    -180,
+    20,
+    180,
+    40
+   ],
+   "attribution": "NOAA AOA program. Processed by Ocean Metrics.",
+   "attribution_html": "<a href=\"https://noaa.example/\">NOAA AOA program</a>. Processed by Ocean Metrics.",
+   "license": "CC-PDDC",
+   "license_url": "https://www.usa.gov/publicdomain/label/1.0/",
+   "citation": "NOAA AOA program. Processed by Ocean Metrics. Fixture AOAs."
+  },
+  {
+   "slug": "fx_stations",
+   "title": "Fixture stations",
+   "collection": "fx_stations",
+   "pmtiles": "https://storage.oceanmetrics.io/gazetteer/fx_stations/places.pmtiles",
+   "source_layer": "fx_stations",
+   "geom_type": "Point",
+   "n": 3,
+   "updated": "2026-10-01T12:00:00Z",
+   "version": "1.0.3",
+   "paint": {
+    "circle": {
+     "circle-color": "#e08a1e",
+     "circle-radius": 4
+    }
+   },
+   "authority": "CALCOFI",
+   "place_type": "station",
+   "bbox": [
+    -180,
+    20,
+    180,
+    40
+   ],
+   "attribution": "CalCOFI. Processed by Ocean Metrics.",
+   "attribution_html": "CalCOFI. Processed by Ocean Metrics.",
+   "license": "CC-PDDC",
+   "license_url": "https://www.usa.gov/publicdomain/label/1.0/",
+   "citation": "CalCOFI. Processed by Ocean Metrics. Fixture stations."
+  },
+  {
+   "slug": "fx_lines",
+   "title": "Fixture lines",
+   "collection": "fx_lines",
+   "pmtiles": "https://storage.oceanmetrics.io/gazetteer/fx_lines/places.pmtiles",
+   "source_layer": "fx_lines",
+   "geom_type": "MultiLineString",
+   "n": 3,
+   "updated": "2026-10-01T12:00:00Z",
+   "version": "1.0.3",
+   "paint": {
+    "line": {
+     "line-color": "#a85f00",
+     "line-width": 1.5
+    }
+   },
+   "authority": "CALCOFI",
+   "place_type": "transect",
+   "bbox": [
+    -180,
+    20,
+    180,
+    40
+   ],
+   "attribution": "CalCOFI. Processed by Ocean Metrics.",
+   "attribution_html": "CalCOFI. Processed by Ocean Metrics.",
+   "license": "CC-PDDC",
+   "license_url": "https://www.usa.gov/publicdomain/label/1.0/",
+   "citation": "CalCOFI. Processed by Ocean Metrics. Fixture lines."
+  }
+ ]
+}
