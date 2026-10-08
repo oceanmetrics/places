@@ -9,6 +9,7 @@ description: >-
 authority: NOAA-OCS
 place_type: maritime_limit
 geometry_type: MultiLineString
+spatial_sort: true
 version: 1.0.0
 cadence: yearly
 license: CC-PDDC

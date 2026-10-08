@@ -34,9 +34,11 @@ for f in $shared catalog.json; do
   cp "$dir_pub/$f" "$snap/$f" 2>/dev/null || true
 done
 
-# 2. copy staging into the pub tree ----
+# 2. copy staging into the pub tree (fresh dir, so a re-run gets a fresh 1.0.0 ledger rather than
+#    portolan auto-bumping a leftover one) ----
 for s in $slugs; do
   [[ -d "$dir_staging/$s" ]] || { echo "not staged: $s" >&2; exit 1; }
+  rm -rf "$dir_pub/$s"
   mkdir -p "$dir_pub/$s"
   cp -R "$dir_staging/$s/." "$dir_pub/$s/"
 done
@@ -97,8 +99,31 @@ with open(rp, "w") as f:
 print("fixups ok:", " ".join(slugs))
 PYEOF
 
-# 6. gate ----
-rashid check "$dir_pub" --data-scope local
+# 6. gate: fail only on ERROR findings in the collections being published; the pulled tree carries
+#    pre-existing findings in other collections (e.g. the stats item links), which are reported, not fatal ----
+rashid check "$dir_pub" --data-scope local --all > /tmp/rashid_gate.txt 2>&1 || true
+python3 - "$slugs" <<'PYEOF'
+import re, sys
+slugs = set(sys.argv[1].split())
+sev = None
+mine, elsewhere = [], 0
+for line in open("/tmp/rashid_gate.txt"):
+    m = re.match(r"^(error|warning|info)\s", line)
+    if m:
+        sev = m.group(1)
+        continue
+    fm = re.match(r"^\s+(\S+?)/", line)
+    if fm and sev == "error":
+        if fm.group(1) in slugs:
+            mine.append(line.rstrip())
+        else:
+            elsewhere += 1
+if mine:
+    print("GATE FAILED: error findings in the publish set:")
+    print("\n".join(mine))
+    sys.exit(1)
+print(f"gate ok: no errors in the publish set ({elsewhere} pre-existing error lines elsewhere in the pulled tree)")
+PYEOF
 
 # 7. upload (no --delete anywhere; root files last) ----
 if [[ $do_upload -eq 1 ]]; then
