@@ -1,0 +1,39 @@
+{
+  "name": "@oceanmetrics/places",
+  "version": "0.1.0",
+  "description": "client for the Ocean Metrics places gazetteer: layers manifest, MapLibre layers from PMTiles, parquet search and lookups, credits",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src", "README.md"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hyparquet": "^1.30.1",
+    "hyparquet-compressors": "^1.1.1"
+  },
+  "peerDependencies": {
+    "pmtiles": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pmtiles": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^22.0.0",
+    "typescript": "~5.9.0",
+    "vitest": "^5.0.1"
+  }
+}

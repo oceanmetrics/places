@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# the offline test fixtures are committed (the repo-wide *.parquet rule is for built catalog artifacts)
+!test/fixtures/**/*.parquet
