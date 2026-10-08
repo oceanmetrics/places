@@ -1,0 +1,29 @@
+# python / uv
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+
+# build working dirs
+cache/
+catalog/staging/
+
+# built catalog artifacts (the Portolan tree is built here and published to S3 / R2, not committed)
+catalog/**/*.parquet
+catalog/**/*.pmtiles
+catalog/**/*.thumb.jpg
+catalog/**/collection.json
+catalog/**/.portolan/
+*.parquet
+*.pmtiles
+*.thumb.jpg
+changed.json
+
+# node (web/, client/)
+node_modules/
+dist/
+
+# local
+.DS_Store
+.env
+.claude/
