@@ -132,6 +132,10 @@ def test_main_offline_writes_manifest(tmp_path):
   assert bl.main(["--staging", str(tmp_path / "st"), "--out", str(out), "--no-remote"]) == 0
   m = json.loads(out.read_text())
   assert m["schema"] == 1 and [r["slug"] for r in m["layers"]] == ["acme_leases"]
+  # pmtiles stay canonical (storage host); base_direct is the redirect-free bucket host apps MAY rewrite onto
+  assert m["base"] == "https://storage.oceanmetrics.io/gazetteer/"
+  assert m["base_direct"] == "https://oceanmetrics.io-public.s3.amazonaws.com/gazetteer/"
+  assert m["layers"][0]["pmtiles"].startswith(m["base"])
 
 
 def test_mixed_geometry_collection_row_regression():

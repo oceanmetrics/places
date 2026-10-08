@@ -6,6 +6,12 @@ standalone (stdlib only): merges two sources of truth, local staged builds win o
   (b) <base>/catalog.json -> each child collection.json, plus versions.json for the current version
 a collection is a map layer when it carries a PMTiles asset. either source may be absent.
 
+URLs: every layer's `pmtiles` is CANONICAL, on the storage host (`base`, https://storage.oceanmetrics.io/gazetteer/):
+each request there costs one 302 to the bucket. apps MAY rewrite a `pmtiles` URL onto `base_direct` (the bucket's own
+host, https://oceanmetrics.io-public.s3.amazonaws.com/gazetteer/, no redirect) by replacing the `base` prefix, until a
+redirect-free host lands. the manifest itself is published at <base>index/layers.json (the client falls back to
+<base>layers.json).
+
   python scripts/build_layers_json.py [--out catalog/staging/layers.json] [--no-remote] [--no-local]
 """
 from __future__ import annotations
@@ -24,6 +30,7 @@ from urllib.parse import urljoin
 
 ROOT = Path(__file__).resolve().parent.parent
 BASE = "https://storage.oceanmetrics.io/gazetteer/"
+BASE_DIRECT = "https://oceanmetrics.io-public.s3.amazonaws.com/gazetteer/"   # same keys, no 302 (bucket host)
 SCHEMA = 1
 
 # default paint per geometry kind (MapLibre paint properties), overridden by a collection's styles/default.json ----
@@ -163,7 +170,7 @@ def merge_rows(published: list[dict], local: list[dict]) -> list[dict]:
 
 def manifest(rows: list[dict], base: str = BASE, generated: str | None = None) -> dict:
   return {"schema": SCHEMA, "generated": generated or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-          "base": base, "layers": rows}
+          "base": base, "base_direct": BASE_DIRECT, "layers": rows}
 
 
 # sources ----
