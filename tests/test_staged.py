@@ -70,3 +70,51 @@ def test_alaska_planning_areas_that_cross_180_are_split():
   t = pq.read_table(d / "places.parquet", columns=["source_id", "bbox"]).to_pylist()
   by = {r["source_id"]: r["bbox"] for r in t}
   assert by["ALA"]["xmin"] == -180.0 and by["ALA"]["xmax"] == 180.0
+
+
+# getPlace is a range read: footer + the row groups whose place_id min/max admit the id ----
+WAVE1 = ["calcofi_lines", "calcofi_stations", "fws_critical_habitat_proposed", "gebco_undersea", "mpa_inventory", "noaa_hapc",
+         "noaa_marine_monuments", "noaa_maritime_limits", "noaa_nerrs", "noaa_sanctuaries", "noaa_state_lateral_boundaries",
+         "noaa_state_submerged_lands", "noaa_submarine_cables", "noaa_vessel_routing_measures", "usace_danger_zones"]
+
+
+def lookup_bytes(path, place_id):
+  """bytes of row-group data a client reads for one place: every row group whose place_id statistics admit the id
+  (a group without statistics must be read), as hyparquet's filter { place_id: { $eq } } does. The footer
+  (md.serialized_size, read once per file and cached) comes on top; it is asserted separately below."""
+  md = pq.ParquetFile(path).metadata
+  total = 0
+  for i in range(md.num_row_groups):
+    g = md.row_group(i)
+    col = next(g.column(j) for j in range(g.num_columns) if g.column(j).path_in_schema == "place_id")
+    st = col.statistics
+    if st is None or not st.has_min_max or st.min <= place_id <= st.max:
+      total += sum(g.column(j).total_compressed_size for j in range(g.num_columns))
+  return total
+
+
+def test_mpa_inventory_getplace_reads_under_1mb():
+  """regression: one getPlace of MPAINV:CA136 pulled 30.5 MB (10 Morton row groups of 100 rows, overlapping id ranges)."""
+  d = staged("mpa_inventory")
+  assert lookup_bytes(d / "places.parquet", "MPAINV:CA136") < 1_000_000
+
+
+def test_noaa_sanctuaries_getplace_does_not_read_the_whole_file():
+  """regression: the layer was ONE 5.5 MB row group, so every lookup read the file."""
+  d = staged("noaa_sanctuaries")
+  md = pq.ParquetFile(d / "places.parquet").metadata
+  assert md.num_row_groups == md.num_rows == 47
+  pid = pq.read_table(d / "places.parquet", columns=["place_id"]).column(0)[0].as_py()
+  assert lookup_bytes(d / "places.parquet", pid) < 600_000
+
+
+@pytest.mark.parametrize("slug", WAVE1)
+def test_wave1_row_groups_keep_the_footer_small_and_rows_carry_the_collection_version(slug):
+  d = staged(slug)
+  md = pq.ParquetFile(d / "places.parquet").metadata
+  assert md.serialized_size < 1_300_000                      # the footer is read once by every opener
+  if md.num_rows > 1 and md.num_row_groups == 1:
+    assert (d / "places.parquet").stat().st_size < 300_000   # a single-group table is only allowed when it is tiny
+  versions = set(pq.read_table(d / "places.parquet", columns=["version"]).column(0).to_pylist())
+  coll = json.loads((d / "collection.json").read_text())
+  assert versions == {coll.get("version") or coll["gazetteer:provenance"]["version"]} and versions != {"1.0.0"}   # republishes of 1.0.0

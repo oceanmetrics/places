@@ -60,7 +60,7 @@ export interface IndexPlace {
   collection: string
   /** [west, south, east, north]; a place cut at the antimeridian is unwrapped, so east may exceed 180 (177..199). */
   bbox      : BBox
-  /** [lon, lat] in [-180, 180] */
+  /** [lon, lat]; for a place cut at the antimeridian lon is the centroid of the unwrapped parts and may exceed 180 (e.g. 188), like the bbox. */
   centroid  : [number, number] | null
   area_km2  : number | null
   license   : string | null

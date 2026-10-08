@@ -51,14 +51,14 @@ COPY (
 -- place_id varchar, name varchar, authority varchar, place_type varchar, geom_type varchar, collection varchar,
 -- bbox struct(xmin double, ymin double, xmax double, ymax double), centroid_lon double, centroid_lat double,
 -- area_km2 double, license varchar, attribution varchar, version varchar, updated varchar.
--- a place cut at the antimeridian (FX:PM) carries the UNWRAPPED bbox (xmax beyond 180), as build_index.py writes it.
+-- a place cut at the antimeridian (FX:PM) carries the UNWRAPPED bbox and centroid (beyond 180), as build_index.py writes them.
 COPY (
   SELECT place_id::VARCHAR AS place_id, name::VARCHAR AS name, authority::VARCHAR AS authority, place_type::VARCHAR AS place_type,
          CASE WHEN place_id = 'FX:PM' THEN 'MultiPolygon' ELSE 'Polygon' END::VARCHAR AS geom_type,
          collection::VARCHAR AS collection,
          CASE WHEN place_id = 'FX:PM' THEN {'xmin': 170.0, 'ymin': 20.0, 'xmax': 196.0, 'ymax': 22.0}
               ELSE {'xmin': bbox.xmin, 'ymin': bbox.ymin, 'xmax': bbox.xmax, 'ymax': bbox.ymax} END AS bbox,
-         (CASE WHEN place_id = 'FX:PM' THEN -179.8 ELSE (bbox.xmin + bbox.xmax) / 2 END)::DOUBLE AS centroid_lon, ((bbox.ymin + bbox.ymax) / 2)::DOUBLE AS centroid_lat,
+         (CASE WHEN place_id = 'FX:PM' THEN 180.2 ELSE (bbox.xmin + bbox.xmax) / 2 END)::DOUBLE AS centroid_lon, ((bbox.ymin + bbox.ymax) / 2)::DOUBLE AS centroid_lat,
          area_km2::DOUBLE AS area_km2,
          'CC-PDDC'::VARCHAR AS license,
          (CASE collection WHEN 'fx_leases' THEN 'Fixture Agency, via MarineCadastre. Processed by Ocean Metrics.'

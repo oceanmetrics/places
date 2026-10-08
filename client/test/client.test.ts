@@ -65,6 +65,11 @@ describe('search', () => {
     expect(hits.every((p) => p.centroid !== null && p.collection !== '' && p.geom_type !== null)).toBe(true)
     expect((await c.search('delta'))[0].centroid).toEqual([-117.5, 39.5])
   })
+  it('an antimeridian place has an unwrapped bbox and centroid (east beyond 180)', async () => {
+    const [pm] = await c.search('pacific meridian')
+    expect(pm.bbox).toEqual([170, 20, 196, 22])
+    expect(pm.centroid![0]).toBeGreaterThan(180)
+  })
   it('a place_id in two collections is two hits, told apart by collection', async () => {
     const hits = await c.search('FX:C-3')
     expect(hits.map((p) => [p.collection, p.name]).sort()).toEqual([['fx_aoa', 'Charlie lease (AOA copy)'], ['fx_leases', 'Charlie lease']])

@@ -11,6 +11,7 @@
   `creditsFor` accepts search hits and `{ collection, place_id }` and credits every collection for a bare duplicate id.
 - `listLayers` falls back to `${base}layers.json` when `${base}index/layers.json` answers 404 or 403 (an explicit
   `layersUrl` is used as given).
+- index centroids of places cut at the antimeridian are computed on the unwrapped parts (`centroid[0]` may exceed 180, e.g. NMS:PMNM ~188 instead of a mid-Pacific average), same convention as the bbox.
 - `bboxIntersects` / `search({ bbox })` understand unwrapped index bboxes whose east edge exceeds 180 (places cut at the
   antimeridian are indexed as e.g. 177..199).
 - docs: `layers.json` `base_direct` (apps MAY rewrite canonical `pmtiles` URLs onto the redirect-free bucket host).

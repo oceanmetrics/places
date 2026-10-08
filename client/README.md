@@ -89,7 +89,7 @@ pre-0.1.1 `centroid` list is still understood), `area_km2, license, attribution,
 slug whose PMTiles layer and GeoParquet hold the place (`${base}${collection}/`), `geom_type` its geometry kind.
 
 - **bbox convention for places cut at the antimeridian:** the index bbox is *unwrapped*: parts west of the antimeridian are
-  shifted +360, so `xmax` may exceed 180 (e.g. `[177, 10, 199, 14]`). `fitBounds` takes it as is. The `bbox` option of
+  shifted +360, so `xmax` may exceed 180 (e.g. `[177, 10, 199, 14]`). `fitBounds` takes it as is. The `centroid` of such a place is computed on the unwrapped parts too, so `centroid[0]` may exceed 180 (NMS:PMNM is about 188); wrap it with `((x + 540) % 360) - 180` where a map needs [-180, 180]. The `bbox` option of
   `search` also matches such places from either side of the antimeridian.
 - **`place_id` is unique within a collection, not across collections** (`BOEM:OCS-P 0562/0563/0564` are in both
   `boem_pacific_og_leases` and `boem_wind_leases`). `search` returns one hit per (collection, place_id); tell them apart
