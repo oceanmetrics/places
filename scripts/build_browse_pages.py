@@ -9,7 +9,7 @@ rewrites a folder URL to that object. Same conventions as the sibling generators
   * MarineSensitivity/msens R/storage.R               (same bucket and vhost: look, README block,
     dirs link to the storage host, files link straight to S3 so no bytes transit the VM)
 
-It only WRITES local files. Uploading is a separate, deliberate step (see docs/browse_pages.md):
+It only WRITES local files. Uploading is a separate, deliberate step (see docs/vhost_gazetteer_browse.diff for the root/vhost side):
     aws s3 sync OUT s3://oceanmetrics.io-public/ --exclude '*' --include '*index.html' \
         --cache-control no-cache
 
