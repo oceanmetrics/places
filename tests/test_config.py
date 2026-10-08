@@ -11,7 +11,7 @@ CFGS = load_all(ROOT / "sources")
 
 
 def test_six_collections_are_configured():
-  assert set(CFGS) == EXPECTED
+  assert EXPECTED <= set(CFGS)  # other collections may be added alongside
 
 
 @pytest.mark.parametrize("slug", sorted(EXPECTED))

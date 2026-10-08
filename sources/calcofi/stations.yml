@@ -1,0 +1,56 @@
+# calcofi_stations: the 113 CalCOFI stations of the extended pattern as points, flagged core-75 vs extended
+slug: calcofi_stations
+title: CalCOFI stations
+description: >-
+  The 113 CalCOFI sampling stations (the full extended pattern: the 75-station standard pattern used since 1984 plus
+  38 stations of the winter/spring and extended 113-station pattern) at the positions CalCOFI publishes on its
+  Station Positions page (CalCOFIStationOrder.csv). `in_core_75` is true for the 75 standard stations, taken from
+  CalCOFI's 75-station KML (CalCOFI_75StandardStations.kml); `sampling_pattern` is core_75 or extended. `line_id` and
+  `station_id` are the zero-padded line and station numbers (e.g. 093.3 and 030.0), `sta_type` is ROS (rosette) or
+  SCCOOS (the nine ~20 m inshore stations).
+place_type: station
+geometry_type: Point
+authority: CALCOFI
+version: 1.0.0
+cadence: monthly
+license: CC-BY-4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+license_note: >-
+  Stated by CalCOFI on https://calcofi.org/data/data-usage-policy/ (read 2026-10-08): "CalCOFI oceanographic and
+  biological data are licensed under the Creative Commons Attribution 4.0 International License"; users must state that
+  the data were obtained from the California Cooperative Oceanic Fisheries Investigations (https://calcofi.org/).
+  The policy covers CalCOFI's data in general and does not name the station-position tables, which are published
+  without a separate statement; decision D13 treats the collections as contributed by CalCOFI under its own licence.
+attribution: >-
+  California Cooperative Oceanic Fisheries Investigations (CalCOFI), calcofi.org. CC BY 4.0. Processed by Ocean Metrics.
+providers:
+  - {name: California Cooperative Oceanic Fisheries Investigations (CalCOFI), roles: [producer, licensor], url: "https://calcofi.org/"}
+source_page: https://calcofi.org/sampling-info/station-positions/
+status:
+  value: active
+  source: https://calcofi.org/sampling-info/station-positions/
+  date: data_last_edit
+place_id: {template: "CALCOFI:{line_id}_{station_id}", pattern: '^CALCOFI:\d{3}\.\d_\d{3}\.\d$'}
+name: "CalCOFI station {station_key}"
+source_id: "{station_key}"
+tile_maxzoom: 10
+tile_properties: [place_id, name, place_type, status, source_id, line, station, sta_type, in_core_75, sampling_pattern]
+column_docs:
+  line_id: "zero-padded CalCOFI line number, e.g. 093.3"
+  station_id: "zero-padded CalCOFI station number along the line, e.g. 030.0"
+  station_key: "line and station as 'LLL.L SSS.S', the form of the CalCOFI database site_key"
+  line: "CalCOFI line number (numeric)"
+  station: "CalCOFI station number along the line (numeric)"
+  order_occ: "CalCOFI's order of occupation of the station on a cruise"
+  depth_est_m: "estimated bottom depth in metres (empty where CalCOFI lists none)"
+  sta_type: "ROS (rosette) or SCCOOS (inshore ~20 m station)"
+  in_core_75: "true when the station is in the 75-station standard pattern (CalCOFI_75StandardStations.kml)"
+  sampling_pattern: "core_75 (standard 75-station pattern) or extended (the other 38 of the 113-station pattern)"
+sources:
+  - kind: calcofi_positions
+    url: https://calcofi.org/downloads/maps/CalCOFIStationOrder.csv
+    core_url: https://calcofi.org/downloads/CalCOFI_75StandardStations.kml
+    product: stations
+    item_id: ""
+    expected_count: 113
+    expected_core: 75

@@ -43,8 +43,9 @@ def check_parquet(path: Path, cfg: dict) -> list[str]:
   geoms = shapely.from_wkb(t.column("geometry").to_pylist())
   if not shapely.is_valid(geoms).all():
     problems.append(f"{int((~shapely.is_valid(geoms)).sum())} invalid geometries")
-  if set(shapely.get_type_id(geoms)) != {6}:
-    problems.append("geometries are not all MultiPolygon")
+  gtype = cfg.get("geometry_type", "MultiPolygon")
+  if set(shapely.get_type_id(geoms)) != {{"Point": 0, "LineString": 1, "MultiPolygon": 6}[gtype]}:
+    problems.append(f"geometries are not all {gtype}")
   b = shapely.bounds(geoms)
   if b[:, 0].min() < -180 or b[:, 2].max() > 180 or b[:, 1].min() < -90 or b[:, 3].max() > 90:
     problems.append("coordinates outside [-180, 180] x [-90, 90]")

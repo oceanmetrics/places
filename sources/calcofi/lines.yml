@@ -1,0 +1,53 @@
+# calcofi_lines: the CalCOFI transect lines as linestrings through their listed station positions
+slug: calcofi_lines
+title: CalCOFI transect lines
+description: >-
+  The eleven CalCOFI transect lines (60.0 to 93.3) as linestrings through the station positions CalCOFI publishes on its
+  Station Positions page, vertices in station-number order (nearshore to offshore). A line is flagged `in_core_75` when
+  any of its stations is in the 75-station standard pattern (the six lines 76.7 to 93.3); `n_core_75` counts them. The
+  seven single-station SCCOOS inshore lines (81.7, 81.8, 85.4, 86.8, 88.5, 91.7, 93.4) have no second position, so they
+  are not lines here: see calcofi_stations.
+place_type: transect
+geometry_type: LineString
+authority: CALCOFI
+version: 1.0.0
+cadence: monthly
+license: CC-BY-4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+license_note: >-
+  Stated by CalCOFI on https://calcofi.org/data/data-usage-policy/ (read 2026-10-08): "CalCOFI oceanographic and
+  biological data are licensed under the Creative Commons Attribution 4.0 International License"; users must state that
+  the data were obtained from the California Cooperative Oceanic Fisheries Investigations (https://calcofi.org/).
+  The policy covers CalCOFI's data in general and does not name the station-position tables, which are published
+  without a separate statement; decision D13 treats the collections as contributed by CalCOFI under its own licence.
+attribution: >-
+  California Cooperative Oceanic Fisheries Investigations (CalCOFI), calcofi.org. CC BY 4.0. Processed by Ocean Metrics.
+providers:
+  - {name: California Cooperative Oceanic Fisheries Investigations (CalCOFI), roles: [producer, licensor], url: "https://calcofi.org/"}
+source_page: https://calcofi.org/sampling-info/station-positions/
+status:
+  value: active
+  source: https://calcofi.org/sampling-info/station-positions/
+  date: data_last_edit
+place_id: {template: "CALCOFI:line-{line_id}", pattern: '^CALCOFI:line-\d{3}\.\d$'}
+name: "CalCOFI line {line_id}"
+source_id: "{line_id}"
+tile_maxzoom: 10
+tile_properties: [place_id, name, place_type, status, source_id, line, n_stations, in_core_75]
+column_docs:
+  line_id: "zero-padded CalCOFI line number, e.g. 093.3"
+  line: "CalCOFI line number (numeric)"
+  n_stations: "number of listed station positions on the line (vertices)"
+  n_core_75: "how many of them are in the 75-station standard pattern"
+  in_core_75: "true when the line carries any 75-station standard station"
+  station_min: "lowest (most inshore) station number on the line"
+  station_max: "highest (most offshore) station number on the line"
+  length_km: "geodesic length of the linestring, km (WGS 84)"
+sources:
+  - kind: calcofi_positions
+    url: https://calcofi.org/downloads/maps/CalCOFIStationOrder.csv
+    core_url: https://calcofi.org/downloads/CalCOFI_75StandardStations.kml
+    product: lines
+    item_id: ""
+    expected_count: 11
+    expected_core: 75

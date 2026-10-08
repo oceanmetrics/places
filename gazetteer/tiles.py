@@ -36,15 +36,17 @@ def table_to_ndjson(parquet: Path, out: Path, keep: list[str] | None = None) -> 
   return len(geoms)
 
 
-def tippecanoe_cmd(src: Path, dest: Path, slug: str, name: str, description: str, attribution: str) -> list[str]:
-  """the tippecanoe invocation: guessed max zoom, layer = slug, -n / -N name and description, --attribution."""
-  return ["tippecanoe", "-o", str(dest), "-zg", "-l", slug, "-n", name, "-N", description,
+def tippecanoe_cmd(src: Path, dest: Path, slug: str, name: str, description: str, attribution: str,
+                   maxzoom: int | None = None) -> list[str]:
+  """the tippecanoe invocation: guessed max zoom (or -z maxzoom, for sparse points / lines where the guess is too
+  coarse), layer = slug, -n / -N name and description, --attribution."""
+  return ["tippecanoe", "-o", str(dest), f"-z{maxzoom}" if maxzoom else "-zg", "-l", slug, "-n", name, "-N", description,
           "--attribution", attribution, "--drop-densest-as-needed", "--extend-zooms-if-still-dropping",
           "--read-parallel", "--force", "--quiet", str(src)]
 
 
 def build_pmtiles(parquet: Path, dest: Path, slug: str, name: str, description: str, attribution: str,
-                  keep: list[str] | None = None) -> int:
+                  keep: list[str] | None = None, maxzoom: int | None = None) -> int:
   """GeoParquet -> PMTiles; returns the feature count. raises if tippecanoe is missing or fails."""
   if not shutil.which("tippecanoe"):
     raise RuntimeError("tippecanoe not found on PATH (brew install tippecanoe, or build felt/tippecanoe)")
@@ -52,7 +54,7 @@ def build_pmtiles(parquet: Path, dest: Path, slug: str, name: str, description: 
     nd = Path(tmp) / f"{slug}.geojsonl"
     n = table_to_ndjson(parquet, nd, keep)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(tippecanoe_cmd(nd, dest, slug, name, " ".join(description.split()), " ".join(attribution.split())),
+    subprocess.run(tippecanoe_cmd(nd, dest, slug, name, " ".join(description.split()), " ".join(attribution.split()), maxzoom),
                    check=True)
   return n
 

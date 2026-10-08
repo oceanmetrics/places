@@ -6,8 +6,9 @@ from pathlib import Path
 
 import yaml
 
-PLACE_TYPES = {"lease", "planning_area", "aoa"}
-KINDS = {"arcgis", "shapefile_zip"}
+PLACE_TYPES = {"lease", "planning_area", "aoa", "station", "transect"}
+KINDS = {"arcgis", "shapefile_zip", "calcofi_positions"}
+GEOMETRY_TYPES = {"MultiPolygon", "Point", "LineString"}  # collection-level `geometry_type`, default MultiPolygon
 REQUIRED = ["slug", "title", "description", "authority", "place_type", "version", "license", "attribution",
             "providers", "status", "sources"]
 
@@ -29,6 +30,8 @@ def validate_config(cfg: dict, label: str = "config") -> None:
     errs.append("slug must be snake_case")
   if cfg.get("place_type") and cfg["place_type"] not in PLACE_TYPES:
     errs.append(f"place_type must be one of {sorted(PLACE_TYPES)}")
+  if cfg.get("geometry_type", "MultiPolygon") not in GEOMETRY_TYPES:
+    errs.append(f"geometry_type must be one of {sorted(GEOMETRY_TYPES)}")
   st = cfg.get("status") or {}
   errs += [f"status.{k} missing" for k in ("value", "source", "date") if not st.get(k)]
   for i, src in enumerate(cfg.get("sources") or []):

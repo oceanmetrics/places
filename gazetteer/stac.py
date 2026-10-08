@@ -49,9 +49,19 @@ def size_label(n: int) -> str:
   return f"{n / 1e6:.1f} MB" if n >= 1e6 else f"{n / 1e3:.0f} kB"
 
 
-def style_json(slug: str, max_zoom: int) -> dict:
+def style_json(slug: str, max_zoom: int, geometry_type: str = "MultiPolygon") -> dict:
+  src = {"data": {"type": "vector", "url": "pmtiles://../places.pmtiles", "minzoom": 0, "maxzoom": max_zoom}}
+  if geometry_type == "Point":
+    return {"version": 8, "name": "Default", "sources": src, "layers": [
+      {"id": f"{slug}-circle", "type": "circle", "source": "data", "source-layer": slug,
+       "paint": {"circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 2, 8, 5, 12, 7], "circle-color": "#0b6e99",
+                 "circle-stroke-color": "#ffffff", "circle-stroke-width": 1, "circle-opacity": 0.9}}]}
+  if geometry_type == "LineString":
+    return {"version": 8, "name": "Default", "sources": src, "layers": [
+      {"id": f"{slug}-line", "type": "line", "source": "data", "source-layer": slug,
+       "paint": {"line-color": "#0b6e99", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1, 10, 2.5]}}]}
   return {"version": 8, "name": "Default",
-          "sources": {"data": {"type": "vector", "url": "pmtiles://../places.pmtiles", "minzoom": 0, "maxzoom": max_zoom}},
+          "sources": src,
           "layers": [
             {"id": f"{slug}-fill", "type": "fill", "source": "data", "source-layer": slug,
              "paint": {"fill-color": "#e08a1e", "fill-opacity": 0.45}},
@@ -64,9 +74,11 @@ def build_collection(cfg: dict, table: pa.Table, geo: dict, provenance: dict, di
   """the STAC Collection (1.1.0) mirroring the catalog places collection, for files already in `dir`."""
   slug = cfg["slug"]
   bbox = geo["columns"]["geometry"]["bbox"]
+  gt = cfg.get("geometry_type", "MultiPolygon")
+  docs = {**COLUMN_DOCS, "geom_type": f"geometry type ({gt})", "geometry": f"{gt.upper()}, EPSG:4326, split at +/-180 antimeridian"}
   cols = []
   for f in table.schema:
-    desc = COLUMN_DOCS.get(f.name) or descriptions.get(f.name) or f"native attribute of the source layer ({f.name})"
+    desc = descriptions.get(f.name) or docs.get(f.name) or f"native attribute of the source layer ({f.name})"
     cols.append({"name": f.name, "type": str(f.type).replace("timestamp[ms, tz=UTC]", "timestamp[ms, tz=UTC]"),
                  "description": desc})
   links = [
@@ -100,7 +112,7 @@ def build_collection(cfg: dict, table: pa.Table, geo: dict, provenance: dict, di
     "type": "Collection", "id": slug, "stac_version": "1.1.0",
     "description": " ".join(cfg["description"].split()) + f" Built by build.py from {len(provenance['sources'])} source layer(s).",
     "links": links, "stac_extensions": STAC_EXTENSIONS,
-    "geoparquet:geometry_type": "MultiPolygon", "geoparquet:feature_count": table.num_rows,
+    "geoparquet:geometry_type": gt, "geoparquet:feature_count": table.num_rows,
     "table:row_count": table.num_rows, "table:primary_geometry": "geometry", "table:columns": cols,
     "updated": now, "pmtiles:min_zoom": header["min_zoom"], "pmtiles:max_zoom": header["max_zoom"],
     "pmtiles:tile_type": "mvt", "pmtiles:center": header["center"], "pmtiles:layers": [slug],

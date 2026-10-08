@@ -9,7 +9,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 import requests
 
-from . import fetch, stac, tiles
+from . import calcofi, fetch, stac, tiles
 from .fetch import SourceResult
 from .table import build_rows, to_table, write_geoparquet
 from .validate import check_parquet, check_pmtiles
@@ -23,6 +23,8 @@ def fetch_source(src: dict, cache: Path, delay: float = 0.5, s=None) -> SourceRe
     return fetch.fetch_arcgis(src, delay=delay, raw_dir=cache / "raw" / (src.get("component") or "layer"), s=s)
   if src["kind"] == "shapefile_zip":
     return fetch.fetch_shapefile_zip(src, cache, s=s)
+  if src["kind"] == "calcofi_positions":
+    return calcofi.fetch_calcofi(src, cache, s=s)
   raise ValueError(f"unknown source kind {src['kind']}")
 
 
@@ -53,16 +55,16 @@ def build_layer(cfg: dict, staging: Path, cache: Path, version: str | None = Non
   prov = provenance_record(cfg, results, len(rows), dropped, version, now)
   geo = write_geoparquet(table, out / "places.parquet", prov)
   tiles.build_pmtiles(out / "places.parquet", out / "places.pmtiles", slug, cfg["title"],
-                      cfg["description"], cfg["attribution"], cfg.get("tile_properties"))
+                      cfg["description"], cfg["attribution"], cfg.get("tile_properties"), cfg.get("tile_maxzoom"))
   header, _ = tiles.read_pmtiles(out / "places.pmtiles")
-  (out / "styles" / "default.json").write_text(json.dumps(stac.style_json(slug, header["max_zoom"]), indent=2) + "\n")
+  (out / "styles" / "default.json").write_text(json.dumps(stac.style_json(slug, header["max_zoom"], cfg.get("geometry_type", "MultiPolygon")), indent=2) + "\n")
   (out / "provenance.json").write_text(json.dumps(prov, indent=2, default=str) + "\n")
   (out / "AGENTS.md").write_text(stac.agents(cfg))
   # the README lists the asset sizes, so write a placeholder first, build the collection, then fill it in
   (out / "README.md").write_text("")
-  coll = stac.build_collection(cfg, table, geo, prov, out, header, now, {})
+  coll = stac.build_collection(cfg, table, geo, prov, out, header, now, cfg.get("column_docs") or {})
   (out / "README.md").write_text(stac.readme(cfg, table, prov, coll, version))
-  coll = stac.build_collection(cfg, table, geo, prov, out, header, now, {})
+  coll = stac.build_collection(cfg, table, geo, prov, out, header, now, cfg.get("column_docs") or {})
   (out / "collection.json").write_text(json.dumps(coll, indent=2, default=str) + "\n")
   problems = check_parquet(out / "places.parquet", cfg) + check_pmtiles(out / "places.pmtiles", slug)
   if problems:

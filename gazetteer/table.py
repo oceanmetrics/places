@@ -14,6 +14,7 @@ import shapely
 
 from .config import source_setting
 from .fetch import SourceResult
+from .calcofi import clean_simple_geometry
 from .geom import clean_geometry
 from .ids import build_place_ids, check_place_ids
 from .fmt import render
@@ -42,6 +43,8 @@ def coerce(value, typ: str):
   """a native value -> the Python value for its Arrow type (Esri dates are epoch milliseconds)."""
   if value is None or (isinstance(value, float) and np.isnan(value)):
     return None
+  if typ == "bool":
+    return bool(value)
   if typ == "int":
     return int(value)
   if typ == "float":
@@ -56,7 +59,7 @@ def coerce(value, typ: str):
 
 
 def arrow_type(typ: str) -> pa.DataType:
-  return {"int": pa.int64(), "float": pa.float64(), "date": TS}.get(typ, pa.string())
+  return {"int": pa.int64(), "float": pa.float64(), "date": TS, "bool": pa.bool_()}.get(typ, pa.string())
 
 
 def _iso_day(iso: str | None) -> dt.date | None:
@@ -73,6 +76,7 @@ def build_rows(cfg: dict, results: list[SourceResult], version: str | None = Non
   overlay_cfg = (cfg.get("status") or {}).get("overlay")
   overlay = load_overlay(Path(cfg["_sources_dir"]) / overlay_cfg["file"]) if overlay_cfg else None
   version = version or cfg["version"]
+  gtype = cfg.get("geometry_type", "MultiPolygon")   # Point / LineString collections skip the polygon cleaning
   rows, fields, dropped = [], [], []
   seen_types: dict[str, str] = {}
   for src_cfg, res in zip(cfg["sources"], results):
@@ -84,8 +88,9 @@ def build_rows(cfg: dict, results: list[SourceResult], version: str | None = Non
       if col not in [x["name"] for x in fields]:
         fields.append({"name": col, "type": f["type"], "native": f["name"]})
     keep = []
+    dropped += res.extra.get("dropped") or []
     for ft in res.features:
-      g = clean_geometry(ft["geometry"])
+      g = clean_geometry(ft["geometry"]) if gtype == "MultiPolygon" else clean_simple_geometry(ft["geometry"], gtype)
       if g is None:
         dropped.append(f"{res.source_url}: dropped feature with no polygon (attributes: "
                        f"{ {k: v for k, v in ft['properties'].items() if v not in (None, '')} })")
@@ -105,7 +110,7 @@ def build_rows(cfg: dict, results: list[SourceResult], version: str | None = Non
         "place_id": pid, "authority": cfg["authority"],
         "source_id": render(source_setting(cfg, src_cfg, "source_id"), props, maps),
         "name": render(source_setting(cfg, src_cfg, "name"), props, maps),
-        "place_type": cfg["place_type"], "geom_type": "MultiPolygon",
+        "place_type": cfg["place_type"], "geom_type": gtype,
         "status": st[0], "status_source": st[1], "status_date": st[2],
         "source_url": res.source_url,
         "source_date": _iso_day(res.data_last_edit) or _iso_day(res.retrieved),
@@ -149,13 +154,15 @@ def to_table(rows: list[dict], fields: list[dict]) -> pa.Table:
 
 
 def geo_metadata(table: pa.Table) -> dict:
-  """GeoParquet 1.1 `geo` metadata for the table: WKB MultiPolygon in EPSG:4326 with the bbox covering."""
+  """GeoParquet 1.1 `geo` metadata for the table: WKB (the geom_type column: MultiPolygon, Point or LineString) in EPSG:4326 with the bbox covering."""
+  types = sorted(set(table.column("geom_type").to_pylist())) or ["MultiPolygon"]
   b = table.column("bbox").combine_chunks()
   mins = [min(b.field(k).to_pylist()) for k in ("xmin", "ymin")]
   maxs = [max(b.field(k).to_pylist()) for k in ("xmax", "ymax")]
   return {"version": "1.1.0", "primary_column": "geometry", "columns": {"geometry": {
-    "encoding": "WKB", "geometry_types": ["MultiPolygon"], "crs": pyproj.CRS.from_epsg(4326).to_json_dict(),
-    "edges": "planar", "orientation": "counterclockwise", "bbox": [mins[0], mins[1], maxs[0], maxs[1]],
+    "encoding": "WKB", "geometry_types": types, "crs": pyproj.CRS.from_epsg(4326).to_json_dict(),
+    "edges": "planar", **({"orientation": "counterclockwise"} if types == ["MultiPolygon"] else {}),
+    "bbox": [mins[0], mins[1], maxs[0], maxs[1]],
     "covering": {"bbox": {k: ["bbox", k] for k in ("xmin", "ymin", "xmax", "ymax")}}}}}
 
 
