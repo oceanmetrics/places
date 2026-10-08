@@ -1,0 +1,42 @@
+# boem_wind_leases: BOEM offshore wind lease outlines (52 polygons: commercial leases, research leases, easements)
+slug: boem_wind_leases
+title: BOEM offshore wind lease outlines
+description: >-
+  Outlines of the offshore wind energy leases and grid/export easements issued by the Bureau of Ocean Energy
+  Management (BOEM) on the U.S. Outer Continental Shelf (52 polygons, 5 of them off California). The layer
+  itself carries no status field and still lists the five California leases (OCS-P 0561-0565) after BOEM's
+  2026 cancellations and relinquishment, so `status`, `status_source` and `status_date` come from a
+  hand-maintained overlay (catalog/sources/boem/wind_lease_status.csv, from BOEM's California page) joined on
+  the lease number. Every other lease is `active` as of the layer's last edit.
+authority: BOEM
+place_type: lease
+version: 1.0.0
+cadence: weekly
+license: CC-PDDC
+license_url: https://www.usa.gov/publicdomain/label/1.0/
+license_note: U.S. federal government work (BOEM), public domain; the AGOL item carries the usa.gov public-domain label.
+attribution: >-
+  Bureau of Ocean Energy Management (BOEM), Office of Renewable Energy Programs (OREP), via MarineCadastre.gov.
+  Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: Bureau of Ocean Energy Management (BOEM), roles: [producer, licensor], url: "https://www.boem.gov/renewable-energy"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.boem.gov/renewable-energy/state-activities/california
+place_id:
+  rule: lease          # BOEM:<lease number>; extra polygons of one lease (easements) get :<lease type>[-n]
+  pattern: '^BOEM:OCS-[A-Z] \d{4,5}(:[a-z0-9-]+)?$'
+name: "{LEASE_NUMBER} {LEASE_TYPE} - {COMPANY}"
+source_id: "{LEASE_NUMBER}"
+status:
+  value: active
+  source: https://services7.arcgis.com/G5Ma95RzqJRPKsWL/arcgis/rest/services/Wind_Lease_Boundaries__BOEM_/FeatureServer/8
+  date: data_last_edit
+  overlay:
+    file: boem/wind_lease_status.csv
+    key: LEASE_NUMBER
+sources:
+  - kind: arcgis
+    url: https://services7.arcgis.com/G5Ma95RzqJRPKsWL/arcgis/rest/services/Wind_Lease_Boundaries__BOEM_/FeatureServer/8
+    item_id: 709831444a234968966667d84bcc0357
+    expected_count: 52
+    page_size: 1000

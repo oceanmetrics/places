@@ -1,0 +1,41 @@
+# boem_pacific_og_leases: active Pacific oil and gas leases (34), BOEM's own ArcGIS Server
+slug: boem_pacific_og_leases
+title: BOEM Pacific active oil and gas leases
+description: >-
+  The 34 active oil and gas leases in the Pacific OCS (off California), from BOEM's Pacific Region map service
+  (POC_Layers layer 7). `LEASE_STATUS_CD` is BOEM's own code (UNIT = committed to a unit, PROD = producing,
+  RENACV is kept as served); `status` is `active` for all of them because the layer lists active leases only.
+  Lease numbers are served as P00202 and published in BOEM's formal form `OCS-P 0202`.
+authority: BOEM
+place_type: lease
+version: 1.0.0
+cadence: weekly
+license: CC-PDDC
+license_url: https://www.usa.gov/publicdomain/label/1.0/
+license_note: U.S. federal government work (BOEM / BSEE), public domain; the service carries no separate terms.
+attribution: >-
+  Bureau of Ocean Energy Management (BOEM) and Bureau of Safety and Environmental Enforcement (BSEE), Pacific
+  Region. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: Bureau of Ocean Energy Management (BOEM), roles: [producer, licensor], url: "https://www.boem.gov/oil-gas-energy/mapping-and-data/pacific-cadastral-data"}
+  - {name: Bureau of Safety and Environmental Enforcement (BSEE), roles: [producer], url: "https://www.bsee.gov"}
+source_page: https://www.boem.gov/oil-gas-energy/mapping-and-data/pacific-cadastral-data
+place_id:
+  rule: lease
+  pattern: '^BOEM:OCS-P \d{4}(:[a-z0-9-]+)?$'
+name: "{LEASE_NUMBER|lease_number} oil and gas lease ({LEASE_STATUS_CD})"
+source_id: "{LEASE_NUMBER}"
+status:
+  value: active
+  source: https://gis.boem.gov/server/rest/services/BOEM_BSEE/POC_Layers/MapServer/7
+  date: "field:LSE_STAT_EFF_DT"
+sources:
+  - kind: arcgis
+    url: https://gis.boem.gov/server/rest/services/BOEM_BSEE/POC_Layers/MapServer/7
+    item_id: ""
+    expected_count: 34
+    page_size: 1000
+    # gis.boem.gov serves an incomplete certificate chain (no intermediate), so no client can verify it:
+    # set to true if BOEM fixes the chain. the data are public and every row records its source_url.
+    tls_verify: false
+    format: geojson    # esrijson also supported (converted by erin_layers.geom.esri_json_to_geojson)

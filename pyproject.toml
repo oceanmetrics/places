@@ -1,0 +1,27 @@
+# the oceanmetrics places gazetteer build pipeline (build.py + gazetteer/): `uv run --group dev pytest -q`
+
+[project]
+name = "places"
+version = "0.1.0"
+description = "fetch, normalise and publish marine place layers as GeoParquet + PMTiles + STAC (oceanmetrics gazetteer)"
+requires-python = ">=3.11"
+dependencies = [
+  "pyarrow>=17",
+  "shapely>=2.1",
+  "pyproj>=3.6",
+  "pyyaml>=6",
+  "requests>=2.31",
+  "pyogrio>=0.9",
+  "numpy>=1.26",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "pmtiles>=3.4"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["network: hits a live service (deselect with -m 'not network')", "tippecanoe: needs the tippecanoe binary"]
+
+[tool.uv]
+package = false

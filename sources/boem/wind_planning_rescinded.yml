@@ -1,0 +1,47 @@
+# boem_wind_planning_rescinded: BOEM wind planning areas rescinded on 2025-07-30 (outlines + blocks)
+slug: boem_wind_planning_rescinded
+title: BOEM offshore wind planning areas (rescinded 2025-07-30)
+description: >-
+  Wind energy areas, call areas and proposed-sale areas that BOEM de-designated on 2025-07-30 (BOEM notice
+  "BOEM Rescinds Designated Wind Energy Areas on the Outer Continental Shelf"). Two BOEM layers are combined:
+  the dissolved outlines (`component` = outline) and the OCS blocks and sub-blocks that make them up
+  (`component` = block). Every row is `status` = rescinded, `status_date` = 2025-07-30; the native `AREA_STATUS`
+  column keeps BOEM's own, stale value (the Oregon areas are still marked Active). The outline layer holds one
+  row with no geometry and no attributes (OBJECTID 2068); it is dropped.
+authority: BOEM
+place_type: planning_area
+version: 1.0.0
+cadence: weekly
+license: CC-PDDC
+license_url: https://www.usa.gov/publicdomain/label/1.0/
+license_note: U.S. federal government work (BOEM), public domain; the AGOL items carry the usa.gov public-domain label.
+attribution: >-
+  Bureau of Ocean Energy Management (BOEM), Office of Renewable Energy Programs (OREP), via MarineCadastre.gov.
+  Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: Bureau of Ocean Energy Management (BOEM), roles: [producer, licensor], url: "https://www.boem.gov/renewable-energy"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.boem.gov/newsroom/notes-stakeholders/boem-rescinds-designated-wind-energy-areas-outer-continental-shelf
+status:
+  value: rescinded
+  source: https://www.boem.gov/newsroom/notes-stakeholders/boem-rescinds-designated-wind-energy-areas-outer-continental-shelf
+  date: "2025-07-30"
+sources:
+  - kind: arcgis
+    component: outline
+    url: https://services7.arcgis.com/G5Ma95RzqJRPKsWL/arcgis/rest/services/Wind_Planning_Area_Boundaries__BOEM_/FeatureServer/0
+    item_id: f4bafa57366c49ffb84db33fa52c134c
+    expected_count: 19
+    page_size: 1000
+    place_id: {template: "BOEM:WPA:{OBJECTID}", pattern: '^BOEM:WPA:\d+$'}
+    name: "{ADDITIONAL_INFORMATION}"
+    source_id: "{OBJECTID}"
+  - kind: arcgis
+    component: block
+    url: https://services7.arcgis.com/G5Ma95RzqJRPKsWL/arcgis/rest/services/Wind_Planning_Areas__BOEM_/FeatureServer/7
+    item_id: ad4e83ed78d24319b641ebbaf1f7298e
+    expected_count: 3307
+    page_size: 1000
+    place_id: {template: "BOEM:WPA-BLK:{PROTRACTION_NUMBER}-{BLOCK_NUMBER}{SUB_BLOCK|prefix:-}", pattern: '^BOEM:WPA-BLK:[A-Z]{2}\d{2}-\d{2}-[A-Za-z0-9]+(-[A-Za-z0-9]+)?$'}
+    name: "{ADDITIONAL_INFORMATION} - block {PROTRACTION_NUMBER}-{BLOCK_LABEL}{SUB_BLOCK|prefix:-}"
+    source_id: "{PROTRACTION_NUMBER}-{BLOCK_NUMBER}{SUB_BLOCK|prefix:-}"

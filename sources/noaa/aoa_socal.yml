@@ -1,0 +1,37 @@
+# noaa_aoa_socal: Southern California Aquaculture Opportunity Areas (10), NOAA Fisheries shapefile
+slug: noaa_aoa_socal
+title: NOAA Southern California Aquaculture Opportunity Areas
+description: >-
+  The ten Aquaculture Opportunity Areas (AOAs) NOAA identified in federal waters off Southern California
+  (decision signed 2025-09-10, identified 2025-09-19) in two study areas (North, Central North). Source is the
+  NOAA Fisheries shapefile (NAD83(2011) / California Albers), reprojected to EPSG:4326. `AOA` is the area code
+  (e.g. N1-A, CN1-B).
+authority: AOA
+place_type: aoa
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.usa.gov/publicdomain/label/1.0/
+license_note: >-
+  U.S. federal government work (NOAA Fisheries). The download page states no terms; treated as public domain
+  under 17 U.S.C. 105. Credit NOAA and do not imply endorsement.
+attribution: >-
+  NOAA Fisheries, West Coast Region, Southern California Aquaculture Opportunity Areas (2025). Public domain.
+  Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Fisheries West Coast Region, roles: [producer, licensor], url: "https://www.fisheries.noaa.gov/west-coast/aquaculture/southern-california-aquaculture-opportunity-areas"}
+source_page: https://www.fisheries.noaa.gov/west-coast/aquaculture/southern-california-aquaculture-opportunity-areas
+place_id: {template: "AOA:{AOA}", pattern: '^AOA:[A-Z]{1,3}\d+-[A-Z]$'}
+name: "Southern California AOA {AOA}"
+source_id: "{AOA}"
+status:
+  value: identified
+  source: https://www.fisheries.noaa.gov/west-coast/aquaculture/southern-california-aquaculture-opportunity-areas
+  date: "2025-09-19"
+sources:
+  - kind: shapefile_zip
+    url: https://www.fisheries.noaa.gov/s3//2025-09/aoa-socal.zip
+    item_id: ""
+    member_stem: AOA_SOCAL
+    expected_count: 10
+    segmentize_m: 250

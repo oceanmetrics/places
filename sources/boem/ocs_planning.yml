@@ -1,0 +1,63 @@
+# boem_ocs_planning: OCS oil and gas planning areas (27)
+slug: boem_ocs_planning
+title: BOEM OCS oil and gas planning areas
+description: >-
+  The 27 Outer Continental Shelf planning areas BOEM uses for the National OCS Oil and Gas Leasing Program
+  (Gulf 3, Pacific 4, Atlantic 4, Alaska 16). `PLANNING_AREA` is BOEM's three-letter code; `name` is the area's
+  full name (hand-mapped in catalog/sources/boem/ocs_planning.yml).
+authority: BOEM
+place_type: planning_area
+version: 1.0.0
+cadence: weekly
+license: CC-PDDC
+license_url: https://www.usa.gov/publicdomain/label/1.0/
+license_note: U.S. federal government work (BOEM), public domain; the AGOL item carries the usa.gov public-domain label.
+attribution: >-
+  Bureau of Ocean Energy Management (BOEM), Office of Strategic Resources (OSR), Geospatial Services Division (GSD),
+  via MarineCadastre.gov. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: Bureau of Ocean Energy Management (BOEM), roles: [producer, licensor], url: "https://www.boem.gov/oil-gas-energy"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.boem.gov/oil-gas-energy/national-ocs-program
+place_id: {template: "BOEM:PA:{PLANNING_AREA}", pattern: '^BOEM:PA:[A-Z]{2,3}$'}
+name: "{PLANNING_AREA|map:planning_area_names} Planning Area"
+source_id: "{PLANNING_AREA}"
+maps:
+  planning_area_names:
+    CG: Central Gulf of America
+    EG: Eastern Gulf of America
+    WG: Western Gulf of America
+    CEC: Central California
+    NOC: Northern California
+    SOC: Southern California
+    WAO: Washington/Oregon
+    FLS: Straits of Florida
+    MDA: Mid-Atlantic
+    NOA: North Atlantic
+    SOA: South Atlantic
+    ALA: Aleutian Arc
+    ALB: Aleutian Basin
+    HAR: High Arctic
+    BOW: Bowers Basin
+    COK: Cook Inlet
+    GEO: St. George Basin
+    GOA: Gulf of Alaska
+    HOP: Hope Basin
+    KOD: Kodiak
+    MAT: St. Matthew-Hall
+    NAL: North Aleutian Basin
+    NAV: Navarin Basin
+    NOR: Norton Basin
+    SHU: Shumagin
+    BFT: Beaufort Sea
+    CHU: Chukchi Sea
+status:
+  value: active
+  source: https://www.arcgis.com/home/item.html?id=49604c94c8244f5fb42d6b021446b0d6
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://services7.arcgis.com/G5Ma95RzqJRPKsWL/arcgis/rest/services/OCS_Planning_Area_Polygons/FeatureServer/5
+    item_id: 49604c94c8244f5fb42d6b021446b0d6
+    expected_count: 27
+    page_size: 100

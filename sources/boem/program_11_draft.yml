@@ -1,0 +1,34 @@
+# boem_program_11_draft: 11th National OCS Program, Draft Proposed Program areas (20)
+slug: boem_program_11_draft
+title: BOEM 11th National OCS Program, Draft Proposed Program areas
+description: >-
+  The 20 program areas in the Draft Proposed Program of the 11th National OCS Oil and Gas Leasing Program
+  (November 2025), including the Northern, Central and Southern California Program Areas. A draft stage only:
+  every row is `status` = draft_proposed.
+authority: BOEM
+place_type: planning_area
+version: 1.0.0
+cadence: weekly
+license: CC-PDDC
+license_url: https://www.usa.gov/publicdomain/label/1.0/
+license_note: U.S. federal government work (BOEM), public domain; the AGOL item carries the usa.gov public-domain label.
+attribution: >-
+  Bureau of Ocean Energy Management (BOEM), Office of Strategic Resources (OSR), Geospatial Services Division (GSD),
+  via MarineCadastre.gov. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: Bureau of Ocean Energy Management (BOEM), roles: [producer, licensor], url: "https://www.boem.gov/oil-gas-energy"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.boem.gov/oil-gas-energy/national-ocs-program
+place_id: {template: "BOEM:DPP11:{OBJECTID}", pattern: '^BOEM:DPP11:\d+$'}
+name: "{NAME}"
+source_id: "{OBJECTID}"
+status:
+  value: draft_proposed
+  source: https://www.arcgis.com/home/item.html?id=ed65f4351e494ff3a3c5589bb1960bae
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://services7.arcgis.com/G5Ma95RzqJRPKsWL/arcgis/rest/services/11th_National_Draft_Proposed_Program_Areas/FeatureServer/16
+    item_id: ed65f4351e494ff3a3c5589bb1960bae
+    expected_count: 20
+    page_size: 100
