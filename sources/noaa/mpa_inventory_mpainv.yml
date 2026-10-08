@@ -1,0 +1,54 @@
+# mpa_inventory (MPAINV:): NOAA Marine Protected Areas Inventory, 981 polygons. file name ends _mpainv because sources/noaa/mpa_inventory.yml is the MarineCadastre agent's slug noaa_mpa_inventory (same source layer, MPA: ids)
+slug: mpa_inventory
+title: NOAA Marine Protected Areas Inventory
+description: >-
+  The NOAA MPA Center's Marine Protected Areas Inventory (v2024, layer NOAA_MPA_Inventory_2023): 981 boundaries of
+  existing marine protected areas under U.S. federal, state, territorial, local and tribal jurisdiction that meet the
+  IUCN definition of a protected area. All 35 native attributes are kept as columns. Two of them are the crosswalk
+  keys to other registries: `ProSeasID` (ProtectedSeas Navigator `site_id`) and `WDPA_Cd` (World Database on
+  Protected Areas id). Fishery management areas and similar are not in the Inventory. Not to be used for navigation;
+  not a legal document (consult the CFR or state code for regulatory boundaries).
+authority: MPAINV
+place_type: mpa
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.usa.gov/publicdomain/label/1.0/
+license_note: >-
+  U.S. federal government work (NOAA MPA Center). InPort item 69506: "These data are in the Public domain. The data
+  are not to be used for navigation." The ArcGIS item licenseInfo adds: "Data are not to be used for navigation. ...
+  These data and related graphics are not legal documents and are not intended to be used as such."
+attribution: >-
+  NOAA National Ocean Service, Office of National Marine Sanctuaries, Marine Protected Areas Center, NOAA Marine
+  Protected Areas Inventory (2024 release). Public domain; not to be used for navigation. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Marine Protected Areas Center, roles: [producer, licensor], url: "https://marineprotectedareas.noaa.gov/dataanalysis/mpainventory/"}
+  - {name: NOAA Fisheries InPort, roles: [processor], url: "https://www.fisheries.noaa.gov/inport/item/69506"}
+source_page: https://marineprotectedareas.noaa.gov/dataanalysis/mpainventory/
+place_id: {template: "MPAINV:{Site_ID}", pattern: '^MPAINV:[A-Za-z0-9_-]+$'}
+name: "{Site_Name}"
+source_id: "{Site_ID}"
+status:
+  value: active
+  source: https://marineprotectedareas.noaa.gov/dataanalysis/mpainventory/
+  date: data_last_edit
+# a small tile payload (every property is repeated in each tile a polygon touches); the full record is in the GeoParquet
+spatial_sort: true
+row_group_size: 100
+tile_properties: [place_id, name, place_type, status, source_id, State, Gov_Level, Prot_Lvl, Fish_Rstr, Mgmt_Agen]
+column_docs:
+  place_id: "prefixed, unique id: MPAINV:<Site_ID> (e.g. MPAINV:CA123)"
+  authority: "MPAINV = NOAA Marine Protected Areas Inventory"
+  source_id: "the Inventory's Site_ID (stable site code; the place_id suffix)"
+  place_type: "mpa"
+  status: "active: the site is listed in the current Inventory release"
+  Site_ID: "Inventory site code, unique; the id part of place_id"
+  ProSeasID: "ProtectedSeas Navigator site id (crosswalk key to the Navigator `site_id`); may be empty"
+  WDPA_Cd: "World Database on Protected Areas site code (crosswalk key to the WDPA id); may be empty"
+  URL: "the site's own web page, as listed in the Inventory"
+sources:
+  - kind: arcgis
+    url: https://services2.arcgis.com/C8EMgrsFcRFL6LrL/arcgis/rest/services/NOAA_MPA_Inventory_2023/FeatureServer/0
+    item_id: eb2b36aecb004f14ac29cf0260624291
+    expected_count: 981
+    page_size: 250

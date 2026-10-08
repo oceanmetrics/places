@@ -16,7 +16,8 @@ from .config import source_setting
 from .fetch import SourceResult
 from .calcofi import clean_simple_geometry
 from .geom import clean_geometry
-from .ids import build_place_ids, check_place_ids
+from .mixed import clean_mixed_geometry, morton_order
+from .ids import build_place_ids, check_place_ids, suffix_duplicates
 from .fmt import render
 from .status import load_overlay, resolve_status, unmatched_overlay
 
@@ -90,7 +91,8 @@ def build_rows(cfg: dict, results: list[SourceResult], version: str | None = Non
     keep = []
     dropped += res.extra.get("dropped") or []
     for ft in res.features:
-      g = clean_geometry(ft["geometry"]) if gtype == "MultiPolygon" else clean_simple_geometry(ft["geometry"], gtype)
+      g = (clean_mixed_geometry(ft["geometry"]) if cfg.get("mixed_geometry") else clean_geometry(ft["geometry"])
+           if gtype == "MultiPolygon" else clean_simple_geometry(ft["geometry"], gtype))
       if g is None:
         dropped.append(f"{res.source_url}: dropped feature with no polygon (attributes: "
                        f"{ {k: v for k, v in ft['properties'].items() if v not in (None, '')} })")
@@ -110,7 +112,7 @@ def build_rows(cfg: dict, results: list[SourceResult], version: str | None = Non
         "place_id": pid, "authority": cfg["authority"],
         "source_id": render(source_setting(cfg, src_cfg, "source_id"), props, maps),
         "name": render(source_setting(cfg, src_cfg, "name"), props, maps),
-        "place_type": cfg["place_type"], "geom_type": gtype,
+        "place_type": cfg["place_type"], "geom_type": g.geom_type if cfg.get("mixed_geometry") else gtype,
         "status": st[0], "status_source": st[1], "status_date": st[2],
         "source_url": res.source_url,
         "source_date": _iso_day(res.data_last_edit) or _iso_day(res.retrieved),
@@ -123,9 +125,18 @@ def build_rows(cfg: dict, results: list[SourceResult], version: str | None = Non
       for nat, col in names.items():
         row[col] = coerce(props.get(nat), ftypes[nat])
       rows.append(row)
+  if cfg.get("id_collisions") == "suffix_component":
+    # one feature served as a point and a polygon: the first source in the config keeps the bare id, the others get ':<component>'
+    comp_rank = {s.get("component"): k for k, s in enumerate(cfg["sources"])}
+    new = suffix_duplicates([r["place_id"] for r in rows], [r.get("component") or "part" for r in rows],
+                            [(comp_rank[r.get("component")], i) for i, r in enumerate(rows)])
+    for r, pid in zip(rows, new):
+      r["place_id"] = pid
   all_ids = [r["place_id"] for r in rows]
   if len(set(all_ids)) != len(all_ids):
     raise ValueError("place_id is not unique across the collection's sources")
+  if cfg.get("spatial_sort"):     # cluster neighbours so a reader can skip row groups (set `row_group_size` to match)
+    rows = [rows[i] for i in morton_order([r["_geom"] for r in rows])]
   return rows, fields, dropped
 
 

@@ -1,0 +1,62 @@
+# gebco_undersea: IHO-IOC GEBCO Gazetteer of Undersea Feature Names (points, lines and polygons; 5,412 features)
+slug: gebco_undersea
+title: GEBCO Gazetteer of Undersea Feature Names
+description: >-
+  Names, generic feature types and geometries of seafloor features (seamounts, canyons, banks, ridges, basins,
+  guyots, fracture zones, trenches ...) approved by the IHO-IOC GEBCO Sub-Committee on Undersea Feature Names (SCUFN),
+  from the NOAA NCEI / IHO DCDB Undersea_Features feature service. The service has three layers, one per geometry
+  type (2,632 points, 1,128 lines, 1,652 polygons), all kept here with the per-row `geom_type`
+  (MultiPoint, MultiLineString or MultiPolygon) and `component` (point, line, polygon). `FEATURE_ID`, the
+  gazetteer's permanent feature number, is the id: a feature that the service serves as both a point and an extent
+  (101 do) keeps `GEBCO:<FEATURE_ID>` on its polygon (else line) and gets `:point` or `:line` on the other rows.
+authority: GEBCO
+place_type: undersea_feature
+version: 1.0.0
+cadence: monthly
+license: LicenseRef-IHO-IOC-GEBCO-Gazetteer
+stac_license: other         # not an SPDX id: the STAC collection says "other" and links the terms (license_url)
+license_url: https://www.gebco.net/data-products/undersea-feature-names
+license_note: >-
+  Attribution terms, no other restriction stated. ArcGIS item f09d579c68b84c5184fef1ac69ea7b24 licenseInfo and the GEBCO page
+  ("Data set acknowledgement") both say: "Please include the following citation when data from the gazetteer are used
+  or reproduced in reports, presentations and other products: IHO-IOC GEBCO Gazetteer of Undersea Feature Names,
+  www.gebco.net". Item accessInformation: "IHO Data Centre for Digital Bathymetry (IHO DCDB); General Bathymetric Chart of
+  the Oceans (GEBCO); NOAA National Centers for Environmental Information (NCEI)". No non-commercial or
+  no-redistribution clause on either page.
+attribution: >-
+  IHO-IOC GEBCO Gazetteer of Undersea Feature Names, www.gebco.net. Served by the IHO Data Centre for Digital Bathymetry
+  (IHO DCDB) and NOAA National Centers for Environmental Information (NCEI). Processed by Ocean Metrics.
+providers:
+  - {name: IHO-IOC GEBCO Sub-Committee on Undersea Feature Names (SCUFN), roles: [producer, licensor], url: "https://www.gebco.net/data-products/undersea-feature-names"}
+  - {name: IHO Data Centre for Digital Bathymetry (NOAA NCEI), roles: [processor], url: "https://www.ncei.noaa.gov/iho-data-centre-digital-bathymetry"}
+source_page: https://www.gebco.net/data-products/undersea-feature-names
+mixed_geometry: true
+id_collisions: suffix_component   # first source in this list keeps the bare id: polygon, then line, then point
+place_id: {template: "GEBCO:{FEATURE_ID}", pattern: '^GEBCO:\d+(:(line|point))?$'}
+name: "{NAME} {TYPE}"
+source_id: "{FEATURE_ID}"
+status:
+  value: approved
+  source: https://www.gebco.net/data-products/undersea-feature-names
+  date: data_last_edit
+spatial_sort: true
+row_group_size: 500
+tile_maxzoom: 8   # features are small (a seamount is 10-50 km): -zg would stop at z5
+tile_properties: [place_id, name, place_type, status, source_id, geom_type, component, TYPE]
+column_docs:
+  place_id: "prefixed, unique id: GEBCO:<FEATURE_ID>; the point (or line) twin of a feature that also has an extent gets :point (or :line)"
+  authority: "GEBCO = IHO-IOC GEBCO Gazetteer of Undersea Feature Names"
+  source_id: "the gazetteer's FEATURE_ID (permanent feature number; shared by a feature's point, line and polygon rows)"
+  name: "official name followed by the generic term, e.g. 'Satsuma Seamount'"
+  place_type: "undersea_feature"
+  status: "approved: the name is in the SCUFN gazetteer"
+  geom_type: "geometry type of this row: MultiPoint, MultiLineString or MultiPolygon"
+  component: "source layer of the row: polygon (Polygon_Features), line (Line_Features) or point (Point_Features)"
+  geometry: "WKB MultiPoint / MultiLineString / MultiPolygon, EPSG:4326, lines and polygons split at +/-180 antimeridian"
+  NAME_src: "the gazetteer name without the generic term"
+  TYPE: "generic feature term (Seamount, Canyon, Bank, Ridge, ...); plural forms exist (Seamounts)"
+  FEATURE_ID: "gazetteer feature number; the id part of place_id"
+sources:
+  - {kind: arcgis, component: polygon, url: "https://services2.arcgis.com/C8EMgrsFcRFL6LrL/arcgis/rest/services/Undersea_Features/FeatureServer/2", item_id: f09d579c68b84c5184fef1ac69ea7b24, expected_count: 1652, page_size: 1000}
+  - {kind: arcgis, component: line, url: "https://services2.arcgis.com/C8EMgrsFcRFL6LrL/arcgis/rest/services/Undersea_Features/FeatureServer/1", item_id: f09d579c68b84c5184fef1ac69ea7b24, expected_count: 1128, page_size: 1000}
+  - {kind: arcgis, component: point, url: "https://services2.arcgis.com/C8EMgrsFcRFL6LrL/arcgis/rest/services/Undersea_Features/FeatureServer/0", item_id: f09d579c68b84c5184fef1ac69ea7b24, expected_count: 2632, page_size: 1000}

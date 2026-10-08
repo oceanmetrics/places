@@ -51,6 +51,17 @@ def size_label(n: int) -> str:
 
 def style_json(slug: str, max_zoom: int, geometry_type: str = "MultiPolygon") -> dict:
   src = {"data": {"type": "vector", "url": "pmtiles://../places.pmtiles", "minzoom": 0, "maxzoom": max_zoom}}
+  if geometry_type == "Mixed":   # points, lines and polygons share one tile layer: one style layer per geometry kind
+    return {"version": 8, "name": "Default", "sources": src, "layers": [
+      {"id": f"{slug}-fill", "type": "fill", "source": "data", "source-layer": slug, "filter": ["==", ["geometry-type"], "Polygon"],
+       "paint": {"fill-color": "#0b6e99", "fill-opacity": 0.25}},
+      {"id": f"{slug}-outline", "type": "line", "source": "data", "source-layer": slug, "filter": ["==", ["geometry-type"], "Polygon"],
+       "paint": {"line-color": "#0b6e99", "line-width": 1}},
+      {"id": f"{slug}-line", "type": "line", "source": "data", "source-layer": slug, "filter": ["==", ["geometry-type"], "LineString"],
+       "paint": {"line-color": "#0b6e99", "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1, 10, 2.5]}},
+      {"id": f"{slug}-point", "type": "circle", "source": "data", "source-layer": slug, "filter": ["==", ["geometry-type"], "Point"],
+       "paint": {"circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 2, 8, 4, 12, 6], "circle-color": "#0b6e99",
+                 "circle-stroke-color": "#ffffff", "circle-stroke-width": 1, "circle-opacity": 0.9}}]}
   if geometry_type == "Point":
     return {"version": 8, "name": "Default", "sources": src, "layers": [
       {"id": f"{slug}-circle", "type": "circle", "source": "data", "source-layer": slug,
@@ -76,6 +87,7 @@ def build_collection(cfg: dict, table: pa.Table, geo: dict, provenance: dict, di
   bbox = geo["columns"]["geometry"]["bbox"]
   gt = cfg.get("geometry_type", "MultiPolygon")
   docs = {**COLUMN_DOCS, "geom_type": f"geometry type ({gt})", "geometry": f"{gt.upper()}, EPSG:4326, split at +/-180 antimeridian"}
+  gts = geo["columns"]["geometry"]["geometry_types"]
   cols = []
   for f in table.schema:
     desc = descriptions.get(f.name) or docs.get(f.name) or f"native attribute of the source layer ({f.name})"
@@ -112,13 +124,13 @@ def build_collection(cfg: dict, table: pa.Table, geo: dict, provenance: dict, di
     "type": "Collection", "id": slug, "stac_version": "1.1.0",
     "description": " ".join(cfg["description"].split()) + f" Built by build.py from {len(provenance['sources'])} source layer(s).",
     "links": links, "stac_extensions": STAC_EXTENSIONS,
-    "geoparquet:geometry_type": gt, "geoparquet:feature_count": table.num_rows,
+    "geoparquet:geometry_type": (gts[0] if len(gts) == 1 else gts), "geoparquet:feature_count": table.num_rows,
     "table:row_count": table.num_rows, "table:primary_geometry": "geometry", "table:columns": cols,
     "updated": now, "pmtiles:min_zoom": header["min_zoom"], "pmtiles:max_zoom": header["max_zoom"],
     "pmtiles:tile_type": "mvt", "pmtiles:center": header["center"], "pmtiles:layers": [slug],
     "title": cfg["title"],
     "extent": {"spatial": {"bbox": [bbox]}, "temporal": {"interval": [[None, None]]}},
-    "license": cfg["license"],
+    "license": cfg.get("stac_license") or cfg["license"],   # SPDX id, or "other" (+ the license link) for a custom one
     "providers": [*cfg["providers"], OCEAN_METRICS],
     "gazetteer:authority": cfg["authority"], "gazetteer:place_type": cfg["place_type"],
     "gazetteer:cadence": cfg.get("cadence", "weekly"), "gazetteer:attribution": " ".join(cfg["attribution"].split()),
