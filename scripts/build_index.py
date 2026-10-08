@@ -250,13 +250,14 @@ def batch_rows(batch: pa.RecordBatch, src: Source) -> tuple[dict, list[dict]]:
       b = tuple(float(x) for x in bounds[i])
     c = None
     if geoms is not None and ok[i]:
-      # a place split at +/-180 has bbox -180..180 (useless for fitBounds): use the unwrapped bbox (xmax may exceed
-      # 180, e.g. 177..199) and a centroid taken on the unwrapped parts, wrapped back into [-180, 180]
+      # a place split at +/-180 has bbox -180..180 and a centroid averaged over both halves (mid-ocean, wrong side):
+      # use the unwrapped bbox (xmax may exceed 180, e.g. 177..199) and the centroid of the unwrapped parts
+      # (centroid_lon may exceed 180 too, e.g. 188)
       u = unwrap_crossing(geoms[i]) if b is not None and b[0] <= -180 + EDGE and b[2] >= 180 - EDGE else None
       if u is not None:
         b = tuple(float(x) for x in u.bounds)
         pt = shapely.centroid(u)
-        c = (pt.x - 360.0 if pt.x > 180 else pt.x, pt.y)
+        c = (pt.x, pt.y)
       else:
         pt = shapely.centroid(geoms[i])
         c = (pt.x, pt.y)
@@ -399,7 +400,7 @@ def collection_json(stats: dict, out: Path) -> dict:
     "description": (
       "Geometry-free search index of every place in the Ocean Metrics gazetteer (one row per place: id, name, "
       "authority, type, collection, bbox, centroid, area, licence, attribution, version; a place cut at the "
-      "antimeridian has an unwrapped bbox whose xmax may exceed 180) and a crosswalk from "
+      "antimeridian has an unwrapped bbox and centroid whose longitudes may exceed 180) and a crosswalk from "
       "place_id to external identifiers (MarineRegions MRGID, ProtectedSeas PSGID, WDPA, NOAA MPA Inventory, "
       "MPAtlas, Wikidata, Overture GERS). Read by the client with range requests to search and resolve places "
       "without loading any geometry. Rebuilt by scripts/build_index.py whenever a collection is published. The "
@@ -449,7 +450,7 @@ One row per place ({sum(stats["counts"].values())} rows, row groups of {ROW_GROU
 | geom_type | utf8 | Point, LineString, Polygon, Multi* |
 | collection | utf8 | slug; the PMTiles/GeoParquet live at `<base><collection>/` |
 | bbox | struct | xmin, ymin, xmax, ymax (double). Convention: a place stored split at the antimeridian has the UNWRAPPED bbox, western parts shifted +360, so **xmax may exceed 180** (e.g. 177..199); fit bounds with it as is, wrap a longitude back with `((x + 540) % 360) - 180`. Other places have the stored bbox |
-| centroid_lon, centroid_lat | double | planar centroid of the stored geometry (bbox centre if absent); in [-180, 180] also for split places |
+| centroid_lon, centroid_lat | double | planar centroid of the stored geometry (bbox centre if absent). Same convention as the bbox: for a place stored split at the antimeridian it is the centroid of the UNWRAPPED parts, so `centroid_lon` may exceed 180 (e.g. 188) and lies inside the bbox |
 | area_km2 | double | null where the source has none |
 | license, attribution, version, updated | utf8 | per row, from the collection |
 

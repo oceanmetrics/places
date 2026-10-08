@@ -136,8 +136,10 @@ def test_dateline_crossing_place_gets_the_unwrapped_bbox_and_a_wrapped_centroid(
   _, stats, rows, _ = run(tmp_path / "st", tmp_path / "out")
   by = {r["place_id"]: r for r in rows}
   assert by["X:PM"]["bbox"] == {"xmin": 177.0, "ymin": 10.0, "xmax": 199.0, "ymax": 14.0}
-  # centroid on the unwrapped parts (area-weighted: x = 188), wrapped back into [-180, 180]; not near 0 as on the split parts
-  assert by["X:PM"]["centroid_lon"] == pytest.approx(-172.0) and by["X:PM"]["centroid_lat"] == pytest.approx(12.0)
+  # centroid on the unwrapped parts (area-weighted: x = 188), NOT wrapped back and not the mid-ocean average of the split parts
+  assert by["X:PM"]["centroid_lon"] > 180
+  assert by["X:PM"]["centroid_lon"] == pytest.approx(188.0) and by["X:PM"]["centroid_lat"] == pytest.approx(12.0)
+  assert by["X:PM"]["bbox"]["xmin"] <= by["X:PM"]["centroid_lon"] <= by["X:PM"]["bbox"]["xmax"]
   assert by["X:PLAIN"]["bbox"] == {"xmin": 10.0, "ymin": 10.0, "xmax": 12.0, "ymax": 12.0}      # untouched
   assert stats["bbox"][2] <= 180.0 and stats["bbox"][0] >= -180.0                                # STAC extent stays valid
 
