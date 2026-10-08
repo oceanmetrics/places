@@ -115,3 +115,12 @@ After the held slugs are later published, rerun this step with them included.
   collection, expected: the same Marine Regions record). Decide whether the BOEM overlap needs a distinct prefix before the index is published.
 - `scripts/build_layers_json.py` crashed on mixed-geometry collections (`gebco_undersea`, list-valued `geoparquet:geometry_type`); fixed in this
   reconciliation (row `geom_type` is `Mixed`, paint holds fill+line+circle) with a regression test.
+
+## Republish (a new version of published collections)
+
+Rebuild the slugs at the new version (`uv run build.py build --slug <slug> --version 1.0.1`), pull the published metadata tree into
+`catalog/pub/` (step 2), then `scripts/publish_collections.sh --republish [--version 1.0.1] [--note "..."] <slug> ...`. It keeps the
+pulled `catalog/pub/<slug>/` and its ledger, copies the staged assets over it, restores the pulled ledger after `portolan add` (which
+would otherwise auto-create a patch version) and runs `portolan version bump`, so the ledger ends at the new version exactly once.
+Refuses when the pulled ledger already has that version. Then rebuild index/ and layers.json (step 4; the manifest is published at
+`index/layers.json`, the client falls back to the root `layers.json`) and upload as in step 3.
