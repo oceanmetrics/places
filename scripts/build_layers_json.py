@@ -8,7 +8,7 @@ a collection is a map layer when it carries a PMTiles asset. either source may b
 
 URLs: every layer's `pmtiles` is CANONICAL, on the storage host (`base`, https://storage.oceanmetrics.io/gazetteer/):
 each request there costs one 302 to the bucket. apps MAY rewrite a `pmtiles` URL onto `base_direct` (the bucket's own
-host, https://oceanmetrics.io-public.s3.amazonaws.com/gazetteer/, no redirect) by replacing the `base` prefix, until a
+host, https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/, no redirect) by replacing the `base` prefix, until a
 redirect-free host lands. the manifest itself is published at <base>index/layers.json (the client falls back to
 <base>layers.json).
 
@@ -30,7 +30,7 @@ from urllib.parse import urljoin
 
 ROOT = Path(__file__).resolve().parent.parent
 BASE = "https://storage.oceanmetrics.io/gazetteer/"
-BASE_DIRECT = "https://oceanmetrics.io-public.s3.amazonaws.com/gazetteer/"   # same keys, no 302 (bucket host)
+BASE_DIRECT = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/"   # path-style: the dotted bucket name breaks tls on the virtual-hosted form
 SCHEMA = 1
 
 # default paint per geometry kind (MapLibre paint properties), overridden by a collection's styles/default.json ----
