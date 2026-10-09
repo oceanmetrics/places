@@ -57,6 +57,11 @@ export function withBase(path: string, base: string, defaultBase = DEFAULT_BASE,
   return `${p}?${params.toString().replace(/%3A/gi, ':').replace(/%2F/gi, '/')}`
 }
 
+// theme ----
+/** the effective theme: an explicit choice ('light' | 'dark') wins, else the OS preference. */
+export const effectiveDark = (choice: string | null | undefined, osDark: boolean) =>
+  choice === 'dark' ? true : choice === 'light' ? false : osDark
+
 // grouping and formatting ----
 /** layers grouped by authority (sorted, "Other" last), each group sorted by title. */
 export function groupByAuthority(layers: Layer[]): Array<{ authority: string; layers: Layer[] }> {

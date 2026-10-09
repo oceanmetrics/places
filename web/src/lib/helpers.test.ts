@@ -93,6 +93,17 @@ describe('layers', () => {
   })
 })
 
+describe('theme', () => {
+  it('an explicit choice wins, else the OS preference', async () => {
+    const { effectiveDark } = await import('./helpers')
+    expect(effectiveDark('dark', false)).toBe(true)
+    expect(effectiveDark('light', true)).toBe(false)
+    expect(effectiveDark(null, true)).toBe(true)
+    expect(effectiveDark(undefined, false)).toBe(false)
+    expect(effectiveDark('garbage', true)).toBe(true)   // an unknown value is no choice
+  })
+})
+
 describe('formatting and sql', () => {
   it('formats counts, dates and values', () => {
     expect(fmtN(12345)).toBe('12,345')

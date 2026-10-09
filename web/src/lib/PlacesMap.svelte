@@ -8,6 +8,7 @@
   import type { LayerSel } from './grammar'
   import { layerPath, sanitizeHtml, withBase, fmtDate, placePath } from './helpers'
   import { BASE } from './data.svelte'
+  import { theme } from './theme.svelte'
 
   interface Props {
     /** layers on the map, first on top */
@@ -31,7 +32,6 @@
   const failed = new Set<string>()
 
   const HL = 'place-hl'
-  const dark = () => matchMedia('(prefers-color-scheme: dark)').matches
 
   // credit line control: the basemap plus creditsFor() of what is visible ----
   class CreditsControl implements maplibregl.IControl {
@@ -159,14 +159,10 @@
     m.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')
     m.addControl(credits, 'bottom-right')
 
-    const mq = matchMedia('(prefers-color-scheme: dark)')
-    const onTheme = () => map && applyTheme(map, mq.matches)
-    mq.addEventListener('change', onTheme)
-
     m.on('load', () => {
-      applyTheme(m, dark())
+      applyTheme(m, theme.dark)
       m.addSource(HL, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-      const acc = '#ffb000'
+      const acc = '#f5b528'   // the brand's one warm spark (oceanmetrics.io/brand/v1)
       m.addLayer({ id: `${HL}-fill`, type: 'fill', source: HL, filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': acc, 'fill-opacity': 0.25 } }, LABELS_BELOW)
       m.addLayer({ id: `${HL}-line`, type: 'line', source: HL, paint: { 'line-color': acc, 'line-width': 3 } }, LABELS_BELOW)
       m.addLayer({ id: `${HL}-point`, type: 'circle', source: HL, filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-color': acc, 'circle-radius': 7, 'circle-stroke-color': '#000', 'circle-stroke-width': 1.5 } }, LABELS_BELOW)
@@ -197,7 +193,13 @@
       })
     }
 
-    return () => { mq.removeEventListener('change', onTheme); m.remove(); map = undefined }
+    return () => { m.remove(); map = undefined }
+  })
+
+  // the basemap follows the app theme (header toggle or OS; src/lib/theme.svelte.ts)
+  $effect(() => {
+    const d = theme.dark
+    if (map && ready) applyTheme(map, d)
   })
 
   /** let a parent move the map. */

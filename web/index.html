@@ -5,7 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Search, browse and cite the Ocean Metrics marine gazetteer: licence-aware marine boundaries and places." />
     <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f4fafb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a2831" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- an explicit theme choice applies before first paint (no flash); see src/lib/theme.svelte.ts -->
+    <script>try{var t=localStorage.getItem('om-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
+    <!-- brand type (oceanmetrics.io/brand/v1): Space Grotesk display, IBM Plex Sans body, IBM Plex Mono data; Fraunces subset for the wordmark's "Ocean" -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@60,600,0,0&text=Ocean&display=swap" />
     <title>Places · Ocean Metrics marine gazetteer</title>
   </head>
   <body>

@@ -1,38 +1,43 @@
-/* tokens: light by default, dark by prefers-color-scheme ---- */
+/* tokens: the Ocean Metrics brand (oceanmetrics.io/brand/v1) — a teal-and-yellow ocean, light + dark
+   from one source of truth via light-dark(). The OS preference is the default; an explicit choice is
+   :root[data-theme] (set before first paint by index.html, toggled in the header, saved as 'om-theme'). */
+:root { color-scheme: light dark; }
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
 :root {
-  --bg: #f6f8fa;
-  --bg-card: #ffffff;
-  --bg-tint: #eef2f6;
-  --border: #d3dbe3;
-  --text: #17212b;
-  --text-muted: #55657a;
-  --link: #0b5f8a;
-  --accent: #0b4f6c;
+  --bg: light-dark(#f4fafb, #0a2831);           /* foam paper / night */
+  --bg-card: light-dark(#ffffff, #103a45);
+  --bg-tint: light-dark(#e6f5f8, #12414d);
+  --border: light-dark(#d6ebef, #234853);
+  --border-strong: light-dark(#c2e0e7, #2c5764);
+  --text: light-dark(#123a45, #e6f4f7);         /* heading ink */
+  --text-body: light-dark(#3c5b64, #b7d0d6);
+  --text-muted: light-dark(#5c7880, #83a0a7);
+  --link: light-dark(#0c7288, #86d6e5);         /* teal as text flips to sky-teal on dark */
+  --accent: #0c7288;                            /* button fill: brand teal, white text in both themes */
+  --accent-hover: #0a5c6e;
   --accent-text: #ffffff;
-  --warn-bg: #fff4d6;
-  --warn-text: #5c4300;
-  --warn-border: #e6c460;
-  --code-bg: #eef2f6;
-  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --brand-text: light-dark(#0c7288, #86d6e5);
+  --sun: #f5b528;                               /* the one warm accent — rationed */
+  --warn-bg: light-dark(#fdf3d7, #3a2f10);
+  --warn-text: light-dark(#5c4300, #f3dc9a);
+  --warn-border: light-dark(#e6c460, #7a6420);
+  --code-bg: light-dark(#e6f5f8, #0d3340);
+  --focus: #1aa0bd;
+  --font: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --display: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --header-h: 52px;
-  color-scheme: light dark;
 }
-@media (prefers-color-scheme: dark) {
+/* browsers without light-dark() get the light palette */
+@supports not (color: light-dark(#000, #fff)) {
   :root {
-    --bg: #0e141a;
-    --bg-card: #17202a;
-    --bg-tint: #1d2833;
-    --border: #2e3b48;
-    --text: #e4ebf2;
-    --text-muted: #9bacbf;
-    --link: #6cc0ee;
-    --accent: #1f7ea6;
-    --accent-text: #ffffff;
-    --warn-bg: #3a2f10;
-    --warn-text: #f3dc9a;
-    --warn-border: #7a6420;
-    --code-bg: #111a22;
+    --bg: #f4fafb; --bg-card: #ffffff; --bg-tint: #e6f5f8;
+    --border: #d6ebef; --border-strong: #c2e0e7;
+    --text: #123a45; --text-body: #3c5b64; --text-muted: #5c7880;
+    --link: #0c7288; --brand-text: #0c7288;
+    --warn-bg: #fdf3d7; --warn-text: #5c4300; --warn-border: #e6c460;
+    --code-bg: #e6f5f8;
   }
 }
 
@@ -41,6 +46,7 @@ html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); }
 #app { min-height: 100%; display: flex; flex-direction: column; }
 a { color: var(--link); }
+h1, h2, h3 { font-family: var(--display); letter-spacing: -0.02em; }
 h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 .5rem; }
 h2 { font-size: 1.15rem; margin: 1.6rem 0 .5rem; }
 h3 { font-size: 1rem; margin: 1rem 0 .3rem; }
@@ -50,10 +56,12 @@ pre { background: var(--code-bg); border: 1px solid var(--border); border-radius
 button, input, select { font: inherit; color: inherit; }
 input[type='search'], input[type='text'] { width: 100%; padding: 8px 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; }
 input[type='color'] { padding: 0; width: 28px; height: 24px; border: 1px solid var(--border); border-radius: 4px; background: none; }
-:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .btn { display: inline-block; cursor: pointer; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text); text-decoration: none; font-weight: 600; }
-.btn.secondary { background: transparent; color: var(--link); border-color: var(--border); }
+.btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.secondary { background: transparent; color: var(--brand-text); border-color: var(--border-strong); }
+.btn.secondary:hover { background: var(--bg-tint); }
 .btn.small { padding: 3px 9px; font-size: 13px; }
 .muted { color: var(--text-muted); }
 .notice { background: var(--warn-bg); color: var(--warn-text); border: 1px solid var(--warn-border); border-radius: 6px; padding: 8px 10px; font-size: 13px; margin: 8px 0; }
@@ -61,9 +69,17 @@ input[type='color'] { padding: 0; width: 28px; height: 24px; border: 1px solid v
 
 /* page frame ---- */
 .site-header { height: var(--header-h); flex: none; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--bg-card); border-bottom: 1px solid var(--border); }
-.site-header .brand { font-weight: 700; color: var(--text); text-decoration: none; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-.site-header .brand svg { width: 22px; height: 22px; }
-.site-header nav { display: flex; gap: 14px; margin-left: auto; }
+.site-header .brand { font-weight: 700; color: var(--text); text-decoration: none; display: flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 17px; line-height: 1; }
+.site-header .brand .om-mark { width: 26px; height: 26px; flex: none; color: var(--brand-text); transition: transform .18s ease-out; }
+.site-header .brand:hover .om-mark { transform: rotate(-8deg); }
+/* the wordmark pairs textures (brand/v1): fluid serif "Ocean" + mono "Metrics", then the product */
+.om-ocean { font-family: 'Fraunces', Georgia, var(--display); font-weight: 600; letter-spacing: -0.005em; color: var(--brand-text); }
+.om-metrics { font-family: var(--mono); font-weight: 500; font-size: .9em; letter-spacing: 0.005em; color: var(--text); margin-left: 1px; }
+.brand-product { font-family: var(--display); font-weight: 600; color: var(--text); border-left: 1px solid var(--border-strong); padding-left: 9px; margin-left: 3px; }
+.theme-toggle { display: inline-flex; align-items: center; justify-content: center; width: 2.15rem; height: 2.15rem; flex: none; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text); cursor: pointer; }
+.theme-toggle:hover { background: var(--bg-tint); color: var(--brand-text); border-color: var(--border-strong); }
+.theme-toggle svg { width: 16px; height: 16px; }
+.site-header nav { display: flex; gap: 14px; margin-left: auto; align-items: center; }
 .site-header nav a { color: var(--text-muted); text-decoration: none; padding: 4px 2px; border-bottom: 2px solid transparent; }
 .site-header nav a[aria-current='page'] { color: var(--text); border-bottom-color: var(--accent); }
 .page { width: 100%; max-width: 62rem; margin: 0 auto; padding: 20px 16px 40px; flex: 1; }
@@ -81,6 +97,7 @@ blockquote { margin: .4rem 0; padding: 6px 12px; border-left: 3px solid var(--bo
 @media (max-width: 600px) {
   .site-header { gap: 8px; padding: 0 10px; }
   .site-header nav { gap: 10px; font-size: 14px; }
-  .site-header .brand span.long { display: none; }
+  .om-ocean, .om-metrics { display: none; }                /* mark + product name only on a phone */
+  .brand-product { border-left: none; padding-left: 0; margin-left: 0; }
   table.kv th { width: 7rem; }
 }
