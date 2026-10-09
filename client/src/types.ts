@@ -77,8 +77,12 @@ export interface SearchOptions {
   limit?    : number
 }
 
-/** a GeoJSON Feature; `id` is the place_id, `properties` the collection's columns without geometry and bbox. */
-export type PlaceFeature = Feature<Geometry, Record<string, unknown>> & { id: string; bbox?: BBox }
+/**
+ * a GeoJSON Feature; `id` is the place_id, `properties` the collection's columns without geometry and bbox.
+ * `collection` (a foreign member) is the slug of the collection the place was read from: place_id is not unique
+ * across collections, so this is what links the feature back to its layers.json entry (licence, attribution, citation).
+ */
+export type PlaceFeature = Feature<Geometry, Record<string, unknown>> & { id: string; bbox?: BBox; collection: string }
 
 export interface GetPlaceOptions {
   /** unwrap antimeridian-split parts into contiguous longitudes beyond 180 (see `unwrapAntimeridian`). */

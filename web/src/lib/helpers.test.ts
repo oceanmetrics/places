@@ -84,6 +84,13 @@ describe('layers', () => {
     expect(layerForPlace(ls, 'BOEM:1')?.slug).toBe('a')
     expect(layerForPlace(ls, 'ZZZ:1')).toBeUndefined()
   })
+
+  it('the feature collection wins over the authority guess (regression: NMS:PMNM in the authority-less legacy places layer)', () => {
+    const ls = [L({ slug: 'noaa_sanctuaries', collection: 'noaa_sanctuaries', authority: 'ONMS' }), L({ slug: 'places', collection: 'places', authority: null })]
+    expect(layerForPlace(ls, 'NMS:PMNM', {}, 'places')?.slug).toBe('places')
+    expect(layerForPlace(ls, 'NMS:PMNM')).toBeUndefined()          // no collection, no authority match: undefined, not a guess
+    expect(layerForPlace(ls, 'ONMS:MBNMS', {}, 'nope')?.slug).toBe('noaa_sanctuaries')   // unknown collection falls back
+  })
 })
 
 describe('formatting and sql', () => {

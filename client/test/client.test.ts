@@ -112,6 +112,12 @@ describe('getPlace', () => {
     expect(f.geometry).toEqual({ type: 'Polygon', coordinates: [[[-122, 35], [-121, 35], [-121, 36], [-122, 36], [-122, 35]]] })
     expect(f.properties).toMatchObject({ place_id: 'FX:B-2', name: 'Bravo lease', status: 'cancelled', authority: 'FX' })
     expect(f.properties).not.toHaveProperty('geometry')
+    expect(f.collection).toBe('fx_leases')
+  })
+  it('carries the collection it was read from (regression: NMS:PMNM in the legacy places collection had no way back to its layers.json credit)', async () => {
+    const fresh = createClient({ base: srv.base })
+    expect((await fresh.getPlace('FX:C-3', { slug: 'fx_aoa' }))!.collection).toBe('fx_aoa')
+    expect((await fresh.getPlace('AOA:S2'))!.collection).toBe('fx_aoa')
   })
   it('finds a place in a different authority via the layers manifest', async () => {
     expect((await c.getPlace('AOA:S2'))!.properties.name).toBe('Southern aquaculture area')

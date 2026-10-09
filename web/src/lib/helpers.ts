@@ -89,10 +89,15 @@ export function defaultColour(layer: Layer | undefined): string {
 export const authorityOf = (placeId: string) => (placeId.includes(':') ? placeId.slice(0, placeId.indexOf(':')) : '')
 
 /**
- * the layer a place belongs to, given only its id and properties: layers whose authority matches the id prefix
- * (the collection slug is also tried), then the one whose place_type matches the row's, else the first.
+ * the layer a place belongs to. `collection` (from a getPlace feature or a search hit) is exact and wins;
+ * without it, layers whose authority matches the id prefix (the collection slug is also tried), then the one
+ * whose place_type matches the row's, else the first.
  */
-export function layerForPlace(layers: Layer[], placeId: string, props: Record<string, unknown> = {}): Layer | undefined {
+export function layerForPlace(layers: Layer[], placeId: string, props: Record<string, unknown> = {}, collection?: string): Layer | undefined {
+  if (collection) {
+    const hit = layers.find((l) => l.collection === collection)
+    if (hit) return hit
+  }
   const auth = authorityOf(placeId).toLowerCase()
   let c = layers.filter((l) => (l.authority ?? '').toLowerCase() === auth || l.slug.toLowerCase() === auth)
   if (!c.length) return undefined

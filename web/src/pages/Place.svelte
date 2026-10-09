@@ -26,7 +26,7 @@
   })
 
   const attrs = $derived((feature?.properties ?? {}) as Record<string, unknown>)
-  const layer = $derived(feature || manifest.status === 'ok' ? layerForPlace(manifest.layers, id, attrs) : undefined)
+  const layer = $derived(feature || manifest.status === 'ok' ? layerForPlace(manifest.layers, id, attrs, feature?.collection) : undefined)
   const url = $derived(layer ? parquetUrl(BASE, layer.collection) : '')
   const name = $derived(String(attrs.name ?? id))
   const rows = $derived(Object.entries(attrs).filter(([k]) => k !== 'name' && k !== 'place_id'))
@@ -75,7 +75,10 @@
         <tr><th>Licence</th><td>{fmtValue(attrs.license)}</td></tr>
         <tr><th>Attribution</th><td>{@html sanitizeHtml(String(attrs.attribution ?? '–'))}</td></tr>
       </tbody></table>
-      <p class="notice">The layers manifest is not available, so the full citation cannot be shown.</p>
+      <p class="notice">
+        {#if manifest.status === 'error'}The layers manifest could not be loaded, so the full citation cannot be shown.
+        {:else}No layer in the manifest covers this place's collection, so the full citation cannot be shown.{/if}
+      </p>
     {/if}
 
     <h2>Use in</h2>

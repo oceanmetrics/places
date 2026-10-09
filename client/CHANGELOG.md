@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2
+
+- `getPlace` features gain `collection` (a GeoJSON foreign member): the slug of the collection the place was read
+  from. `place_id` is not unique across collections, and an id whose authority prefix matches no layer's `authority`
+  (e.g. `NMS:PMNM` in the legacy `places` collection, whose manifest entry has no authority) otherwise has no way
+  back to its layers.json entry for licence, attribution and citation.
+
 ## 0.1.1
 
 - **fix: index centroids.** `search` read `centroid` but the published index has `centroid_lon` / `centroid_lat`, so every

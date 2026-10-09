@@ -214,7 +214,7 @@ export function createClient(initial: ClientConfig = {}) {
       if (opts.unwrap) geometry = unwrapAntimeridian(geometry)
       const properties = Object.fromEntries(Object.entries(rest).map(([k, v]) => [k, plain(v)]))
       const bbox = opts.unwrap ? geometryBBox(geometry) : (toBBox(rawBox) ?? geometryBBox(geometry))
-      return { type: 'Feature', id, bbox, properties, geometry } as PlaceFeature
+      return { type: 'Feature', id, bbox, properties, geometry, collection: slug } as PlaceFeature
     }
     return null
   }

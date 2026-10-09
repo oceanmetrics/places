@@ -1,6 +1,6 @@
 {
   "name": "@oceanmetrics/places",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "client for the Ocean Metrics places gazetteer: layers manifest, MapLibre layers from PMTiles, parquet search and lookups, credits",
   "license": "MIT",
   "type": "module",
@@ -13,7 +13,11 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "src", "README.md"],
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -28,7 +32,9 @@
     "pmtiles": "^4.0.0"
   },
   "peerDependenciesMeta": {
-    "pmtiles": { "optional": true }
+    "pmtiles": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
