@@ -72,6 +72,13 @@
   // the one open layer-info card in the list (a second click, another row, or Esc closes it) ----
   let info = $state<string | null>(null)
 
+  // zoom to a layer's manifest bbox (unwrapped: east may exceed 180 for antimeridian-cut collections) ----
+  let mapRef = $state<{ fitTo(b: [number, number, number, number]) : void } | null>(null)
+  const zoomTo = (slug: string) => {
+    const b = manifest.layers.find((l) => l.slug === slug)?.bbox
+    if (b) mapRef?.fitTo(b as [number, number, number, number])
+  }
+
   // tile sources that fail (collection not published yet) ----
   let badLayers = $state<string[]>([])
   const onlayererror = (slug: string) => { if (!badLayers.includes(slug)) badLayers = [...badLayers, slug] }
@@ -136,6 +143,7 @@
             <div class="row">
               <input type="color" aria-label="Colour of {l?.title ?? s.slug}" value={s.colour ?? defaultColour(l)} oninput={(e) => patch(s.slug, { colour: e.currentTarget.value })} />
               <a href={withBase(layerPath(s.slug), BASE)} class="grow">{l?.title ?? s.slug}</a>
+              <button class="btn secondary small" type="button" aria-label="Zoom to {l?.title ?? s.slug}" title="Zoom to layer" disabled={!l?.bbox} onclick={() => zoomTo(s.slug)}>⌖</button>
               <button class="btn secondary small" type="button" aria-label="Move up" disabled={i === 0} onclick={() => move(i, -1)}>▲</button>
               <button class="btn secondary small" type="button" aria-label="Move down" disabled={i === selected.length - 1} onclick={() => move(i, 1)}>▼</button>
               <button class="btn secondary small" type="button" aria-label="Remove {l?.title ?? s.slug} from the map" onclick={() => toggle(s.slug)}>✕</button>
@@ -187,6 +195,9 @@
                   <a class="btn small" href={withBase(layerPath(l.slug), BASE)}>Full layer page</a>
                   <a class="btn secondary small" href={collectionDir(BASE, l.collection)} target="_blank" rel="noopener noreferrer">Collection README</a>
                   <button class="btn secondary small" type="button" onclick={() => toggle(l.slug)}>{isOn(l.slug) ? 'Remove from map' : 'Add to map'}</button>
+                  {#if l.bbox}
+                    <button class="btn secondary small" type="button" onclick={() => { if (!isOn(l.slug)) toggle(l.slug); zoomTo(l.slug) }}>Zoom to</button>
+                  {/if}
                 </div>
               </div>
             {/if}
@@ -202,7 +213,7 @@
     {#await import('../lib/PlacesMap.svelte')}
       <p class="muted loading">Loading the map…</p>
     {:then m}
-      <m.default {selected} layers={manifest.layers} highlight={place} {onlayererror} onpick={(id: string | null) => id && write({ place: id })} />
+      <m.default bind:this={mapRef} {selected} layers={manifest.layers} highlight={place} {onlayererror} onpick={(id: string | null) => id && write({ place: id })} />
     {:catch}
       <p class="notice">The map could not be loaded.</p>
     {/await}
