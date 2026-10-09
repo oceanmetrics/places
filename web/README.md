@@ -34,9 +34,16 @@ Everything degrades: when `index/layers.json` or the places index is not publish
 renders (search falls back to filtering the layer list; a layer whose tiles are missing is flagged, not fatal).
 `attribution_html` is sanitised (inline tags and http(s) links only) because the base URL can be overridden.
 
-## BEN-DOES: deploy (not done)
+## Deploy
 
-Hosting is Cloudflare Workers static assets (decision D11). `wrangler.jsonc` is ready (assets from `dist/`, SPA fallback so
+**Live now at <https://oceanmetrics.io/places/>** via GitHub Pages (`.github/workflows/pages.yml`: on push to `main`
+touching `web/` or `client/`, it checks, tests, builds with `--base=/places/` and deploys; `404.html` is a copy of
+`index.html`, the SPA fallback). The app base is `import.meta.env.BASE_URL` (`APP_BASE` in `lib/helpers.ts`): routes
+are matched and internal links written under it, so the same build runs at `/` (dev, Workers) and `/places/` (Pages).
+
+## BEN-DOES: deploy to places.oceanmetrics.io (not done)
+
+Hosting there is Cloudflare Workers static assets (decision D11). `wrangler.jsonc` is ready (assets from `dist/`, SPA fallback so
 `/p/…` and `/l/…` resolve to `index.html`). After the `oceanmetrics.io` DNS move to Cloudflare:
 
 1. `cd web && npm ci && npm run build`

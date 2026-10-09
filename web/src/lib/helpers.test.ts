@@ -26,6 +26,15 @@ describe('routes', () => {
     expect(matchRoute('/p/MR%3A8439%2Fa')).toEqual({ name: 'place', id: 'MR:8439/a' })
   })
 
+  it('serves under an app base prefix (GitHub Pages /places/)', () => {
+    expect(matchRoute('/places/', '/places')).toEqual({ name: 'home' })
+    expect(matchRoute('/places', '/places')).toEqual({ name: 'home' })
+    expect(matchRoute('/places/credits', '/places')).toEqual({ name: 'credits' })
+    expect(matchRoute('/places/p/NMS:PMNM', '/places')).toEqual({ name: 'place', id: 'NMS:PMNM' })
+    expect(withBase('/l/a', 'https://storage.oceanmetrics.io/gazetteer', undefined, '/places')).toBe('/places/l/a')
+    expect(withBase('/?layers=a', 'http://h/', undefined, '/places')).toBe('/places/?layers=a&base=http://h/')
+  })
+
   it('round-trips a place id through placePath', () => {
     for (const id of ['NMS:PMNM', 'AOA:N 1', 'X:a/b']) expect(matchRoute(placePath(id))).toEqual({ name: 'place', id })
     expect(placePath('NMS:PMNM')).toBe('/p/NMS:PMNM')

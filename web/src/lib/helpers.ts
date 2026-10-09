@@ -8,6 +8,9 @@ export const ERDDAP_PLACES   = 'https://oceanmetrics.io/erddap-places/'
 
 export const slash = (b: string) => (b.endsWith('/') ? b : b + '/')
 
+/** the path prefix the site is served under: '' at the root, '/places' on GitHub Pages (vite --base). */
+export const APP_BASE = (import.meta.env?.BASE_URL ?? '/').replace(/\/+$/, '')
+
 // routes ----
 export type Route =
   | { name: 'home' }
@@ -18,7 +21,8 @@ export type Route =
   | { name: 'notfound' }
 
 /** which page a pathname is. Place ids carry a colon (and sometimes a slash, encoded), so the rest of the path is the id. */
-export function matchRoute(pathname: string): Route {
+export function matchRoute(pathname: string, appBase = APP_BASE): Route {
+  if (appBase && pathname.startsWith(appBase)) pathname = pathname.slice(appBase.length)
   const p = pathname.replace(/\/+$/, '') || '/'
   if (p === '/') return { name: 'home' }
   if (p === '/credits') return { name: 'credits' }
@@ -43,8 +47,9 @@ export const parquetUrl     = (base: string, slug: string) => `${slash(base)}${s
 export const readmeUrl      = (base: string, slug: string) => `${slash(base)}${slug}/README.md`
 export const collectionUrl  = (base: string, slug: string) => `${slash(base)}${slug}/collection.json`
 
-/** the page's own links keep a `base=` override so a staging gazetteer stays selected while browsing. */
-export function withBase(path: string, base: string, defaultBase = DEFAULT_BASE): string {
+/** the page's own links live under APP_BASE and keep a `base=` override so a staging gazetteer stays selected while browsing. */
+export function withBase(path: string, base: string, defaultBase = DEFAULT_BASE, appBase = APP_BASE): string {
+  path = appBase + path
   if (slash(base) === slash(defaultBase)) return path
   const [p, q = ''] = path.split('?')
   const params = new URLSearchParams(q)
