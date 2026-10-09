@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import Credit from '../lib/Credit.svelte'
   import { BASE, loadManifest, manifest } from '../lib/data.svelte'
-  import { calcofiLink, collectionUrl, fmtDate, fmtN, parquetUrl, readmeUrl, withBase } from '../lib/helpers'
+  import { calcofiLink, collectionDir, collectionUrl, fmtDate, fmtN, parquetUrl, withBase } from '../lib/helpers'
 
   let { slug }: { slug: string } = $props()
   onMount(() => { loadManifest() })
@@ -30,7 +30,7 @@
         <tr><th>Geometry</th><td>{layer.geom_type}</td></tr>
         <tr><th>Version</th><td>{layer.version ?? '–'}</td></tr>
         <tr><th>Updated</th><td>{fmtDate(layer.updated)}</td></tr>
-        <tr><th>README</th><td><a href={readmeUrl(BASE, layer.collection)} target="_blank" rel="noopener noreferrer">collection README</a></td></tr>
+        <tr><th>README</th><td><a href={collectionDir(BASE, layer.collection)} target="_blank" rel="noopener noreferrer">collection README</a></td></tr>
         <tr><th>Files</th><td>
           <a href={parquetUrl(BASE, layer.collection)}>places.parquet</a> ·
           <a href={layer.pmtiles}>places.pmtiles</a> ·
@@ -51,7 +51,7 @@
       {/if}
     </p>
     <div class="row">
-      <a class="btn secondary" href={readmeUrl(BASE, slug)} target="_blank" rel="noopener noreferrer">Try the collection README</a>
+      <a class="btn secondary" href={collectionDir(BASE, slug)} target="_blank" rel="noopener noreferrer">Try the collection README</a>
     </div>
   {/if}
 </main>

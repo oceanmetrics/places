@@ -44,7 +44,8 @@ export const layerPath = (slug: string) => '/l/' + encodeURIComponent(slug)
 export const stacRoot       = (base: string) => `${slash(base)}catalog.json`
 export const layersJsonUrl  = (base: string) => `${slash(base)}index/layers.json`
 export const parquetUrl     = (base: string, slug: string) => `${slash(base)}${slug}/places.parquet`
-export const readmeUrl      = (base: string, slug: string) => `${slash(base)}${slug}/README.md`
+/** the collection's browsable page: storage.oceanmetrics.io renders its README as HTML there (raw README.md stays raw). */
+export const collectionDir  = (base: string, slug: string) => `${slash(base)}${slug}/`
 export const collectionUrl  = (base: string, slug: string) => `${slash(base)}${slug}/collection.json`
 
 /** the page's own links live under APP_BASE and keep a `base=` override so a staging gazetteer stays selected while browsing. */

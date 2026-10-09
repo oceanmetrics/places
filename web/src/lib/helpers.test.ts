@@ -47,6 +47,12 @@ describe('urls', () => {
     expect(stacRoot('https://x/g/')).toBe('https://x/g/catalog.json')
   })
 
+  it('links the browsable collection page, not the raw README.md', async () => {
+    const { collectionDir } = await import('./helpers')
+    expect(collectionDir('https://storage.oceanmetrics.io/gazetteer', 'boem_program_11_draft'))
+      .toBe('https://storage.oceanmetrics.io/gazetteer/boem_program_11_draft/')
+  })
+
   it('carries a non-default base through internal links only', () => {
     expect(withBase('/l/a', 'https://storage.oceanmetrics.io/gazetteer')).toBe('/l/a')
     expect(withBase('/l/a', 'http://localhost:8080/')).toBe('/l/a?base=http://localhost:8080/')

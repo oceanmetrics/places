@@ -2,7 +2,7 @@
   import { getPlace, type IndexPlace, type PlaceFeature } from '@oceanmetrics/places'
   import { BASE, index, manifest, searchPlaces } from '../lib/data.svelte'
   import { buildSearch, parseView, type LayerSel } from '../lib/grammar'
-  import { defaultColour, fmtN, groupByAuthority, layerPath, placePath, withBase } from '../lib/helpers'
+  import { collectionDir, defaultColour, fmtDate, fmtN, groupByAuthority, layerPath, placePath, sanitizeHtml, withBase } from '../lib/helpers'
   import { loc, navigate } from '../lib/router.svelte'
 
   // the URL is the state: layers=… and place=… are read here and written back with replaceState ----
@@ -68,6 +68,9 @@
       .catch((e: unknown) => { if (my === pt) placeError = `Place ${id} could not be read: ${(e as Error).message}` })
   })
   const pickHit = (h: IndexPlace) => write({ place: h.place_id })
+
+  // the one open layer-info card in the list (a second click, another row, or Esc closes it) ----
+  let info = $state<string | null>(null)
 
   // tile sources that fail (collection not published yet) ----
   let badLayers = $state<string[]>([])
@@ -160,12 +163,33 @@
       <ul class="layers">
         {#each g.layers as l (l.slug)}
           <li>
-            <label>
-              <input type="checkbox" aria-label={l.title} checked={isOn(l.slug)} onchange={() => toggle(l.slug)} />
-              <span class="sw" style:background={defaultColour(l)}></span>
-              <span class="grow">{l.title}</span>
-              <span class="muted n">{fmtN(l.n)}</span>
-            </label>
+            <div class="lrow">
+              <label>
+                <input type="checkbox" aria-label={l.title} checked={isOn(l.slug)} onchange={() => toggle(l.slug)} />
+                <span class="sw" style:background={defaultColour(l)}></span>
+                <span class="grow">{l.title}</span>
+                <span class="muted n">{fmtN(l.n)}</span>
+              </label>
+              <button class="info-btn" type="button" aria-label="About {l.title}" aria-expanded={info === l.slug}
+                onclick={() => (info = info === l.slug ? null : l.slug)}
+                onkeydown={(e) => { if (e.key === 'Escape') info = null }}>
+                <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.4" /><circle cx="8" cy="4.9" r="1" fill="currentColor" /><path d="M8 7.2v4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+              </button>
+            </div>
+            {#if info === l.slug}
+              <div class="card linfo">
+                <div class="muted">{fmtN(l.n)} places · {l.geom_type}{l.version ? ` · v${l.version}` : ''}{l.updated ? ` · ${fmtDate(l.updated)}` : ''}</div>
+                {#if l.license}<div class="muted">Licence: {#if l.license_url}<a href={l.license_url} target="_blank" rel="noopener noreferrer">{l.license}</a>{:else}{l.license}{/if}</div>{/if}
+                {#if l.attribution_html || l.attribution}
+                  <div class="attr">{@html sanitizeHtml(l.attribution_html || l.attribution)}</div>
+                {/if}
+                <div class="row">
+                  <a class="btn small" href={withBase(layerPath(l.slug), BASE)}>Full layer page</a>
+                  <a class="btn secondary small" href={collectionDir(BASE, l.collection)} target="_blank" rel="noopener noreferrer">Collection README</a>
+                  <button class="btn secondary small" type="button" onclick={() => toggle(l.slug)}>{isOn(l.slug) ? 'Remove from map' : 'Add to map'}</button>
+                </div>
+              </div>
+            {/if}
           </li>
         {/each}
       </ul>
@@ -200,6 +224,13 @@
   .hits button:hover, .hits button:focus-visible { background: var(--bg-tint); }
   .hits span { display: block; font-size: 12px; }
   .layers label { display: flex; gap: 8px; align-items: center; padding: 4px 0; cursor: pointer; }
+  .lrow { display: flex; align-items: center; gap: 4px; }
+  .lrow label { flex: 1; min-width: 0; }
+  .info-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%; background: transparent; color: var(--text-muted); cursor: pointer; }
+  .info-btn:hover, .info-btn[aria-expanded='true'] { color: var(--brand-text); background: var(--bg-tint); }
+  .info-btn svg { width: 15px; height: 15px; }
+  .linfo { font-size: 13px; margin: 2px 0 8px; display: grid; gap: 6px; }
+  .linfo .attr { color: var(--text-muted); }
   .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; border: 1px solid var(--border); }
   .grow { flex: 1; min-width: 0; }
   .n { font-size: 12px; font-variant-numeric: tabular-nums; }
