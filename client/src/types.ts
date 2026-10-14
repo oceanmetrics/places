@@ -10,6 +10,16 @@ export interface LayerPaint {
   circle?: Record<string, unknown>
 }
 
+/** a dated status event of a whole layer (layers.json `status` and the items of `status_history`). */
+export interface LayerStatus {
+  value : string
+  /** ISO date, or a partial one (YYYY, YYYY-MM). */
+  date  : string
+  /** URL that documents the status. */
+  source: string
+  note? : string | null
+}
+
 /** one row of layers.json (written by scripts/build_layers_json.py). */
 export interface Layer {
   slug            : string
@@ -33,6 +43,21 @@ export interface Layer {
   license         : string | null
   license_url     : string | null
   citation        : string
+  // added in client 0.1.3 (manifest rows from before lack them; null when unknown) ----
+  /** the layer-level status, e.g. { value: 'rescinded', date: '2025-07-30', source, note }; null when the layer has none. */
+  status?         : LayerStatus | null
+  /** the layer's status events, ascending by date. */
+  status_history? : LayerStatus[] | null
+  /** 'rescinded 2025-07-30' (value with '_' as space, then the date): show it as `${title} (${status_label})`, see `layerLabel`. */
+  status_label?   : string | null
+  /** ISO date of the collection's first published version. */
+  created?        : string | null
+  /** latest upstream data edit date across the collection's sources (ISO date). */
+  source_date?    : string | null
+  /** absolute URL of the collection's places.parquet. */
+  parquet?        : string | null
+  /** sha256 (hex) of places.parquet at `version`: pin `version` + `parquet_sha256`. */
+  parquet_sha256? : string | null
 }
 
 export interface ClientConfig {

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.3
+
+- `Layer` (a layers.json row) gains optional `status`, `status_history`, `status_label` (layer-level status, e.g. the
+  BOEM wind planning areas: `rescinded`, 2025-07-30, with the BOEM notice), `created` (first published version's date),
+  `source_date` (latest upstream data edit), `parquet` and `parquet_sha256` (pin `version` + `parquet_sha256`). All are
+  null when unknown and absent in older manifests. New type `LayerStatus`.
+- New `layerLabel(layer)`: `title (status_label)` when the layer has a status, else the title. Layer titles in the
+  manifest are now plain (`BOEM offshore wind planning areas`, no "(rescinded 2025-07-30)" suffix).
+- Collections' `places.parquet` gain `status_upstream` (the source's own status code, verbatim) and `status_history`
+  (JSON event list); `getPlace` returns them as properties when present. No client change needed.
+- docs: `base_direct` is the path-style bucket URL.
+
 ## 0.1.2
 
 - `getPlace` features gain `collection` (a GeoJSON foreign member): the slug of the collection the place was read

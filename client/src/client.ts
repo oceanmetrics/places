@@ -50,6 +50,11 @@ export function bboxIntersects(a: BBox, b: BBox): boolean {
   return hit(b[0], b[2]) || (b[2] > 180 && hit(b[0] - 360, b[2] - 360))
 }
 
+/** a layer's display name: its title, plus ` (status_label)` when the layer has a status (e.g. "... (rescinded 2025-07-30)"). */
+export function layerLabel(layer: Pick<Layer, 'title'> & { status_label?: string | null }): string {
+  return layer.status_label ? `${layer.title} (${layer.status_label})` : layer.title
+}
+
 /** the credit line for attribution strings: deduped; the shared "Processed by Ocean Metrics." said once at the end. */
 export function creditLine(parts: string[]): string {
   const seen = new Set<string>(), cores: string[] = []

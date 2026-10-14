@@ -24,11 +24,20 @@ Calling `configure` clears the caches.
 
 The manifest written by `scripts/build_layers_json.py`: one row per map layer (`slug`, `title`, `collection`,
 `pmtiles`, `source_layer`, `geom_type`, `n`, `updated`, `version`, `paint`, `authority`, `place_type`, `bbox`,
-`attribution`, `attribution_html`, `license`, `license_url`, `citation`). Cached; `{ refresh: true }` re-fetches.
+`attribution`, `attribution_html`, `license`, `license_url`, `citation`, and since 0.1.3 `status`, `status_history`,
+`status_label`, `created`, `source_date`, `parquet`, `parquet_sha256`). Cached; `{ refresh: true }` re-fetches.
+
+Layer status and pinning: `status` is the layer-level status (`{ value, date, source, note }`, e.g. the BOEM wind
+planning areas rescinded on 2025-07-30) and `status_history` its ascending events; both null when the layer has none.
+Titles are plain: show `layerLabel(layer)` (`title (status_label)`, e.g. "BOEM offshore wind planning areas (rescinded
+2025-07-30)"). `created` is the date of the collection's first published version, `updated` the current version's
+build time, `source_date` the latest upstream data edit. To pin data, keep `version` + `parquet_sha256` (sha256 of
+`parquet` at that version) and verify the download. Rows from an older manifest lack these fields.
 
 URLs: each `pmtiles` is canonical, on the storage host (`https://storage.oceanmetrics.io/gazetteer/...`), which answers
 every request with one 302 to the bucket. The manifest's top-level `base_direct`
-(`https://oceanmetrics.io-public.s3.amazonaws.com/gazetteer/`) is the same key space on the bucket host, without the
+(`https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/`, path-style: the dotted bucket name breaks
+TLS on the virtual-hosted form) is the same key space on the bucket host, without the
 redirect. Apps MAY rewrite a `pmtiles` URL onto `base_direct` (replace the manifest's `base` prefix) until a
 redirect-free host replaces the redirect; nothing else needs to change. `listLayers()` returns the layer rows only; read
 `base_direct` from the JSON if you need it.
