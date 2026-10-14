@@ -99,15 +99,17 @@ def test_literal_date_and_constant_status():
   assert s == ("rescinded", "u", "2025-07-30")
 
 
-def test_data_last_edit_falls_back_to_the_retrieval_day_noaa_sanctuaries_regression(tmp_path):
-  # noaa_sanctuaries' layer serves no editingInfo.dataLastEditDate: status_date was '' on every row while
-  # source_date fell back to the retrieval day. status_date now takes the same fallback.
+def test_data_last_edit_without_an_edit_date_leaves_status_date_empty_noaa_sanctuaries_regression(tmp_path):
+  # noaa_sanctuaries' layer serves no editingInfo.dataLastEditDate. status_date stays empty rather than take the
+  # retrieval day (source_date does fall back to it): the Explorer shows "<status> <status_date>" as when the status
+  # took effect, and "Chumash Heritage (designated 2026-10-14)" would state a false designation date.
   spec = {"value": "designated", "source": "u", "date": "data_last_edit"}
-  assert resolve_status(spec, {}, None, retrieved="2026-10-08T17:03:26Z") == ("designated", "u", "2026-10-08")
+  assert resolve_status(spec, {}, None, retrieved="2026-10-08T17:03:26Z") == ("designated", "u", "")
   assert resolve_status(spec, {}, "2025-12-29T13:52:33Z", retrieved="2026-10-08T17:03:26Z")[2] == "2025-12-29"
   cfg = lease_cfg(tmp_path)
   rows, _, _ = build_rows(cfg, [lease_result([(1, "OCS-A 0001", "Commercial", "X", square(0, 0))], edit=None)])
-  assert rows[0]["status_date"] == "2026-10-08" == rows[0]["source_date"].isoformat()
+  assert rows[0]["status_date"] == ""
+  assert rows[0]["source_date"].isoformat() == "2026-10-08"
 
 
 def test_status_upstream_is_the_native_code_verbatim():

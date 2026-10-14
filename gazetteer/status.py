@@ -78,13 +78,14 @@ def resolve_status(cfg_status: dict, attrs: dict, data_last_edit: str | None, ev
   """(status, status_source, status_date) for one row.
 
   value: a literal, or 'field:NAME' (a native attribute, lower-cased; `default` when empty).
-  date: a literal ('2025-07-30'), 'data_last_edit' (the source's last edit day; the retrieval day when the source
-  serves no edit date, the same fallback as the `source_date` column) or 'field:NAME' (a native date attribute).
+  date: a literal ('2025-07-30'), 'data_last_edit' (the source's last edit day; EMPTY when the source serves no edit
+  date, never the retrieval day: an app shows status_date as the date the status took effect, so "designated
+  2026-10-14" for a 2024 sanctuary would be false) or 'field:NAME' (a native date attribute).
   the latest event of the row's key (matched on the exact events_key_field value) wins over the default.
   """
   spec = str(cfg_status.get("date") or "")
   if spec == "data_last_edit":
-    date = (data_last_edit or retrieved or "")[:10]
+    date = (data_last_edit or "")[:10]
   elif spec.startswith("field:"):
     date = _iso_date(attrs.get(spec[6:]))
   else:
