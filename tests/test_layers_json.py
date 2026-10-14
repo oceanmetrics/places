@@ -44,7 +44,68 @@ def test_row_exact():
     "license": "CC-PDDC", "license_url": "https://example.org/pd",
     "citation": "Acme Agency, via MarineCadastre. Public domain. Processed by Ocean Metrics. Acme leases, v1.0.3. "
                 "Ocean Metrics gazetteer, 2026. https://storage.oceanmetrics.io/gazetteer/acme_leases/",
+    # an older collection (no layer status, no parquet asset, no ledger) keeps the new keys, all null
+    "status": None, "status_history": None, "status_label": None, "created": None, "source_date": None,
+    "parquet": None, "parquet_sha256": None,
   }
+
+
+SHA_OLD, SHA_NEW = "a" * 64, "b" * 64
+NOTICE = "https://boem.test/notice"
+RESCINDED = {
+  **COLL, "id": "boem_wind_planning_rescinded", "title": "BOEM offshore wind planning areas",
+  "assets": {**COLL["assets"], "places": {"href": "./places.parquet", "type": "application/vnd.apache.parquet",
+                                          "file:checksum": "1220" + SHA_NEW, "roles": ["data"]}},
+  "gazetteer:status": {"value": "rescinded", "date": "2025-07-30", "source": NOTICE, "note": "BOEM notice"},
+  "gazetteer:status_history": [{"date": "2025-07-30", "value": "rescinded", "source": NOTICE, "note": "BOEM notice"}],
+  "gazetteer:provenance": {"version": "1.1.0", "sources": [
+    {"component": "outline", "data_last_edit": "2025-02-20T16:17:31Z"},
+    {"component": "block", "data_last_edit": "2025-02-20T16:28:20Z"}, {"component": "x", "data_last_edit": None}]},
+}
+LEDGER = {"current_version": "1.0.0", "versions": [
+  {"version": "1.0.0", "created": "2026-10-08T14:58:54.296318Z", "assets": {"places.parquet": {"sha256": SHA_OLD}}}]}
+
+
+def test_row_layer_status_versions_and_parquet_pin():
+  row = bl.layer_row(RESCINDED, ledger=LEDGER)
+  sub = {k: row[k] for k in ("title", "status", "status_history", "status_label", "created", "updated", "source_date",
+                             "version", "parquet", "parquet_sha256")}
+  assert sub == {
+    "title": "BOEM offshore wind planning areas",
+    "status": {"value": "rescinded", "date": "2025-07-30", "source": NOTICE, "note": "BOEM notice"},
+    "status_history": [{"date": "2025-07-30", "value": "rescinded", "source": NOTICE, "note": "BOEM notice"}],
+    "status_label": "rescinded 2025-07-30", "created": "2026-10-08", "updated": "2026-10-01T12:00:00Z",
+    "source_date": "2025-02-20", "version": "1.1.0",
+    "parquet": "https://storage.oceanmetrics.io/gazetteer/boem_wind_planning_rescinded/places.parquet",
+    # 1.1.0 is staged, not in the ledger yet: the collection's own checksum
+    "parquet_sha256": SHA_NEW}
+
+
+def test_parquet_sha256_is_the_ledger_entry_for_the_rows_version():
+  coll = {**RESCINDED, "gazetteer:provenance": {**RESCINDED["gazetteer:provenance"], "version": "1.0.0"}}
+  assert bl.layer_row(coll, ledger=LEDGER)["parquet_sha256"] == SHA_OLD
+  assert bl.parquet_sha256({"assets": {}}, "1.0.0", None) is None
+
+
+def test_status_label_underscores_become_spaces():
+  assert bl.status_label({"value": "draft_proposed", "date": "2025-11-20"}) == "draft proposed 2025-11-20"
+  assert bl.status_label({"value": "settlement_pending", "date": ""}) == "settlement pending"
+  assert bl.status_label(None) is None and bl.status_label({}) is None
+
+
+def test_local_rows_take_created_from_the_published_ledger(tmp_path):
+  d = tmp_path / "boem_wind_planning_rescinded"
+  d.mkdir()
+  (d / "collection.json").write_text(json.dumps(RESCINDED))
+  url = "https://storage.oceanmetrics.io/gazetteer/boem_wind_planning_rescinded/versions.json"
+  assert bl.local_rows(tmp_path, fetch=lambda u: {url: LEDGER}[u])[0]["created"] == "2026-10-08"
+  assert bl.local_rows(tmp_path)[0]["created"] is None                     # offline, never published: unknown
+
+  def boom(u):
+    raise OSError("offline")
+  assert bl.local_rows(tmp_path, fetch=boom)[0]["created"] is None
+  (d / "versions.json").write_text(json.dumps({"versions": [{"version": "0.9.0", "created": "2026-09-01T00:00:00Z"}]}))
+  assert bl.local_rows(tmp_path, fetch=boom)[0]["created"] == "2026-09-01"  # a staged ledger wins
 
 
 def test_style_overrides_default_paint():
@@ -110,12 +171,14 @@ def test_remote_rows_from_fake_catalog():
                                                        | {"assets": {**COLL["assets"], "styles/default": {"href": "./styles/default.json"}}},
     "https://x.test/g/acme_leases/styles/default.json": {"layers": [{"type": "fill", "paint": {"fill-color": "#000000"}}]},
     "https://x.test/g/erddap/foo/collection.json": {"id": "foo", "assets": {}, "links": []},
+    "https://x.test/g/acme_leases/versions.json": {"versions": [{"version": "1.0.0", "created": "2026-10-08T14:58:54Z"}]},
   }
   rows = bl.remote_rows("https://x.test/g/", fetch=lambda u: files[u])
   assert [r["slug"] for r in rows] == ["acme_leases"]
   assert rows[0]["version"] == "1.4.0"
   assert rows[0]["paint"]["fill"]["fill-color"] == "#000000"
   assert rows[0]["pmtiles"] == "https://x.test/g/acme_leases/places.pmtiles"
+  assert rows[0]["created"] == "2026-10-08"
 
 
 def test_remote_unreachable_is_empty_not_fatal():
@@ -134,7 +197,7 @@ def test_main_offline_writes_manifest(tmp_path):
   assert m["schema"] == 1 and [r["slug"] for r in m["layers"]] == ["acme_leases"]
   # pmtiles stay canonical (storage host); base_direct is the redirect-free bucket host apps MAY rewrite onto
   assert m["base"] == "https://storage.oceanmetrics.io/gazetteer/"
-  assert m["base_direct"] == "https://oceanmetrics.io-public.s3.amazonaws.com/gazetteer/"
+  assert m["base_direct"] == "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/"   # path-style (2746599)
   assert m["layers"][0]["pmtiles"].startswith(m["base"])
 
 

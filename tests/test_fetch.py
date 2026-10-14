@@ -67,6 +67,34 @@ def test_count_mismatch_is_an_error():
     fetch_arcgis({"url": "https://x/FeatureServer/0", "page_size": 100}, delay=0, s=Short(5))
 
 
+def test_exclude_drops_renacv_leases_and_records_them_pacific_og_regression(caplog):
+  # boem_pacific_og_leases: BOEM's POC_Layers/7 lists 4 renewable leases (LEASE_STATUS_CD = RENACV) among the
+  # 34 "oil and gas" leases; the config excludes them at fetch, the layer's own count stays the change token
+  class Codes(FakeSession):
+    def get(self, url, params=None, **kw):
+      r = super().get(url, params, **kw)
+      for f in r._p.get("features", []):
+        oid = f["properties"]["OBJECTID"]
+        f["properties"]["LEASE_STATUS_CD"] = "RENACV" if oid in (2, 4) else "UNIT" if oid == 5 else "PROD"
+      return r
+  src = {"url": "https://x/FeatureServer/7", "page_size": 100, "expected_count": 3,
+         "exclude": {"LEASE_STATUS_CD": ["RENACV"]}}
+  res = fetch_arcgis(src, delay=0, s=Codes(5))
+  assert [f["properties"]["OBJECTID"] for f in res.features] == [1, 3, 5]
+  assert res.record_count == 5
+  assert res.extra["excluded"] == ["LEASE_STATUS_CD=RENACV: 2 feature(s)"]
+  assert "expected" not in caplog.text            # expected_count is the count after the exclusion
+  res = fetch_arcgis({k: v for k, v in src.items() if k != "exclude"}, delay=0, s=Codes(5))
+  assert len(res.features) == 5 and res.extra["excluded"] is None
+
+
+def test_exclude_features_rules():
+  feats = [{"properties": {"A": "x", "B": 1}}, {"properties": {"A": "y", "B": 2}}, {"properties": {"A": None, "B": 3}}]
+  kept, notes = fetch.exclude_features(feats, {"A": ["y"], "B": [3]})
+  assert kept == feats[:1] and notes == ["A=y: 1 feature(s)", "B=3: 1 feature(s)"]
+  assert fetch.exclude_features(feats, None) == (feats, [])
+
+
 def test_arcgis_error_body_raises():
   class Err(FakeSession):
     def get(self, url, params=None, **kw):

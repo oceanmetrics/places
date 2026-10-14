@@ -23,7 +23,7 @@ WHERE bbox.xmin < -117 AND bbox.xmax > -125;
 
 | path | what |
 |---|---|
-| `sources/<authority>/<layer>.yml` | one config per source layer: endpoint, paging, field map, `place_type`, licence, attribution, cadence, status overlay |
+| `sources/<authority>/<layer>.yml` | one config per source layer: endpoint, paging, field map, `place_type`, licence, attribution, cadence, status (event log, upstream code, layer status) |
 | `gazetteer/` | the Python package: fetch -> normalise -> validate -> GeoParquet -> PMTiles -> STAC (the plan's `build/` stage) |
 | `build.py` | CLI entry point: `build`, `detect`, `next-version`, `check` |
 | `R/` | R code that still works as is (`build_places.R`: sanctuaries + MarineRegions + ProtectedSeas) |

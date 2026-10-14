@@ -20,12 +20,16 @@ from .ids import build_place_ids, check_place_ids, suffix_duplicates
 from .mixed import clean_mixed_geometry, morton_order
 from .lines import clean_multiline_geometry
 from .fmt import render
-from .status import load_overlay, resolve_status, unmatched_overlay
+from .status import history_json, load_events, resolve_status, row_events, unmatched_events, upstream_status
 
 log = logging.getLogger(__name__)
 
 COMMON = ["place_id", "authority", "source_id", "name", "place_type", "geom_type", "status", "status_source",
-          "status_date", "source_url", "source_date", "retrieved", "version", "license", "attribution"]
+          "status_date", "status_upstream", "status_history", "source_url", "source_date", "retrieved", "version",
+          "license", "attribution"]
+# added 2026-10 (status_upstream: the source's own status code; status_history: JSON event list): written on every
+# build, but collections built before then lack them, so the checks do not require them
+COMMON_ADDED = ["status_upstream", "status_history"]
 RESERVED = {c.lower() for c in COMMON} | {"component", "bbox", "geometry"}
 TS = pa.timestamp("ms", tz="UTC")
 BBOX = pa.struct([("xmin", pa.float64()), ("ymin", pa.float64()), ("xmax", pa.float64()), ("ymax", pa.float64())])
@@ -75,8 +79,9 @@ def build_rows(cfg: dict, results: list[SourceResult], version: str | None = Non
   names and `_geom` (clean shapely MultiPolygon). features with no usable polygon are dropped and reported.
   """
   maps = cfg.get("maps") or {}
-  overlay_cfg = (cfg.get("status") or {}).get("overlay")
-  overlay = load_overlay(Path(cfg["_sources_dir"]) / overlay_cfg["file"]) if overlay_cfg else None
+  events_cfg = (cfg.get("status") or {}).get("events")
+  events = load_events(Path(cfg["_sources_dir"]) / events_cfg["file"]) if events_cfg else None
+  events_key = events_cfg["key"] if events_cfg else None
   version = version or cfg["version"]
   gtype = cfg.get("geometry_type", "MultiPolygon")   # Point / LineString collections skip the polygon cleaning
   rows, fields, dropped = [], [], []
@@ -105,18 +110,19 @@ def build_rows(cfg: dict, results: list[SourceResult], version: str | None = Non
     pid_cfg = source_setting(cfg, src_cfg, "place_id")
     ids = build_place_ids(pid_cfg, attrs, maps)
     check_place_ids(ids, pid_cfg["pattern"])
-    if overlay:
-      unmatched_overlay(overlay, attrs, cfg["status"]["overlay"]["key"])
+    if events:
+      unmatched_events(events, attrs, events_key)
     ftypes = {f["name"]: f["type"] for f in res.fields}
     for (props, g), pid in zip(keep, ids):
-      st = resolve_status(cfg["status"], props, res.data_last_edit, overlay,
-                          cfg["status"]["overlay"]["key"] if overlay_cfg else None)
+      st = resolve_status(cfg["status"], props, res.data_last_edit, events, events_key, res.retrieved)
       row = {
         "place_id": pid, "authority": cfg["authority"],
         "source_id": render(source_setting(cfg, src_cfg, "source_id"), props, maps),
         "name": render(source_setting(cfg, src_cfg, "name"), props, maps),
         "place_type": cfg["place_type"], "geom_type": g.geom_type if cfg.get("mixed_geometry") else gtype,
         "status": st[0], "status_source": st[1], "status_date": st[2],
+        "status_upstream": upstream_status(cfg["status"], props),
+        "status_history": history_json(row_events(props, events, events_key)),
         "source_url": res.source_url,
         "source_date": _iso_day(res.data_last_edit) or _iso_day(res.retrieved),
         "retrieved": dt.datetime.fromisoformat(res.retrieved.replace("Z", "+00:00")),

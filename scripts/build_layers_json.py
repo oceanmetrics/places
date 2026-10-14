@@ -12,6 +12,16 @@ host, https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/, no r
 redirect-free host lands. the manifest itself is published at <base>index/layers.json (the client falls back to
 <base>layers.json).
 
+status and versions (all null when unknown, so an older collection still makes a valid row):
+  status / status_history  the layer-level status ({value, date, source, note}) and its ascending events, from the
+                           collection's `gazetteer:status` / `gazetteer:status_history` (the source YAML's `layer_status`)
+  status_label             "rescinded 2025-07-30": status value ('_' -> ' ') then its date; apps show `title (status_label)`
+  created                  date of the collection's FIRST published version (<slug>/versions.json versions[0].created)
+  updated                  the current build's timestamp (collection.json `updated`)
+  source_date              latest upstream data edit date across the collection's sources (provenance data_last_edit)
+  parquet / parquet_sha256 absolute URL of places.parquet and its sha256 at `version` (the ledger entry for that version,
+                           else the collection's own file:checksum); consumers pin `version` + `parquet_sha256`
+
   python scripts/build_layers_json.py [--out catalog/staging/layers.json] [--no-remote] [--no-local]
 """
 from __future__ import annotations
@@ -66,6 +76,49 @@ def geom_kind(geom_type: str | list | None) -> str:
 
 def pmtiles_url(slug: str, base: str = BASE) -> str:
   return f"{base.rstrip('/')}/{slug}/places.pmtiles"
+
+
+def parquet_asset(coll: dict) -> dict | None:
+  """the collection's places.parquet asset (the `places` key, else the first parquet data asset)."""
+  assets = coll.get("assets") or {}
+  if (assets.get("places") or {}).get("type") == "application/vnd.apache.parquet":
+    return assets["places"]
+  return next((a for a in assets.values() if a.get("type") == "application/vnd.apache.parquet"
+               and str(a.get("href", "")).endswith("places.parquet")), None)
+
+
+def status_label(status: dict | None) -> str | None:
+  """'rescinded 2025-07-30': the value with '_' as space, then the date; None without a status."""
+  if not status or not status.get("value"):
+    return None
+  return " ".join(x for x in (str(status["value"]).replace("_", " "), str(status.get("date") or "")) if x)
+
+
+def created_date(ledger: dict | None) -> str | None:
+  """ISO date of the first published version in a collection's versions.json ledger."""
+  vs = (ledger or {}).get("versions") or []
+  if not vs:
+    return None
+  return str(vs[0].get("created") or "")[:10] or None
+
+
+def parquet_sha256(coll: dict, version: str | None, ledger: dict | None) -> str | None:
+  """sha256 (hex) of places.parquet at `version`: the ledger's entry for that version, else the collection's
+  file:checksum (a sha2-256 multihash, '1220' + hex)."""
+  for v in (ledger or {}).get("versions") or []:
+    if version and v.get("version") == version:
+      sha = ((v.get("assets") or {}).get("places.parquet") or {}).get("sha256")
+      if sha:
+        return sha
+  mh = str((parquet_asset(coll) or {}).get("file:checksum") or "")
+  return mh[4:] if mh.startswith("1220") and len(mh) == 68 else None
+
+
+def source_date(coll: dict) -> str | None:
+  """latest upstream data edit date (ISO date) across the provenance sources; None when no source serves one."""
+  days = [str(s.get("data_last_edit"))[:10] for s in (coll.get("gazetteer:provenance") or {}).get("sources") or []
+          if s.get("data_last_edit")]
+  return max(days) if days else None
 
 
 def has_pmtiles(coll: dict) -> bool:
@@ -131,14 +184,16 @@ def citation(coll: dict, slug: str, version: str | None, updated: str | None, ba
   return f"{attribution_text(coll)} {coll.get('title') or slug}{v}. Ocean Metrics gazetteer, {year}. {base.rstrip('/')}/{slug}/"
 
 
-def layer_row(coll: dict, style: dict | None = None, version: str | None = None, base: str = BASE) -> dict:
-  """the manifest row for one STAC collection (pure: no I/O)."""
+def layer_row(coll: dict, style: dict | None = None, version: str | None = None, base: str = BASE,
+              ledger: dict | None = None) -> dict:
+  """the manifest row for one STAC collection (pure: no I/O). `ledger` is the collection's versions.json."""
   slug = coll["id"]
   geom_type = coll.get("geoparquet:geometry_type") or "MultiPolygon"
   n = coll.get("geoparquet:feature_count", coll.get("table:row_count"))
   ver = coll.get("version") or (coll.get("gazetteer:provenance") or {}).get("version") or version
   layers = coll.get("pmtiles:layers") or []
   updated = coll.get("updated")
+  status = coll.get("gazetteer:status") or None
   return {
     "slug"            : slug,
     "title"           : coll.get("title") or slug,
@@ -158,6 +213,13 @@ def layer_row(coll: dict, style: dict | None = None, version: str | None = None,
     "license"         : coll.get("license"),
     "license_url"     : license_url(coll),
     "citation"        : citation(coll, slug, ver, updated, base),
+    "status"          : status,
+    "status_history"  : coll.get("gazetteer:status_history") or None,
+    "status_label"    : status_label(status),
+    "created"         : created_date(ledger),
+    "source_date"     : source_date(coll),
+    "parquet"         : f"{base.rstrip('/')}/{slug}/places.parquet" if parquet_asset(coll) else None,
+    "parquet_sha256"  : parquet_sha256(coll, ver, ledger) if parquet_asset(coll) else None,
   }
 
 
@@ -174,7 +236,9 @@ def manifest(rows: list[dict], base: str = BASE, generated: str | None = None) -
 
 
 # sources ----
-def local_rows(staging: Path, base: str = BASE) -> list[dict]:
+def local_rows(staging: Path, base: str = BASE, fetch=None) -> list[dict]:
+  """rows for staged builds. the ledger (for `created`) is the staged <slug>/versions.json, else the published one
+  (fetched when `fetch` is given), else none: a never-published collection has `created` null."""
   rows = []
   for f in sorted(staging.glob("*/collection.json")):
     coll = json.loads(f.read_text())
@@ -182,7 +246,14 @@ def local_rows(staging: Path, base: str = BASE) -> list[dict]:
       continue
     style_f = f.parent / "styles" / "default.json"
     style = json.loads(style_f.read_text()) if style_f.exists() else None
-    rows.append(layer_row(coll, style, base=base))
+    ledger_f = f.parent / "versions.json"
+    ledger = json.loads(ledger_f.read_text()) if ledger_f.exists() else None
+    if ledger is None and fetch is not None:
+      try:
+        ledger = fetch(urljoin(base, f"{coll['id']}/versions.json"))
+      except (urllib.error.URLError, OSError, ValueError):
+        ledger = None
+    rows.append(layer_row(coll, style, base=base, ledger=ledger))
   return rows
 
 
@@ -220,7 +291,12 @@ def remote_rows(base: str = BASE, fetch=get_json) -> list[dict]:
         style = fetch(urljoin(href, ref["href"]))
       except (urllib.error.URLError, OSError, ValueError):
         pass
-    return layer_row(coll, style, version=(versions.get(coll["id"]) or {}).get("current_version"), base=base)
+    try:
+      ledger = fetch(urljoin(href, "versions.json"))
+    except (urllib.error.URLError, OSError, ValueError):
+      ledger = None
+    return layer_row(coll, style, version=(versions.get(coll["id"]) or {}).get("current_version"), base=base,
+                     ledger=ledger)
 
   with ThreadPoolExecutor(8) as ex:
     return [r for r in ex.map(one, hrefs) if r]
@@ -235,7 +311,7 @@ def main(argv=None) -> int:
   ap.add_argument("--no-local", action="store_true")
   a = ap.parse_args(argv)
   staging = Path(a.staging)
-  loc = [] if a.no_local or not staging.is_dir() else local_rows(staging, a.base)
+  loc = [] if a.no_local or not staging.is_dir() else local_rows(staging, a.base, None if a.no_remote else get_json)
   rem = [] if a.no_remote else remote_rows(a.base)
   rows = merge_rows(rem, loc)
   out = Path(a.out)

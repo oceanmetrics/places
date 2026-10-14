@@ -7,7 +7,7 @@ description: >-
   full name (hand-mapped in catalog/sources/boem/ocs_planning.yml).
 authority: BOEM
 place_type: planning_area
-version: 1.0.0
+version: 1.1.0
 cadence: weekly
 license: CC-PDDC
 license_url: https://www.usa.gov/publicdomain/label/1.0/
@@ -18,7 +18,7 @@ attribution: >-
 providers:
   - {name: Bureau of Ocean Energy Management (BOEM), roles: [producer, licensor], url: "https://www.boem.gov/oil-gas-energy"}
   - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
-source_page: https://www.boem.gov/oil-gas-energy/national-ocs-program
+source_page: https://www.boem.gov/oil-gas-energy/national-program
 place_id: {template: "BOEM:PA:{PLANNING_AREA}", pattern: '^BOEM:PA:[A-Z]{2,3}$'}
 name: "{PLANNING_AREA|map:planning_area_names} Planning Area"
 source_id: "{PLANNING_AREA}"

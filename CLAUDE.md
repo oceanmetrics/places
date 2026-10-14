@@ -66,9 +66,14 @@ filename, names the collection. `pipeline.build_layer` then runs per slug:
    (features, fields, url, `data_last_edit`, checksum) and raw pages are cached under `cache/<slug>/`.
 2. **normalise** (`table.build_rows` -> `to_table`): renders `name` / `source_id` templates (`fmt.render`), builds
    `place_id`s (`ids.py`: rule `lease` or a `template`, duplicate suffixing, pattern check), resolves `status` from
-   the config plus an optional CSV overlay (`status.py`, e.g. `sources/boem/wind_lease_status.csv`), cleans geometry
+   the config plus an optional dated event log (`status.py`, e.g. `sources/boem/wind_lease_status_events.csv`: the
+   latest event is the current status, all events go to `status_history`; `status.upstream` copies the source's own
+   status code into `status_upstream`), cleans geometry
    by type (`geom.py` polygons with antimeridian split, `lines.py`, `mixed.py`, `calcofi.clean_simple_geometry`).
-   Every row gets the `COMMON` columns in `table.py`; native attributes follow.
+   Every row gets the `COMMON` columns in `table.py`; native attributes follow. A source's `exclude` drops features by
+   native value at fetch (e.g. RENACV leases in `boem_pacific_og_leases`); `expected_count` counts after it.
+   A layer-level status (`layer_status` / `layer_status_history` in the YAML) goes to collection.json
+   (`gazetteer:status`) and layers.json (`status`, `status_history`, `status_label`); titles stay plain.
 3. **write**: `table.write_geoparquet` (WKB, `bbox` struct, provenance in metadata), `tiles.build_pmtiles`
    (tippecanoe with `--attribution`), then `stac.py` writes the style, README, per-collection AGENTS.md and
    `collection.json`; `provenance_record` writes `provenance.json`.

@@ -15,15 +15,17 @@ def square(x0, y0, size=1.0):
   return Polygon([(x0, y0), (x0 + size, y0), (x0 + size, y0 + size), (x0, y0 + size), (x0, y0)])
 
 
-def lease_cfg(tmp_path, overlay_rows=None, status_date="data_last_edit"):
-  """a minimal wind-lease config with its overlay CSV written under tmp_path/boem/."""
+def lease_cfg(tmp_path, event_rows=None, status_date="data_last_edit"):
+  """a minimal wind-lease config with its status event log written under tmp_path/boem/."""
   (tmp_path / "boem").mkdir(exist_ok=True)
-  rows = overlay_rows if overlay_rows is not None else [
-    "OCS-P 0561,relinquished,https://example.test/ca,2026-09-03",
-    "OCS-P 0565,cancelled,https://example.test/ca,2026",
-    "OCS-P 0562,active,https://example.test/ca,",
+  rows = event_rows if event_rows is not None else [
+    "OCS-P 0561,2023-06-01,active,https://example.test/lease-0561,lease issued",
+    "OCS-P 0561,2026-09-03,relinquished,https://example.test/ca,",
+    "OCS-P 0561,2026-08-04,settlement_pending,https://example.test/ca,\"settlement, agreement\"",
+    "OCS-P 0565,2026,cancelled,https://example.test/ca,",
+    "OCS-P 0562,2023-06-01,active,https://example.test/ca,",
   ]
-  (tmp_path / "boem" / "overlay.csv").write_text("lease_number,status,status_source,status_date\n" + "\n".join(rows) + "\n")
+  (tmp_path / "boem" / "events.csv").write_text("lease_number,date,status,source,note\n" + "\n".join(rows) + "\n")
   return {
     "slug": "t_leases", "title": "t", "description": "t", "authority": "BOEM", "place_type": "lease", "version": "1.0.0",
     "license": "CC-PDDC", "license_url": "https://example.test/pd", "attribution": "BOEM test credit",
@@ -31,7 +33,7 @@ def lease_cfg(tmp_path, overlay_rows=None, status_date="data_last_edit"):
     "place_id": {"rule": "lease", "pattern": r"^BOEM:OCS-[A-Z] \d{4,5}(:[a-z0-9-]+)?$"},
     "name": "{LEASE_NUMBER} {LEASE_TYPE} - {COMPANY}", "source_id": "{LEASE_NUMBER}",
     "status": {"value": "active", "source": "https://example.test/layer", "date": status_date,
-               "overlay": {"file": "boem/overlay.csv", "key": "LEASE_NUMBER"}},
+               "events": {"file": "boem/events.csv", "key": "LEASE_NUMBER"}},
     "sources": [{"kind": "arcgis", "url": "https://example.test/FeatureServer/8"}],
     "_sources_dir": str(tmp_path),
   }

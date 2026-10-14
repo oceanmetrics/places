@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from .status import layer_status
+
 PLACE_TYPES = {"lease", "planning_area", "aoa", "station", "transect"}
 # MarineCadastre first-15 layers (sources/*/mc_*.yml): protected areas, jurisdictions, habitat, navigation, ...
 PLACE_TYPES |= {"protected_area", "jurisdiction", "maritime_limit", "habitat", "restricted_area", "navigation_measure",
@@ -40,11 +42,28 @@ def validate_config(cfg: dict, label: str = "config") -> None:
     errs.append(f"geometry_type must be one of {sorted(GEOMETRY_TYPES)}")
   st = cfg.get("status") or {}
   errs += [f"status.{k} missing" for k in ("value", "source", "date") if not st.get(k)]
+  if st.get("overlay"):
+    errs.append("status.overlay is retired: use status.events (a dated event log, see status.py)")
+  ev = st.get("events")
+  if ev is not None and not (isinstance(ev, dict) and ev.get("file") and ev.get("key")):
+    errs.append("status.events needs file and key")
+  if st.get("upstream") is not None and not isinstance(st["upstream"], str):
+    errs.append("status.upstream must be a native field name")
+  try:
+    layer_status(cfg)
+  except ValueError as e:
+    errs.append(str(e))
   for i, src in enumerate(cfg.get("sources") or []):
     if src.get("kind") not in KINDS:
       errs.append(f"sources[{i}].kind must be one of {sorted(KINDS)}")
     if not src.get("url"):
       errs.append(f"sources[{i}].url missing")
+    exc = src.get("exclude")
+    if exc is not None:
+      if src.get("kind") != "arcgis":
+        errs.append(f"sources[{i}].exclude is only supported for arcgis sources")
+      if not (isinstance(exc, dict) and exc and all(isinstance(v, list) and v for v in exc.values())):
+        errs.append(f"sources[{i}].exclude must map a native field to a non-empty list of values")
     for key in ("place_id", "name", "source_id"):
       if not (src.get(key) or cfg.get(key)):
         errs.append(f"sources[{i}]: no {key} (set it on the source or the collection)")

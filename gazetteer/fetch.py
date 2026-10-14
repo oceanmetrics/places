@@ -145,14 +145,35 @@ def fetch_arcgis(src: dict, delay: float = 0.5, raw_dir: Path | None = None, s: 
     time.sleep(delay)
   if len(feats) != total:
     raise RuntimeError(f"{url}: paged {len(feats)} features but the layer counts {total}")
-  expected = src.get("expected_count")
-  if expected and expected != total:
-    log.warning("%s: expected %s features, the layer now has %s", url, expected, total)
+  feats, excluded = exclude_features(feats, src.get("exclude"))
+  expected = src.get("expected_count")    # counted after `exclude`; record_count stays the layer's own count
+  if expected and expected != len(feats):
+    log.warning("%s: expected %s features, the layer now has %s (%s excluded by config)", url, expected, len(feats),
+                total - len(feats))
   return SourceResult(
     features=feats, fields=fields, source_url=url, item_id=src.get("item_id", ""), component=src.get("component"),
     data_last_edit=ms_to_iso((meta.get("editingInfo") or {}).get("dataLastEditDate")), retrieved=now_iso(),
     record_count=total, checksum=h.hexdigest(),
-    extra={**item_meta(s, src.get("item_id", "")), "copyright_text": meta.get("copyrightText") or None})
+    extra={**item_meta(s, src.get("item_id", "")), "copyright_text": meta.get("copyrightText") or None,
+           "excluded": excluded or None})
+
+
+def exclude_features(feats: list[dict], rules: dict | None) -> tuple[list[dict], list[str]]:
+  """drop features whose native field value is listed in `rules` ({field: [value, ...]}, exact string match).
+
+  returns (kept features, one note per rule that dropped something, e.g. 'LEASE_STATUS_CD=RENACV: 4 feature(s)').
+  """
+  if not rules:
+    return feats, []
+  bad = {f: {str(v) for v in vals} for f, vals in rules.items()}
+  kept, counts = [], {}
+  for ft in feats:
+    hit = next(((f, str(ft["properties"].get(f))) for f in bad if str(ft["properties"].get(f)) in bad[f]), None)
+    if hit:
+      counts[hit] = counts.get(hit, 0) + 1
+    else:
+      kept.append(ft)
+  return kept, [f"{f}={v}: {n} feature(s)" for (f, v), n in sorted(counts.items())]
 
 
 # shapefile in a zip ------------------------------------------------------------------------------------------------
