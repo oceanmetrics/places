@@ -31,3 +31,6 @@ dist/
 .claude/plans
 .claude/plans_todo
 .claude/plans_done
+
+# H3 membership builds (scripts/build_h3_membership.py), published to the bucket, not committed
+catalog/h3/

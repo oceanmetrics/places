@@ -13,6 +13,7 @@ dependencies = [
   "requests>=2.31",
   "pyogrio>=0.9",
   "numpy>=1.26",
+  "h3>=4.5.0",
 ]
 
 [dependency-groups]

@@ -200,7 +200,9 @@ jobs:
           # only the rebuilt collections plus the two catalog-level files; never --delete the rest of the gazetteer
           for b in ${{ steps.build.outputs.built }}; do
             slug=${b%%:*}
-            aws s3 sync "catalog/$slug/" "s3://oceanmetrics.io-public/gazetteer/$slug/" --delete --exclude '.portolan/*'
+            # h3/ is the place x H3 membership sidecar (scripts/build_h3_membership.py), built after publishing from the
+            # published parquet: --delete must not remove it; layers.json stops advertising it once its sha256 is stale
+            aws s3 sync "catalog/$slug/" "s3://oceanmetrics.io-public/gazetteer/$slug/" --delete --exclude '.portolan/*' --exclude 'h3/*'
           done
           aws s3 cp catalog/versions.json s3://oceanmetrics.io-public/gazetteer/versions.json
           aws s3 cp catalog/catalog.json  s3://oceanmetrics.io-public/gazetteer/catalog.json
