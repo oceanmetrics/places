@@ -11,7 +11,7 @@ from gazetteer.validate import check_parquet, check_pmtiles
 
 CFGS = load_all(ROOT / "sources")
 COUNTS = {"boem_wind_leases": 52, "boem_wind_planning_rescinded": 3325, "boem_ocs_planning": 27,
-          "boem_program_11_draft": 20, "boem_pacific_og_leases": 34, "noaa_aoa_socal": 10}
+          "boem_program_11_draft": 20, "boem_pacific_og_leases": 30, "noaa_aoa_socal": 10}
 
 
 def staged(slug):
@@ -49,19 +49,29 @@ def test_staged_provenance_has_the_six_fields(slug):
 
 def test_california_wind_leases_carry_the_boem_page_status():
   d = staged("boem_wind_leases")
-  t = pq.read_table(d / "places.parquet", columns=["place_id", "status", "status_date", "status_source"]).to_pylist()
+  t = pq.read_table(d / "places.parquet", columns=["place_id", "status", "status_date", "status_source",
+                                                   "status_upstream", "status_history"]).to_pylist()
   by = {r["place_id"]: r for r in t}
   assert by["BOEM:OCS-P 0561"]["status"] == "relinquished" and by["BOEM:OCS-P 0561"]["status_date"] == "2026-09-03"
-  assert by["BOEM:OCS-P 0565"]["status"] == "cancelled"
+  assert (by["BOEM:OCS-P 0565"]["status"], by["BOEM:OCS-P 0565"]["status_date"]) == ("cancelled", "2026-07-10")
   assert by["BOEM:OCS-P 0564"]["status"] == "settlement_pending"
   assert by["BOEM:OCS-P 0562"]["status"] == by["BOEM:OCS-P 0563"]["status"] == "active"
-  assert by["BOEM:OCS-A 0501"]["status"] == "active"
+  assert by["BOEM:OCS-A 0501"]["status"] == "active" and by["BOEM:OCS-A 0501"]["status_history"] is None
+  hist = json.loads(by["BOEM:OCS-P 0561"]["status_history"])
+  assert [(e["date"], e["value"]) for e in hist] == [("2023-06-01", "active"), ("2026-08-04", "settlement_pending"),
+                                                     ("2026-09-03", "relinquished")]
+  assert all(r["status_upstream"] is None for r in t)          # the wind lease layer has no status field
 
 
 def test_rescinded_planning_areas_are_all_rescinded_on_2025_07_30():
   d = staged("boem_wind_planning_rescinded")
-  t = pq.read_table(d / "places.parquet", columns=["status", "status_date", "component"]).to_pylist()
+  t = pq.read_table(d / "places.parquet", columns=["status", "status_date", "component", "status_upstream",
+                                                   "AREA_STATUS"]).to_pylist()
   assert {(r["status"], r["status_date"]) for r in t} == {("rescinded", "2025-07-30")}
+  assert all(r["status_upstream"] == r["AREA_STATUS"] for r in t)   # BOEM's own (stale) value, verbatim
+  coll = json.loads((d / "collection.json").read_text())
+  assert coll["title"] == "BOEM offshore wind planning areas"
+  assert (coll["gazetteer:status"]["value"], coll["gazetteer:status"]["date"]) == ("rescinded", "2025-07-30")
   assert {r["component"] for r in t} == {"outline", "block"}
 
 
@@ -118,3 +128,20 @@ def test_wave1_row_groups_keep_the_footer_small_and_rows_carry_the_collection_ve
   versions = set(pq.read_table(d / "places.parquet", columns=["version"]).column(0).to_pylist())
   coll = json.loads((d / "collection.json").read_text())
   assert versions == {coll.get("version") or coll["gazetteer:provenance"]["version"]} and versions != {"1.0.0"}   # republishes of 1.0.0
+
+
+def test_pacific_og_leases_leave_out_the_renewable_renacv_leases():
+  d = staged("boem_pacific_og_leases")
+  t = pq.read_table(d / "places.parquet", columns=["place_id", "LEASE_STATUS_CD", "status_upstream"]).to_pylist()
+  assert "RENACV" not in {r["LEASE_STATUS_CD"] for r in t}
+  assert not {"BOEM:OCS-P 0560", "BOEM:OCS-P 0562", "BOEM:OCS-P 0563", "BOEM:OCS-P 0564"} & {r["place_id"] for r in t}
+  assert all(r["status_upstream"] == r["LEASE_STATUS_CD"] for r in t)
+  prov = json.loads((d / "provenance.json").read_text())
+  assert prov["sources"][0]["excluded"] == ["LEASE_STATUS_CD=RENACV: 4 feature(s)"]
+  assert prov["sources"][0]["record_count"] == 34
+
+
+def test_noaa_sanctuaries_status_date_is_not_empty_regression():
+  d = staged("noaa_sanctuaries")
+  t = pq.read_table(d / "places.parquet", columns=["status", "status_date", "source_date"]).to_pylist()
+  assert all(r["status"] == "designated" and r["status_date"] == r["source_date"].isoformat() for r in t)

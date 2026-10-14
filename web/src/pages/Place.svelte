@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getPlace, type PlaceFeature } from '@oceanmetrics/places'
+  import { getPlace, layerLabel, type PlaceFeature } from '@oceanmetrics/places'
   import { onMount } from 'svelte'
   import Credit from '../lib/Credit.svelte'
   import CopyButton from '../lib/CopyButton.svelte'
@@ -38,7 +38,7 @@
 <main class="page">
   <p class="muted"><a href={withBase('/', BASE)}>Map</a> / place</p>
   <h1>{status === 'ok' ? name : id}</h1>
-  <p class="muted">{id}{#if layer}{' '}· layer <a href={withBase(layerPath(layer.slug), BASE)}>{layer.title}</a>{/if}</p>
+  <p class="muted">{id}{#if layer}{' '}· layer <a href={withBase(layerPath(layer.slug), BASE)}>{layerLabel(layer)}</a>{/if}</p>
 
   {#if status === 'loading'}
     <p class="muted">Loading from the collection parquet…</p>

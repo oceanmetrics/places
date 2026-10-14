@@ -35,7 +35,14 @@
    "attribution_html": "<a href=\"https://fixture.example/\">Fixture Agency</a>, via MarineCadastre. Processed by Ocean Metrics.",
    "license": "CC-PDDC",
    "license_url": "https://www.usa.gov/publicdomain/label/1.0/",
-   "citation": "Fixture Agency, via MarineCadastre. Processed by Ocean Metrics. Fixture leases."
+   "citation": "Fixture Agency, via MarineCadastre. Processed by Ocean Metrics. Fixture leases.",
+   "status": null,
+   "status_history": null,
+   "status_label": null,
+   "created": "2026-09-15",
+   "source_date": "2025-03-04",
+   "parquet": "https://storage.oceanmetrics.io/gazetteer/fx_leases/places.parquet",
+   "parquet_sha256": "57b71d5c1ae4593a27d574ff65c84e239bd7558c6b75af15f40c4ad7b96801be"
   },
   {
    "slug": "fx_aoa",
@@ -69,7 +76,26 @@
    "attribution_html": "<a href=\"https://noaa.example/\">NOAA AOA program</a>. Processed by Ocean Metrics.",
    "license": "CC-PDDC",
    "license_url": "https://www.usa.gov/publicdomain/label/1.0/",
-   "citation": "NOAA AOA program. Processed by Ocean Metrics. Fixture AOAs."
+   "citation": "NOAA AOA program. Processed by Ocean Metrics. Fixture AOAs.",
+   "status": {
+    "value": "identified",
+    "date": "2025-09-19",
+    "source": "https://www.fisheries.noaa.gov/west-coast/aquaculture/southern-california-aquaculture-opportunity-areas",
+    "note": "fixture: identified as a whole layer"
+   },
+   "status_history": [
+    {
+     "date": "2025-09-19",
+     "value": "identified",
+     "source": "https://www.fisheries.noaa.gov/west-coast/aquaculture/southern-california-aquaculture-opportunity-areas",
+     "note": "fixture: identified as a whole layer"
+    }
+   ],
+   "status_label": "identified 2025-09-19",
+   "created": "2026-09-15",
+   "source_date": "2025-08-19",
+   "parquet": "https://storage.oceanmetrics.io/gazetteer/fx_aoa/places.parquet",
+   "parquet_sha256": "1b8614d30b54b30d6825cd90b869bab34d81542e1b7f3269b7c17fafc3dda261"
   },
   {
    "slug": "fx_stations",
@@ -99,7 +125,14 @@
    "attribution_html": "CalCOFI. Processed by Ocean Metrics.",
    "license": "CC-PDDC",
    "license_url": "https://www.usa.gov/publicdomain/label/1.0/",
-   "citation": "CalCOFI. Processed by Ocean Metrics. Fixture stations."
+   "citation": "CalCOFI. Processed by Ocean Metrics. Fixture stations.",
+   "status": null,
+   "status_history": null,
+   "status_label": null,
+   "created": null,
+   "source_date": null,
+   "parquet": null,
+   "parquet_sha256": null
   },
   {
    "slug": "fx_lines",
@@ -129,7 +162,14 @@
    "attribution_html": "CalCOFI. Processed by Ocean Metrics.",
    "license": "CC-PDDC",
    "license_url": "https://www.usa.gov/publicdomain/label/1.0/",
-   "citation": "CalCOFI. Processed by Ocean Metrics. Fixture lines."
+   "citation": "CalCOFI. Processed by Ocean Metrics. Fixture lines.",
+   "status": null,
+   "status_history": null,
+   "status_label": null,
+   "created": null,
+   "source_date": null,
+   "parquet": null,
+   "parquet_sha256": null
   }
  ]
 }

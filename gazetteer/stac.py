@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pyarrow as pa
 
+from .status import layer_status
+
 STAC_EXTENSIONS = [
   "https://stac-extensions.github.io/table/v1.2.0/schema.json",
   "https://stac-extensions.github.io/file/v2.1.0/schema.json",
@@ -24,6 +26,8 @@ COLUMN_DOCS = {
   "status": "lifecycle status (e.g. active, cancelled, relinquished, settlement_pending, rescinded, draft_proposed, identified)",
   "status_source": "URL that documents the status",
   "status_date": "ISO date (or year) the status took effect or was last confirmed; may be empty",
+  "status_upstream": "the source's own status code, verbatim (e.g. BOEM LEASE_STATUS_CD, AREA_STATUS); null when the source has none. may disagree with `status`",
+  "status_history": "JSON array of dated status events [{date, value, source, note}], ascending; null when none is logged",
   "source_url": "the service endpoint or download the boundary was fetched from",
   "source_date": "date of the source's last data edit (retrieval date when the source serves none)",
   "retrieved": "UTC time the boundary was fetched",
@@ -135,8 +139,15 @@ def build_collection(cfg: dict, table: pa.Table, geo: dict, provenance: dict, di
     "gazetteer:authority": cfg["authority"], "gazetteer:place_type": cfg["place_type"],
     "gazetteer:cadence": cfg.get("cadence", "weekly"), "gazetteer:attribution": " ".join(cfg["attribution"].split()),
     "gazetteer:provenance": provenance,
+    **layer_status_fields(cfg),
     "assets": assets,
   }
+
+
+def layer_status_fields(cfg: dict) -> dict:
+  """{'gazetteer:status', 'gazetteer:status_history'} for a config that documents a layer-level status; {} otherwise."""
+  st, hist = layer_status(cfg)
+  return {"gazetteer:status": st, "gazetteer:status_history": hist} if st else {}
 
 
 def readme(cfg: dict, table: pa.Table, provenance: dict, collection: dict, version: str) -> str:
@@ -149,11 +160,20 @@ def readme(cfg: dict, table: pa.Table, provenance: dict, collection: dict, versi
   files = [f"| {k} | {size_label(a['file:size'])} | `{a['file:checksum'][:16]}...` |"
            for k, a in collection["assets"].items()]
   overlay = ""
-  if (cfg["status"].get("overlay")):
-    overlay = (f"\n## Status overlay\n\nThe source layer has no status field. `status`, `status_source` and `status_date` come "
-               f"from the hand-maintained `sources/{cfg['status']['overlay']['file']}`, joined on the exact "
-               f"`{cfg['status']['overlay']['key']}`; leases not in the overlay are `{cfg['status']['value']}` as of the "
-               f"layer's last edit. The overlay is the place to record BOEM's changes until the layer catches up.\n")
+  ev = cfg["status"].get("events")
+  if ev:
+    overlay = (f"\n## Status event log\n\nThe source layer has no status field. `status`, `status_source` and `status_date` "
+               f"are the latest event in the hand-maintained, dated event log `sources/{ev['file']}` (one row per event, each "
+               f"with its source URL), joined on the exact `{ev['key']}`; `status_history` holds every event of the place as "
+               f"JSON. Places with no event are `{cfg['status']['value']}` as of the layer's last edit. The log is the place "
+               f"to record BOEM's changes until the layer catches up.\n")
+  if cfg["status"].get("upstream"):
+    overlay += (f"\n`status_upstream` is the source's own `{cfg['status']['upstream']}`, verbatim; where it disagrees with "
+                f"`status`, `status` is ours and documented by `status_source`.\n")
+  st, hist = layer_status(cfg)
+  if st:
+    events = "\n".join(f"- {e['date']}: {e['value']} ({e['source']}){' - ' + e['note'] if e.get('note') else ''}" for e in hist)
+    overlay += f"\n## Layer status\n\n**{st['value'].replace('_', ' ')} {st['date']}** ({st['source']}).\n\n{events}\n"
   return f"""# {cfg['title']}
 
 {' '.join(cfg['description'].split())}

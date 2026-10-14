@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { statSync } from 'node:fs'
-import { createClient, creditLine } from '../src/index'
+import { createClient, creditLine, layerLabel } from '../src/index'
 import { serveFixtures, FIXTURES } from './server'
 
 let srv: Awaited<ReturnType<typeof serveFixtures>>
@@ -13,6 +13,19 @@ describe('listLayers', () => {
     const layers = await c.listLayers()
     expect(layers.map((l) => l.slug)).toEqual(['fx_leases', 'fx_aoa', 'fx_stations', 'fx_lines'])
     expect(layers[0]).toMatchObject({ source_layer: 'fx_leases', n: 6, license: 'CC-PDDC' })
+  })
+  it('carries the layer status, first-release date and the pinned parquet (null when the layer has none)', async () => {
+    const [leases, aoa, stations] = await c.listLayers()
+    expect(aoa).toMatchObject({ status: { value: 'identified', date: '2025-09-19' }, status_label: 'identified 2025-09-19',
+      created: '2026-09-15', source_date: '2025-08-19', parquet: 'https://storage.oceanmetrics.io/gazetteer/fx_aoa/places.parquet' })
+    expect(aoa.status_history?.map((e) => e.value)).toEqual(['identified'])
+    expect(aoa.parquet_sha256).toMatch(/^[0-9a-f]{64}$/)
+    expect(leases).toMatchObject({ status: null, status_label: null })
+    expect(layerLabel(aoa)).toBe('Fixture AOAs (identified 2025-09-19)')
+    expect(layerLabel(leases)).toBe('Fixture leases')
+    // a row from an older manifest has none of the fields
+    const { status, status_label, ...old } = stations
+    expect(layerLabel(old)).toBe('Fixture stations')
   })
   it('getLayer rejects an unknown slug', async () => {
     await expect(c.getLayer('nope')).rejects.toThrow(/unknown layer "nope"/)

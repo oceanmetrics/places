@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import Credit from '../lib/Credit.svelte'
   import { BASE, loadManifest, manifest } from '../lib/data.svelte'
+  import { layerLabel } from '@oceanmetrics/places'
   import { calcofiLink, collectionDir, collectionUrl, fmtDate, fmtN, parquetUrl, withBase } from '../lib/helpers'
 
   let { slug }: { slug: string } = $props()
@@ -16,7 +17,7 @@
     <h1>{slug}</h1>
     <p class="muted">Loading…</p>
   {:else if layer}
-    <h1>{layer.title}</h1>
+    <h1>{layerLabel(layer)}</h1>
     <p class="muted"><code>{layer.slug}</code>{#if layer.authority} · {layer.authority}{/if}{#if layer.place_type} · {layer.place_type}{/if}</p>
     <div class="row">
       <a class="btn" href={withBase(`/?layers=${encodeURIComponent(layer.slug)}`, BASE)}>Add to map</a>

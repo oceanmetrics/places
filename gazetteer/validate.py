@@ -12,7 +12,7 @@ import shapely
 from .geom import max_edge_span
 from .lines import max_line_span
 from .mixed import MIXED_TYPE_IDS
-from .table import COMMON
+from .table import COMMON, COMMON_ADDED
 from .tiles import read_pmtiles
 
 
@@ -22,7 +22,7 @@ def check_parquet(path: Path, cfg: dict) -> list[str]:
   f = pq.ParquetFile(path)
   t = f.read()
   names = t.column_names
-  for c in COMMON + ["bbox", "geometry"]:
+  for c in [c for c in COMMON if c not in COMMON_ADDED] + ["bbox", "geometry"]:
     if c not in names:
       problems.append(f"missing column {c}")
   if problems:

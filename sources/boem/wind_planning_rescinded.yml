@@ -1,16 +1,17 @@
 # boem_wind_planning_rescinded: BOEM wind planning areas rescinded on 2025-07-30 (outlines + blocks)
 slug: boem_wind_planning_rescinded
-title: BOEM offshore wind planning areas (rescinded 2025-07-30)
+title: BOEM offshore wind planning areas
 description: >-
   Wind energy areas, call areas and proposed-sale areas that BOEM de-designated on 2025-07-30 (BOEM notice
   "BOEM Rescinds Designated Wind Energy Areas on the Outer Continental Shelf"). Two BOEM layers are combined:
   the dissolved outlines (`component` = outline) and the OCS blocks and sub-blocks that make them up
-  (`component` = block). Every row is `status` = rescinded, `status_date` = 2025-07-30; the native `AREA_STATUS`
-  column keeps BOEM's own, stale value (the Oregon areas are still marked Active). The outline layer holds one
+  (`component` = block). The whole layer is rescinded (layer status, also in collection.json): every row is
+  `status` = rescinded, `status_date` = 2025-07-30; `status_upstream` (and the native `AREA_STATUS`) keeps BOEM's
+  own, stale value (the Oregon areas are still marked Active). The outline layer holds one
   row with no geometry and no attributes (OBJECTID 2068); it is dropped.
 authority: BOEM
 place_type: planning_area
-version: 1.0.0
+version: 1.1.0
 cadence: weekly
 license: CC-PDDC
 license_url: https://www.usa.gov/publicdomain/label/1.0/
@@ -22,7 +23,13 @@ providers:
   - {name: Bureau of Ocean Energy Management (BOEM), roles: [producer, licensor], url: "https://www.boem.gov/renewable-energy"}
   - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
 source_page: https://www.boem.gov/newsroom/notes-stakeholders/boem-rescinds-designated-wind-energy-areas-outer-continental-shelf
+layer_status:
+  value: rescinded
+  date: "2025-07-30"
+  source: https://www.boem.gov/newsroom/notes-stakeholders/boem-rescinds-designated-wind-energy-areas-outer-continental-shelf
+  note: BOEM notice "BOEM Rescinds Designated Wind Energy Areas on the Outer Continental Shelf"
 status:
+  upstream: AREA_STATUS
   value: rescinded
   source: https://www.boem.gov/newsroom/notes-stakeholders/boem-rescinds-designated-wind-energy-areas-outer-continental-shelf
   date: "2025-07-30"

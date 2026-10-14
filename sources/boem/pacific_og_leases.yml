@@ -2,13 +2,18 @@
 slug: boem_pacific_og_leases
 title: BOEM Pacific active oil and gas leases
 description: >-
-  The 34 active oil and gas leases in the Pacific OCS (off California), from BOEM's Pacific Region map service
-  (POC_Layers layer 7). `LEASE_STATUS_CD` is BOEM's own code (UNIT = committed to a unit, PROD = producing,
-  RENACV is kept as served); `status` is `active` for all of them because the layer lists active leases only.
+  The 30 active oil and gas leases in the Pacific OCS (off California), from BOEM's Pacific Region map service
+  (POC_Layers layer 7). The service lists 34 active leases; the other 4 are renewable energy leases
+  (`LEASE_STATUS_CD` = RENACV, `SERIAL_TYPE_CODE` = R: OCS-P 0560, 0562, 0563, 0564), left out here because
+  they are not oil and gas leases (the source exclusion is recorded in provenance.json). The offshore wind
+  leases OCS-P 0562-0564 are in `boem_wind_leases`, with their dated status; OCS-P 0560 (a 4,260-acre renewable
+  lease effective 2021-03-01, as served) is not in BOEM's wind lease layer. `LEASE_STATUS_CD` (also in
+  `status_upstream`) is BOEM's own code (UNIT = committed to a unit, PROD = producing); `status` is `active` for
+  all of them because the layer lists active leases only.
   Lease numbers are served as P00202 and published in BOEM's formal form `OCS-P 0202`.
 authority: BOEM
 place_type: lease
-version: 1.0.0
+version: 1.1.0
 cadence: weekly
 license: CC-PDDC
 license_url: https://www.usa.gov/publicdomain/label/1.0/
@@ -26,6 +31,7 @@ place_id:
 name: "{LEASE_NUMBER|lease_number} oil and gas lease ({LEASE_STATUS_CD})"
 source_id: "{LEASE_NUMBER}"
 status:
+  upstream: LEASE_STATUS_CD
   value: active
   source: https://gis.boem.gov/server/rest/services/BOEM_BSEE/POC_Layers/MapServer/7
   date: "field:LSE_STAT_EFF_DT"
@@ -33,7 +39,9 @@ sources:
   - kind: arcgis
     url: https://gis.boem.gov/server/rest/services/BOEM_BSEE/POC_Layers/MapServer/7
     item_id: ""
-    expected_count: 34
+    expected_count: 30    # after `exclude`; the layer itself serves 34
+    exclude:
+      LEASE_STATUS_CD: [RENACV]   # renewable (wind) leases: in boem_wind_leases
     page_size: 1000
     # gis.boem.gov serves an incomplete certificate chain (no intermediate), so no client can verify it:
     # set to true if BOEM fixes the chain. the data are public and every row records its source_url.

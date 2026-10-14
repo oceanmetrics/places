@@ -5,12 +5,13 @@ description: >-
   Outlines of the offshore wind energy leases and grid/export easements issued by the Bureau of Ocean Energy
   Management (BOEM) on the U.S. Outer Continental Shelf (52 polygons, 5 of them off California). The layer
   itself carries no status field and still lists the five California leases (OCS-P 0561-0565) after BOEM's
-  2026 cancellations and relinquishment, so `status`, `status_source` and `status_date` come from a
-  hand-maintained overlay (catalog/sources/boem/wind_lease_status.csv, from BOEM's California page) joined on
-  the lease number. Every other lease is `active` as of the layer's last edit.
+  2026 settlements, cancellation and relinquishment, so `status`, `status_source` and `status_date` are the latest
+  event in a hand-maintained, dated event log (sources/boem/wind_lease_status_events.csv: lease issuance,
+  settlement agreements, cancellation, relinquishment, each with its BOEM source document) joined on the lease
+  number, and `status_history` lists every event. Every other lease is `active` as of the layer's last edit.
 authority: BOEM
 place_type: lease
-version: 1.0.0
+version: 1.1.0
 cadence: weekly
 license: CC-PDDC
 license_url: https://www.usa.gov/publicdomain/label/1.0/
@@ -31,8 +32,8 @@ status:
   value: active
   source: https://services7.arcgis.com/G5Ma95RzqJRPKsWL/arcgis/rest/services/Wind_Lease_Boundaries__BOEM_/FeatureServer/8
   date: data_last_edit
-  overlay:
-    file: boem/wind_lease_status.csv
+  events:
+    file: boem/wind_lease_status_events.csv
     key: LEASE_NUMBER
 sources:
   - kind: arcgis

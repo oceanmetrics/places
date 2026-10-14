@@ -7,7 +7,7 @@ description: >-
   polygon per `unitname` section). `cfrsection` and `citation` give the designating regulation.
 authority: ONMS
 place_type: protected_area
-version: 1.0.0
+version: 1.1.0
 cadence: monthly
 license: CC-PDDC
 license_url: https://www.copyright.gov/title17/92chap1.html#105

@@ -8,7 +8,7 @@ description: >-
   (e.g. N1-A, CN1-B).
 authority: AOA
 place_type: aoa
-version: 1.0.0
+version: 1.1.0
 cadence: monthly
 license: CC-PDDC
 license_url: https://www.usa.gov/publicdomain/label/1.0/
@@ -24,6 +24,11 @@ source_page: https://www.fisheries.noaa.gov/west-coast/aquaculture/southern-cali
 place_id: {template: "AOA:{AOA}", pattern: '^AOA:[A-Z]{1,3}\d+-[A-Z]$'}
 name: "Southern California AOA {AOA}"
 source_id: "{AOA}"
+layer_status:
+  value: identified
+  date: "2025-09-19"
+  source: https://www.fisheries.noaa.gov/west-coast/aquaculture/southern-california-aquaculture-opportunity-areas
+  note: NOAA Fisheries signed the decision document on 2025-09-10 (PEIS Alternative 4b) and identified the 10 AOAs on 2025-09-19
 status:
   value: identified
   source: https://www.fisheries.noaa.gov/west-coast/aquaculture/southern-california-aquaculture-opportunity-areas
