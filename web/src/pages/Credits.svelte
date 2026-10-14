@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import Credit from '../lib/Credit.svelte'
   import { BASE, loadManifest, manifest } from '../lib/data.svelte'
+  import { layerLabel } from '@oceanmetrics/places'
   import { groupByAuthority, layerPath, withBase } from '../lib/helpers'
 
   onMount(() => { loadManifest() })
@@ -26,7 +27,7 @@
     <h2 id={g.authority}>{g.authority}</h2>
     {#each g.layers as l (l.slug)}
       <section class="card">
-        <h3><a href={withBase(layerPath(l.slug), BASE)}>{l.title}</a> <span class="chip">{l.version ?? 'no version'}</span></h3>
+        <h3><a href={withBase(layerPath(l.slug), BASE)}>{layerLabel(l)}</a> <span class="chip">{l.version ?? 'no version'}</span></h3>
         <Credit layer={l} />
       </section>
     {/each}

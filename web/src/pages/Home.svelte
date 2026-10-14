@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getPlace, type IndexPlace, type PlaceFeature } from '@oceanmetrics/places'
+  import { getPlace, layerLabel, type IndexPlace, type PlaceFeature } from '@oceanmetrics/places'
   import { BASE, index, manifest, searchPlaces } from '../lib/data.svelte'
   import { buildSearch, parseView, type LayerSel } from '../lib/grammar'
   import { collectionDir, defaultColour, fmtDate, fmtN, groupByAuthority, layerPath, placePath, sanitizeHtml, withBase } from '../lib/helpers'
@@ -45,7 +45,7 @@
 
   const filteredLayers = $derived.by(() => {
     const t = q.trim().toLowerCase()
-    return t ? manifest.layers.filter((l) => `${l.title} ${l.slug} ${l.authority ?? ''} ${l.place_type ?? ''}`.toLowerCase().includes(t)) : manifest.layers
+    return t ? manifest.layers.filter((l) => `${layerLabel(l)} ${l.slug} ${l.authority ?? ''} ${l.place_type ?? ''}`.toLowerCase().includes(t)) : manifest.layers
   })
   const groups = $derived(groupByAuthority(filteredLayers))
 
@@ -82,7 +82,7 @@
   // tile sources that fail (collection not published yet) ----
   let badLayers = $state<string[]>([])
   const onlayererror = (slug: string) => { if (!badLayers.includes(slug)) badLayers = [...badLayers, slug] }
-  const titleOf = (slug: string) => manifest.layers.find((l) => l.slug === slug)?.title ?? slug
+  const titleOf = (slug: string) => { const l = manifest.layers.find((l) => l.slug === slug); return l ? layerLabel(l) : slug }
   const placeName = $derived(String(place?.properties?.name ?? view.place ?? ''))
 </script>
 
@@ -141,12 +141,12 @@
           {@const l = manifest.layers.find((x) => x.slug === s.slug)}
           <li class="card">
             <div class="row">
-              <input type="color" aria-label="Colour of {l?.title ?? s.slug}" value={s.colour ?? defaultColour(l)} oninput={(e) => patch(s.slug, { colour: e.currentTarget.value })} />
-              <a href={withBase(layerPath(s.slug), BASE)} class="grow">{l?.title ?? s.slug}</a>
-              <button class="btn secondary small" type="button" aria-label="Zoom to {l?.title ?? s.slug}" title="Zoom to layer" disabled={!l?.bbox} onclick={() => zoomTo(s.slug)}>⌖</button>
+              <input type="color" aria-label="Colour of {l ? layerLabel(l) : s.slug}" value={s.colour ?? defaultColour(l)} oninput={(e) => patch(s.slug, { colour: e.currentTarget.value })} />
+              <a href={withBase(layerPath(s.slug), BASE)} class="grow">{l ? layerLabel(l) : s.slug}</a>
+              <button class="btn secondary small" type="button" aria-label="Zoom to {l ? layerLabel(l) : s.slug}" title="Zoom to layer" disabled={!l?.bbox} onclick={() => zoomTo(s.slug)}>⌖</button>
               <button class="btn secondary small" type="button" aria-label="Move up" disabled={i === 0} onclick={() => move(i, -1)}>▲</button>
               <button class="btn secondary small" type="button" aria-label="Move down" disabled={i === selected.length - 1} onclick={() => move(i, 1)}>▼</button>
-              <button class="btn secondary small" type="button" aria-label="Remove {l?.title ?? s.slug} from the map" onclick={() => toggle(s.slug)}>✕</button>
+              <button class="btn secondary small" type="button" aria-label="Remove {l ? layerLabel(l) : s.slug} from the map" onclick={() => toggle(s.slug)}>✕</button>
             </div>
             {#if l}
               <div class="sliders">
@@ -173,12 +173,12 @@
           <li>
             <div class="lrow">
               <label>
-                <input type="checkbox" aria-label={l.title} checked={isOn(l.slug)} onchange={() => toggle(l.slug)} />
+                <input type="checkbox" aria-label={layerLabel(l)} checked={isOn(l.slug)} onchange={() => toggle(l.slug)} />
                 <span class="sw" style:background={defaultColour(l)}></span>
-                <span class="grow">{l.title}</span>
+                <span class="grow">{layerLabel(l)}</span>
                 <span class="muted n">{fmtN(l.n)}</span>
               </label>
-              <button class="info-btn" type="button" aria-label="About {l.title}" aria-expanded={info === l.slug}
+              <button class="info-btn" type="button" aria-label="About {layerLabel(l)}" aria-expanded={info === l.slug}
                 onclick={() => (info = info === l.slug ? null : l.slug)}
                 onkeydown={(e) => { if (e.key === 'Escape') info = null }}>
                 <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.4" /><circle cx="8" cy="4.9" r="1" fill="currentColor" /><path d="M8 7.2v4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>

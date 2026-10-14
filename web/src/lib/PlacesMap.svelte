@@ -2,7 +2,7 @@
   import maplibregl from 'maplibre-gl'
   import 'maplibre-gl/dist/maplibre-gl.css'
   import * as pmtiles from 'pmtiles'
-  import { addLayer, creditsFor, registerPmtiles, removeLayer, layerId, type BBox, type Layer, type PlaceFeature } from '@oceanmetrics/places'
+  import { addLayer, creditsFor, layerLabel, registerPmtiles, removeLayer, layerId, type BBox, type Layer, type PlaceFeature } from '@oceanmetrics/places'
   import { onMount } from 'svelte'
   import { applyTheme, BASEMAP_CREDIT, LABELS_BELOW, style } from './basemap'
   import type { LayerSel } from './grammar'
@@ -115,7 +115,7 @@
     const root = document.createElement('div')
     root.className = 'popup'
     const h = document.createElement('strong')
-    h.textContent = String(p.name ?? p.NAME ?? p.place_id ?? layer?.title ?? slug)
+    h.textContent = String(p.name ?? p.NAME ?? p.place_id ?? (layer ? layerLabel(layer) : slug))
     root.append(h)
     const line = (label: string, v: unknown) => {
       if (v == null || v === '') return
@@ -124,7 +124,7 @@
       d.textContent = `${label}: ${v}`
       root.append(d)
     }
-    line('Layer', layer?.title ?? slug)
+    line('Layer', (layer ? layerLabel(layer) : slug))
     line('Status', p.status)
     line('Status date', p.status_date ? fmtDate(String(p.status_date)) : null)
     const links = document.createElement('div')
