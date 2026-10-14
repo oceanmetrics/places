@@ -46,8 +46,27 @@ def test_row_exact():
                 "Ocean Metrics gazetteer, 2026. https://storage.oceanmetrics.io/gazetteer/acme_leases/",
     # an older collection (no layer status, no parquet asset, no ledger) keeps the new keys, all null
     "status": None, "status_history": None, "status_label": None, "created": None, "source_date": None,
-    "parquet": None, "parquet_sha256": None,
+    "parquet": None, "parquet_sha256": None, "h3": None,
   }
+
+
+def test_h3_is_advertised_only_for_the_parquet_it_was_built_from(tmp_path):
+  rows = [{"slug": "a", "parquet_sha256": SHA_NEW}, {"slug": "b", "parquet_sha256": SHA_NEW},
+          {"slug": "c", "parquet_sha256": None}, {"slug": "d", "parquet_sha256": SHA_NEW}]
+  mans = {"a": {"places_sha256": SHA_NEW}, "b": {"places_sha256": SHA_OLD}, "c": {"places_sha256": None}}
+  got = bl.attach_h3(rows, mans, "https://x.test/g/")
+  assert [r["h3"] for r in got] == ["https://x.test/g/a/h3/membership.json", None, None, None]
+  # the local build wins over the published one; a slug with neither is absent
+  (tmp_path / "a" / "h3").mkdir(parents=True)
+  (tmp_path / "a" / "h3" / "membership.json").write_text(json.dumps({"places_sha256": "local"}))
+  pub = {"https://x.test/g/a/h3/membership.json": {"places_sha256": "pub"},
+         "https://x.test/g/b/h3/membership.json": {"places_sha256": "pub"}}
+  def fetch(u):
+    if u not in pub:
+      raise OSError("404")
+    return pub[u]
+  assert bl.h3_manifests(["a", "b", "c"], tmp_path, "https://x.test/g/", fetch) == \
+    {"a": {"places_sha256": "local"}, "b": {"places_sha256": "pub"}}
 
 
 SHA_OLD, SHA_NEW = "a" * 64, "b" * 64

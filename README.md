@@ -19,6 +19,40 @@ FROM read_parquet('https://storage.oceanmetrics.io/gazetteer/boem_wind_leases/pl
 WHERE bbox.xmin < -117 AND bbox.xmax > -125;
 ```
 
+## H3 membership (place × hexagon)
+
+Every polygon collection also publishes which [H3](https://h3geo.org) cells of res 1–7 each place covers, and the
+share of each cell's area inside the place, so an app can filter or summarise hexagon data by place with a join on
+`h3` and no geometry (obis-hex's place filter; the obisindicators per-place layer):
+
+| file under `<slug>/` | what |
+|---|---|
+| `h3/membership.json` | res list, `parent_res` (`{"6": 2, "7": 3}`), every file with rows and bytes, `min_share`, and what it was built from (`places_sha256`, `collection_version`) |
+| `h3/res=<1..5>/membership.parquet` | `place_id VARCHAR, h3 VARCHAR (hex), share FLOAT`, sorted by place_id, h3 |
+| `h3/res=<6\|7>/p=<parent>/membership.parquet` | the same, split by the res-2 / res-3 parent (the obis-h3 release splits res 6/7 by the same parents) |
+| `h3/parents.parquet` | `place_id, res, parent`: which split files hold each place |
+
+`share` is the fraction of the cell's area inside the place, from the intersection in the cylindrical equal-area plane
+`(lon, sin lat)`; a cell is kept when share ≥ 0.01 or when it holds ≥ 1% of the place's own area (so a place smaller than
+1% of a coarse cell keeps the cells it touches). Σ share × cell area equals the place's area to within the dropped slivers
+(< 1%). Built by `gazetteer/membership.py` (refining down the hierarchy, testing only cells near an edge) from the
+PUBLISHED `places.parquet`:
+
+```sh
+uv run scripts/build_h3_membership.py [--slug noaa_sanctuaries ...] --layers-out catalog/h3/layers.json [--upload]
+```
+
+`layers.json` advertises a row's `h3` (the URL of its `membership.json`) only while `places_sha256` equals the row's
+`parquet_sha256`: a collection republished without rebuilding its membership drops back to `h3: null`, never to stale cells.
+The membership is a derived sidecar, not a STAC asset, so building it changes no collection version.
+
+```sql
+-- the res-5 cells of Monterey Bay NMS, with the share of each inside
+SELECT h3, share
+FROM read_parquet('https://storage.oceanmetrics.io/gazetteer/noaa_sanctuaries/h3/res=5/membership.parquet')
+WHERE place_id = 'NMS:MBNMS';
+```
+
 ## Layout
 
 | path | what |
@@ -27,7 +61,7 @@ WHERE bbox.xmin < -117 AND bbox.xmax > -125;
 | `gazetteer/` | the Python package: fetch -> normalise -> validate -> GeoParquet -> PMTiles -> STAC (the plan's `build/` stage) |
 | `build.py` | CLI entry point: `build`, `detect`, `next-version`, `check` |
 | `R/` | R code that still works as is (`build_places.R`: sanctuaries + MarineRegions + ProtectedSeas) |
-| `catalog/` | the Portolan STAC tree, built here and published to the bucket; builds stage in `catalog/staging/` |
+| `catalog/` | the Portolan STAC tree, built here and published to the bucket; builds stage in `catalog/staging/`; H3 membership builds in `catalog/h3/` |
 | `web/` | the website, places.oceanmetrics.io (placeholder) |
 | `client/` | the `@oceanmetrics/places` JS package (placeholder) |
 | `tests/` | pytest, one fixture per source rule |

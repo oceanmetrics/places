@@ -58,6 +58,9 @@ export interface Layer {
   parquet?        : string | null
   /** sha256 (hex) of places.parquet at `version`: pin `version` + `parquet_sha256`. */
   parquet_sha256? : string | null
+  /** URL of `<slug>/h3/membership.json`: the place x H3 membership (res 1-7, the share of each cell inside each
+   *  place), set only while it was built from this `parquet_sha256`; null for points, lines and stale builds. */
+  h3?             : string | null
 }
 
 export interface ClientConfig {

@@ -42,7 +42,8 @@
    "created": "2026-09-15",
    "source_date": "2025-03-04",
    "parquet": "https://storage.oceanmetrics.io/gazetteer/fx_leases/places.parquet",
-   "parquet_sha256": "57b71d5c1ae4593a27d574ff65c84e239bd7558c6b75af15f40c4ad7b96801be"
+   "parquet_sha256": "57b71d5c1ae4593a27d574ff65c84e239bd7558c6b75af15f40c4ad7b96801be",
+   "h3": null
   },
   {
    "slug": "fx_aoa",
@@ -95,7 +96,8 @@
    "created": "2026-09-15",
    "source_date": "2025-08-19",
    "parquet": "https://storage.oceanmetrics.io/gazetteer/fx_aoa/places.parquet",
-   "parquet_sha256": "1b8614d30b54b30d6825cd90b869bab34d81542e1b7f3269b7c17fafc3dda261"
+   "parquet_sha256": "1b8614d30b54b30d6825cd90b869bab34d81542e1b7f3269b7c17fafc3dda261",
+   "h3": null
   },
   {
    "slug": "fx_stations",
@@ -132,7 +134,8 @@
    "created": null,
    "source_date": null,
    "parquet": null,
-   "parquet_sha256": null
+   "parquet_sha256": null,
+   "h3": null
   },
   {
    "slug": "fx_lines",
@@ -169,7 +172,8 @@
    "created": null,
    "source_date": null,
    "parquet": null,
-   "parquet_sha256": null
+   "parquet_sha256": null,
+   "h3": null
   }
  ]
 }

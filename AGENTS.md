@@ -23,6 +23,11 @@ Rules for anyone (human or agent) changing this repo. Each rule is guarded by a 
 - **Per-source provenance** in `provenance.json` and the STAC collection: `source_url`, `source_item_id`,
   `data_last_edit`, `retrieved`, `record_count`, `checksum`.
 
+- **H3 membership follows its parquet.** `<slug>/h3/` is built from the PUBLISHED `places.parquet`
+  (`scripts/build_h3_membership.py`) and `layers.json` advertises `h3` only while `membership.json`'s `places_sha256`
+  is the row's `parquet_sha256`. Republishing a polygon collection means rebuilding its membership (or accepting
+  `h3: null` until it is). Shares are ≥ 0.01 of the cell or the cell holds ≥ 1% of the place (`MIN_SHARE`).
+
 ## Publishing
 
 - `rashid check` must pass before every publish (the sync workflow runs it; run it locally before any manual push).

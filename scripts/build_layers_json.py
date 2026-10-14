@@ -21,8 +21,11 @@ status and versions (all null when unknown, so an older collection still makes a
   source_date              latest upstream data edit date across the collection's sources (provenance data_last_edit)
   parquet / parquet_sha256 absolute URL of places.parquet and its sha256 at `version` (the ledger entry for that version,
                            else the collection's own file:checksum); consumers pin `version` + `parquet_sha256`
+  h3                       absolute URL of <slug>/h3/membership.json, the place x H3 membership (res 1-7, share of each
+                           cell inside; scripts/build_h3_membership.py), only while it was built from this row's
+                           parquet_sha256; else null
 
-  python scripts/build_layers_json.py [--out catalog/staging/layers.json] [--no-remote] [--no-local]
+  python scripts/build_layers_json.py [--out catalog/staging/layers.json] [--h3 catalog/h3] [--no-remote] [--no-local]
 """
 from __future__ import annotations
 
@@ -220,7 +223,38 @@ def layer_row(coll: dict, style: dict | None = None, version: str | None = None,
     "source_date"     : source_date(coll),
     "parquet"         : f"{base.rstrip('/')}/{slug}/places.parquet" if parquet_asset(coll) else None,
     "parquet_sha256"  : parquet_sha256(coll, ver, ledger) if parquet_asset(coll) else None,
+    "h3"              : None,
   }
+
+
+def h3_url(slug: str, base: str = BASE) -> str:
+  return f"{base.rstrip('/')}/{slug}/h3/membership.json"
+
+
+def attach_h3(rows: list[dict], manifests: dict[str, dict], base: str = BASE) -> list[dict]:
+  """set each row's `h3` to its membership.json URL when that membership was built from the row's own places.parquet
+  (places_sha256 == parquet_sha256); a stale or missing one leaves it null."""
+  out = []
+  for r in rows:
+    man = manifests.get(r["slug"]) or {}
+    ok = r.get("parquet_sha256") and man.get("places_sha256") == r["parquet_sha256"]
+    out.append({**r, "h3": h3_url(r["slug"], base) if ok else None})
+  return out
+
+
+def h3_manifests(slugs: list[str], local_dir: Path | None, base: str = BASE, fetch=None) -> dict[str, dict]:
+  """membership.json per slug: the local build (<local_dir>/<slug>/h3/membership.json) first, else the published one."""
+  got = {}
+  for s in slugs:
+    f = local_dir / s / "h3" / "membership.json" if local_dir else None
+    if f is not None and f.exists():
+      got[s] = json.loads(f.read_text())
+    elif fetch is not None:
+      try:
+        got[s] = fetch(h3_url(s, base))
+      except (urllib.error.URLError, OSError, ValueError):
+        pass
+  return got
 
 
 def merge_rows(published: list[dict], local: list[dict]) -> list[dict]:
@@ -307,6 +341,7 @@ def main(argv=None) -> int:
   ap.add_argument("--out", default=str(ROOT / "catalog" / "staging" / "layers.json"))
   ap.add_argument("--staging", default=str(ROOT / "catalog" / "staging"))
   ap.add_argument("--base", default=BASE, help="published catalog base URL")
+  ap.add_argument("--h3", default=str(ROOT / "catalog" / "h3"), help="local membership builds (build_h3_membership.py)")
   ap.add_argument("--no-remote", action="store_true")
   ap.add_argument("--no-local", action="store_true")
   a = ap.parse_args(argv)
@@ -314,10 +349,13 @@ def main(argv=None) -> int:
   loc = [] if a.no_local or not staging.is_dir() else local_rows(staging, a.base, None if a.no_remote else get_json)
   rem = [] if a.no_remote else remote_rows(a.base)
   rows = merge_rows(rem, loc)
+  rows = attach_h3(rows, h3_manifests([r["slug"] for r in rows], Path(a.h3), a.base, None if a.no_remote else get_json),
+                   a.base)
   out = Path(a.out)
   out.parent.mkdir(parents=True, exist_ok=True)
   out.write_text(json.dumps(manifest(rows, a.base), indent=2, ensure_ascii=False) + "\n")
-  print(f"wrote {out}: {len(rows)} layers ({len(rem)} published, {len(loc)} local staged)")
+  print(f"wrote {out}: {len(rows)} layers ({len(rem)} published, {len(loc)} local staged, "
+        f"{sum(1 for r in rows if r['h3'])} with h3 membership)")
   return 0
 
 
