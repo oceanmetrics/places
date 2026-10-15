@@ -100,7 +100,9 @@ def _wide_table(n, cols=30, payload=2000):
   for c in range(cols - 4):
     data[f"c{c}"] = ["x"] * n
   data["bbox"] = pa.StructArray.from_arrays([pa.array([float(i)] * n) for i in range(4)], names=["xmin", "ymin", "xmax", "ymax"])
-  data["geometry"] = pa.array([b"g" * payload] * n, type=pa.binary())
+  # real WKB of about `payload` bytes (geo_metadata parses it for the file bbox): a circle of payload / 16 vertices
+  wkb = shapely.to_wkb(shapely.Point(0, 0).buffer(1, quad_segs=max(1, payload // 64)))
+  data["geometry"] = pa.array([wkb] * n, type=pa.binary())
   return pa.table(data)
 
 
@@ -134,3 +136,29 @@ def test_written_row_groups_prune_a_place_id_lookup(tmp_path):
   assert hit == [123]
   # statistics only for place_id and bbox: the name-like columns carry none (a small footer)
   assert not md.row_group(0).column(1).is_stats_set
+
+
+def test_geo_bbox_crosses_the_antimeridian_while_the_row_bbox_stays_plain(tmp_path):
+  """regression: the file bbox (and so the STAC extent) of a layer with a place cut at +/-180 was -180..180."""
+  wrapped = Polygon([(170, 50), (-170, 50), (-170, 60), (170, 60), (170, 50)])
+  _, _, _, _, t = build(tmp_path, [(1, "OCS-A 0001", "Commercial", "X", wrapped),
+                                   (2, "OCS-A 0002", "Commercial", "Y", square(-160, 55))])
+  path = tmp_path / "x.parquet"
+  geo = write_geoparquet(t, path, {"sources": []})
+  assert geo["columns"]["geometry"]["bbox"] == pytest.approx([170, 50, -159, 60])
+  assert t.column("bbox").combine_chunks().field("xmin").to_pylist()[0] == -180     # covering: plain min/max
+  assert check_parquet(path, lease_cfg(tmp_path)) == []
+
+
+def test_check_parquet_flags_a_globe_spanning_geo_bbox(tmp_path):
+  wrapped = Polygon([(170, 50), (-170, 50), (-170, 60), (170, 60), (170, 50)])
+  _, _, _, _, t = build(tmp_path, [(1, "OCS-A 0001", "Commercial", "X", wrapped)])
+  path = tmp_path / "x.parquet"
+  write_geoparquet(t, path, {"sources": []})
+  f = pq.ParquetFile(path)
+  meta = dict(f.schema_arrow.metadata)
+  geo = json.loads(meta[b"geo"])
+  geo["columns"]["geometry"]["bbox"] = [-180.0, 50.0, 180.0, 60.0]                    # the old min/max
+  meta[b"geo"] = json.dumps(geo).encode()
+  pq.write_table(f.read().replace_schema_metadata(meta), path)
+  assert any("antimeridian-aware" in p for p in check_parquet(path, lease_cfg(tmp_path)))

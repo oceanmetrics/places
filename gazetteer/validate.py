@@ -9,6 +9,7 @@ import numpy as np
 import pyarrow.parquet as pq
 import shapely
 
+from .bbox import geometries_bbox
 from .geom import max_edge_span
 from .lines import max_line_span
 from .mixed import MIXED_TYPE_IDS
@@ -67,6 +68,8 @@ def check_parquet(path: Path, cfg: dict) -> list[str]:
   col = geo["columns"]["geometry"]
   if geo["version"] != "1.1.0" or col["encoding"] != "WKB" or "covering" not in col:
     problems.append("geo metadata is not GeoParquet 1.1 WKB with a bbox covering")
+  if not np.allclose(col.get("bbox") or [np.nan] * 4, geometries_bbox(geoms)):
+    problems.append(f"geo bbox {col.get('bbox')} is not the antimeridian-aware bbox {geometries_bbox(geoms)}")
   if b"gazetteer:provenance" not in f.schema_arrow.metadata:
     problems.append("no provenance in the parquet metadata")
   return problems

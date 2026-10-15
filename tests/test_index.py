@@ -142,6 +142,7 @@ def test_dateline_crossing_place_gets_the_unwrapped_bbox_and_a_wrapped_centroid(
   assert by["X:PM"]["bbox"]["xmin"] <= by["X:PM"]["centroid_lon"] <= by["X:PM"]["bbox"]["xmax"]
   assert by["X:PLAIN"]["bbox"] == {"xmin": 10.0, "ymin": 10.0, "xmax": 12.0, "ymax": 12.0}      # untouched
   assert stats["bbox"][2] <= 180.0 and stats["bbox"][0] >= -180.0                                # STAC extent stays valid
+  assert stats["bbox"] == pytest.approx([10.0, 10.0, -161.0, 14.0])          # and crosses +/-180 (west > east, RFC 7946)
 
 
 def test_unwrap_crossing_leaves_non_crossers_alone():

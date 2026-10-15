@@ -12,6 +12,7 @@ import pyarrow.parquet as pq
 import pyproj
 import shapely
 
+from .bbox import geometries_bbox
 from .config import source_setting
 from .fetch import SourceResult
 from .calcofi import clean_simple_geometry
@@ -174,15 +175,16 @@ def to_table(rows: list[dict], fields: list[dict]) -> pa.Table:
 
 
 def geo_metadata(table: pa.Table) -> dict:
-  """GeoParquet 1.1 `geo` metadata for the table: WKB (the geom_type column: MultiPolygon, Point or LineString) in EPSG:4326 with the bbox covering."""
+  """GeoParquet 1.1 `geo` metadata for the table: WKB (the geom_type column: MultiPolygon, Point or LineString) in EPSG:4326 with the bbox covering.
+
+  the file bbox crosses +/-180 (west > east) for a layer with places cut there (`bbox.geometries_bbox`), while the
+  per-row bbox covering stays plain min/max for xmin <= x <= xmax filters."""
   types = sorted(set(table.column("geom_type").to_pylist())) or ["MultiPolygon"]
-  b = table.column("bbox").combine_chunks()
-  mins = [min(b.field(k).to_pylist()) for k in ("xmin", "ymin")]
-  maxs = [max(b.field(k).to_pylist()) for k in ("xmax", "ymax")]
+  bbox = geometries_bbox(shapely.from_wkb([w for w in table.column("geometry").to_pylist() if w is not None]))
   return {"version": "1.1.0", "primary_column": "geometry", "columns": {"geometry": {
     "encoding": "WKB", "geometry_types": types, "crs": pyproj.CRS.from_epsg(4326).to_json_dict(),
     "edges": "planar", **({"orientation": "counterclockwise"} if types == ["MultiPolygon"] else {}),
-    "bbox": [mins[0], mins[1], maxs[0], maxs[1]],
+    "bbox": bbox,
     "covering": {"bbox": {k: ["bbox", k] for k in ("xmin", "ymin", "xmax", "ymax")}}}}}
 
 

@@ -28,6 +28,7 @@
 #     version, so the ledger gains exactly one new entry (V) on top of the pulled history.
 #   - `bump` leaves the root versions.json summary at the old version: rewritten from the ledger below.
 #   - `add` leaves stale file:size / file:checksum on some assets and re-extracts the PMTiles role as `data`: recomputed.
+#   - `add` splits a crossing extent in two and unions it with the old one: joined and measured from the parquet (4b).
 
 set -euo pipefail
 
@@ -103,6 +104,14 @@ if [[ $republish -eq 1 ]]; then
     portolan version bump "$s" "$version" -m "$note" -y
   done
 fi
+
+# 4b. extent across +/-180: portolan writes a crossing geo bbox (west > east) as two halves, and on a republish unions it
+#     with the old -180..180 extent; measure it from the parquet as one RFC 7946 bbox (gazetteer/bbox.py). after the
+#     bump, in case it rewrites collection.json; only collection.json changes, so no data checksum moves ----
+for s in $slugs; do
+  [[ -f "$s/places.parquet" ]] || continue
+  PYTHONPATH="$dir_repo" uv run --project "$dir_repo" python -m gazetteer.bbox join-extent "$s/collection.json" --data "$s/places.parquet"
+done
 
 # 5. fixups: child links, asset sizes/checksums, pmtiles role, root versions entries ----
 python3 - "$dir_pub" "$slugs" "$want" <<'PYEOF'
