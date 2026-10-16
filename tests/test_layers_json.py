@@ -228,3 +228,11 @@ def test_mixed_geometry_collection_row_regression():
   assert set(row["paint"]) == {"fill", "line", "circle"}
   assert bl.geom_kind(["MultiPolygon"]) == "polygon" and bl.geom_kind(["Point", "MultiPoint"]) == "point"
   assert bl.layer_row({**COLL, "geoparquet:geometry_type": ["MultiPolygon"]})["geom_type"] == "MultiPolygon"
+
+
+def test_crossing_extent_is_unwrapped_for_fit_bounds():
+  """a collection extent crossing +/-180 (west > east) goes to layers.json unwrapped (east + 360), like the index bbox."""
+  coll = {**COLL, "extent": {"spatial": {"bbox": [[177.8, -15.4, -64.5, 48.5]]}}}
+  assert bl.layer_row(coll)["bbox"] == [177.8, -15.4, 295.5, 48.5]
+  assert bl.layer_row(COLL)["bbox"] == [-125.0, 32.0, -117.0, 42.0]
+  assert bl.layer_row({**COLL, "extent": {}})["bbox"] is None

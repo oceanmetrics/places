@@ -6,7 +6,8 @@ carries its own **licence** and **attribution**. Places are identified by `place
 (for example `BOEM:OCS-P 0561`), ids never change; geometry versions do.
 
 - Catalog: https://storage.oceanmetrics.io/gazetteer/ (S3 bucket `oceanmetrics.io-public`, prefix `gazetteer/`)
-- Each collection: `places.parquet` (GeoParquet 1.1, WKB, `bbox` struct, EPSG:4326, split at +/-180),
+- Each collection: `places.parquet` (GeoParquet 1.1, WKB, `bbox` struct, EPSG:4326, split at +/-180; the file
+  bbox and STAC extent cross +/-180 with west > east, per RFC 7946, when a place is cut there),
   `places.pmtiles` (layer name = collection slug, attribution in the metadata), `style.json`, `README.md`,
   `provenance.json`
 - Rules for contributors and agents: [AGENTS.md](AGENTS.md)

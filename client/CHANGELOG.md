@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased (data only, no client change)
+
+- A layer whose places are cut at the antimeridian (e.g. `noaa_sanctuaries` with Papahanaumokuakea) gets a layers.json
+  `bbox` that is unwrapped like the index bbox (`[177.8, -15.4, 295.5, 48.5]`: east beyond 180), instead of
+  `[-180, ..., 180, ...]` round the globe. `fitBounds` takes it as is. The collection's STAC extent and its parquet
+  `geo` bbox cross the antimeridian the RFC 7946 way (west > east, `[177.8, -15.4, -64.5, 48.5]`).
+
 ## 0.1.3
 
 - `Layer` (a layers.json row) gains optional `status`, `status_history`, `status_label` (layer-level status, e.g. the

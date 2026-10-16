@@ -30,6 +30,9 @@ import pyarrow.parquet as pq
 import shapely
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from gazetteer.bbox import union_bbox, wrap_bbox  # noqa: E402
+
 BASE = "https://storage.oceanmetrics.io/gazetteer/"
 ROW_GROUP = 5000
 INDEX_VERSION = "1.0.0"
@@ -338,7 +341,7 @@ def build(sources: list[Source], out: Path) -> dict:
   dups = 0
   xw_n = {c: 0 for c in XW_COLS}
   xw_rows = 0
-  ext = [180.0, 90.0, -180.0, -90.0]
+  ext: list[float] | None = None
   updated = []
   opts = dict(compression="snappy", data_page_version="1.0", use_dictionary=False, write_statistics=True)
   with pq.ParquetWriter(out / "places_index.parquet", INDEX_SCHEMA, **opts) as iw, \
@@ -362,11 +365,11 @@ def build(sources: list[Source], out: Path) -> dict:
             if pid in seen and seen[pid] != src.slug:
               dups += 1
             seen.setdefault(pid, src.slug)
-          for b in index["bbox"]:
-            if b:
-              # the STAC extent stays within [-180, 180] although an unwrapped place bbox may exceed it
-              ext = [min(ext[0], max(b["xmin"], -180.0)), min(ext[1], b["ymin"]),
-                     max(ext[2], min(b["xmax"], 180.0)), max(ext[3], b["ymax"])]
+          # the STAC extent stays within [-180, 180]: an unwrapped place bbox (east beyond 180) counts as a crossing one,
+          # and the union crosses +/-180 (west > east) when that is the smaller box (gazetteer.bbox)
+          boxes = [wrap_bbox([b["xmin"], b["ymin"], b["xmax"], b["ymax"]]) for b in index["bbox"] if b]
+          if boxes:
+            ext = union_bbox(boxes + ([ext] if ext else []))
           counts[src.slug] += batch.num_rows
           pend_i.append(index)
           pend_x.extend(xw)

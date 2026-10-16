@@ -90,6 +90,15 @@ def parquet_asset(coll: dict) -> dict | None:
                and str(a.get("href", "")).endswith("places.parquet")), None)
 
 
+def layer_bbox(coll: dict) -> list[float] | None:
+  """the collection extent for fitting a map: a crossing extent (west > east, RFC 7946) is UNWRAPPED, east + 360, so
+  [177.8, s, -64.5, n] becomes [177.8, s, 295.5, n]; the same convention as the index bbox."""
+  b = (((coll.get("extent") or {}).get("spatial") or {}).get("bbox") or [None])[0]
+  if not b:
+    return None
+  return [b[0], b[1], b[2] + 360, b[3]] if b[0] > b[2] else b
+
+
 def status_label(status: dict | None) -> str | None:
   """'rescinded 2025-07-30': the value with '_' as space, then the date; None without a status."""
   if not status or not status.get("value"):
@@ -210,7 +219,7 @@ def layer_row(coll: dict, style: dict | None = None, version: str | None = None,
     "paint"           : default_paint(geom_kind(geom_type), style),
     "authority"       : coll.get("gazetteer:authority"),
     "place_type"      : coll.get("gazetteer:place_type"),
-    "bbox"            : (((coll.get("extent") or {}).get("spatial") or {}).get("bbox") or [None])[0],
+    "bbox"            : layer_bbox(coll),
     "attribution"     : attribution_text(coll),
     "attribution_html": attribution_html(coll),
     "license"         : coll.get("license"),

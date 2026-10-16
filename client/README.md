@@ -26,6 +26,8 @@ The manifest written by `scripts/build_layers_json.py`: one row per map layer (`
 `pmtiles`, `source_layer`, `geom_type`, `n`, `updated`, `version`, `paint`, `authority`, `place_type`, `bbox`,
 `attribution`, `attribution_html`, `license`, `license_url`, `citation`, and since 0.1.3 `status`, `status_history`,
 `status_label`, `created`, `source_date`, `parquet`, `parquet_sha256`). Cached; `{ refresh: true }` re-fetches.
+A layer's `bbox` follows the index convention below: for a layer with places cut at the antimeridian it is unwrapped
+(east beyond 180, e.g. `[177.8, -15.4, 295.5, 48.5]`), so `fitBounds` takes it as is.
 
 Layer status and pinning: `status` is the layer-level status (`{ value, date, source, note }`, e.g. the BOEM wind
 planning areas rescinded on 2025-07-30) and `status_history` its ascending events; both null when the layer has none.

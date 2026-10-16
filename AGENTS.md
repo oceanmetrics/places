@@ -16,6 +16,11 @@ Rules for anyone (human or agent) changing this repo. Each rule is guarded by a 
 - **Every PMTiles carries attribution metadata** (`name`, `description`, `attribution`), written by tippecanoe
   `--attribution`; `check_pmtiles` fails a file without it.
 - **Antimeridian:** geometries are stored split at +/-180 (GeoParquet 1.1, EPSG:4326, WKB, `bbox` struct).
+  Published bboxes follow RFC 7946: the parquet `geo` bbox and the STAC extent of a layer with places cut at +/-180
+  cross it (west > east, e.g. `noaa_sanctuaries` `[177.8, -15.4, -70.0, 48.5]`), never `-180..180` round the globe
+  (`gazetteer/bbox.py`, checked by `check_parquet`; `publish_collections.sh` re-joins the extent after `portolan add`).
+  The per-row `bbox` struct stays plain min/max for `xmin <= x <= xmax` filters; the index bbox and layers.json
+  `bbox` are unwrapped instead (east beyond 180) so `fitBounds` takes them as is.
 - **`place_id = <authority>:<source_id>`**; ids never change, geometry versions do. Duplicates within a layer are
   suffixed deterministically and reported.
 - **One collection per source layer** (the unit of licence, cadence and style). Collection `version` is semver and

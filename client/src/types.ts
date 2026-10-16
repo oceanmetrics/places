@@ -37,6 +37,7 @@ export interface Layer {
   paint           : LayerPaint
   authority       : string | null
   place_type      : string | null
+  /** the collection extent; unwrapped (east may exceed 180) for a layer with places cut at the antimeridian, like the index bbox. */
   bbox            : BBox | null
   attribution     : string
   attribution_html: string

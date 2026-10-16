@@ -1,0 +1,21 @@
+{
+  "about": "COPY of oceanmetrics/erddap-places catalog/tests/union_bbox_cases.json (keep the two in step): unionBbox() (erddap-places app/src/lib/gazetteer.ts), union_bbox() (erddap-places catalog/erin_layers/bbox.py) and union_bbox() (gazetteer/bbox.py here) must all give `want` for `boxes`; [west, south, east, north], west > east crosses the antimeridian",
+  "cases": [
+    { "name": "PMNM lobes, one each side of 180: crosses instead of spanning the globe",
+      "boxes": [[-180, 19, -161, 32], [177, 25, 180, 30]], "want": [177, 19, -161, 32] },
+    { "name": "one plain box is itself",
+      "boxes": [[-80.92, 31.36, -80.83, 31.42]], "want": [-80.92, 31.36, -80.83, 31.42] },
+    { "name": "plain boxes far apart: the widest gap is round the back of the globe, so no crossing",
+      "boxes": [[-125, 30, -117, 40], [-82, 24, -80, 26]], "want": [-125, 24, -80, 40] },
+    { "name": "boxes either side of 180 that do not touch it still cross (the gap across 180 is the narrow one)",
+      "boxes": [[170, 0, 175, 5], [-175, 0, -170, 5]], "want": [170, 0, -170, 5] },
+    { "name": "a crossing box unioned with a plain one (a collection holding PMNM and the mainland)",
+      "boxes": [[177, 19, -161, 32], [-125, 30, -117, 40]], "want": [177, 19, -117, 40] },
+    { "name": "boxes that cover every longitude give -180..180",
+      "boxes": [[-180, -10, 0, 10], [0, -5, 180, 5]], "want": [-180, -10, 180, 10] },
+    { "name": "a tie between the gap across 180 and an inner gap keeps the box that does not cross",
+      "boxes": [[-90, 0, -80, 1], [90, 0, 100, 1]], "want": [-90, 0, 100, 1] },
+    { "name": "portolan's two halves of a crossing extent join back into one crossing box",
+      "boxes": [[-180, -28.4247039, -64.5, 48.51], [177.8, -28.4247039, 180, 48.51]], "want": [177.8, -28.4247039, -64.5, 48.51] }
+  ]
+}
