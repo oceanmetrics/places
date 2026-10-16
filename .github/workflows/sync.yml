@@ -94,6 +94,10 @@ jobs:
               published = r.get("reason") != "not published yet"
               r["changed"] = published and (r["changed"] or sys.argv[1] == "true")
           json.dump(rows, open("changed.json", "w"))
+          # a probe that failed (an upstream outage) skips that collection this week, visibly
+          for r in rows:
+              if r.get("error"):
+                  print(f"::warning::{r['slug']}: {r['reason']} (not checked this run)")
           PY
           list=$(python3 -c "import json; print(' '.join(r['slug'] for r in json.load(open('changed.json')) if r['changed']))")
           echo "changed=$list" >> "$GITHUB_OUTPUT"

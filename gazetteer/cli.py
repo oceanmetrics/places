@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from .config import load_all
-from .pipeline import build_layer, detect, next_version
+from .pipeline import build_layer, detect_all, next_version
 from .validate import check_parquet, check_pmtiles
 
 ROOT = Path(__file__).resolve().parent.parent  # the repo root
@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
       print(json.dumps(build_layer(cfgs[slug], a.staging, a.cache, a.version, a.delay)))
     return 0
   if a.cmd == "detect":
-    res = [detect(cfgs[s], a.published_base) for s in slugs]
+    res = detect_all([cfgs[s] for s in slugs], a.published_base)
     for r in res:
       print(json.dumps(r))
     if a.json_out:

@@ -137,6 +137,21 @@ def detect(cfg: dict, base_url: str, s=None) -> dict:
   return {"slug": cfg["slug"], "changed": reason is not None, "reason": reason or "unchanged"}
 
 
+def detect_all(cfgs: list[dict], base_url: str, detect_one=None) -> list[dict]:
+  """`detect` for every config; a collection whose probe fails is reported (`changed` False, `error` True, the reason)
+  instead of stopping the others. e.g. NOAA's CDN served a cached redirect to an expired pre-signed S3 URL over IPv6
+  (403 "Request has expired", 2026-10-16) while IPv4 got the file."""
+  detect_one = detect_one or detect
+  out = []
+  for cfg in cfgs:
+    try:
+      out.append(detect_one(cfg, base_url))
+    except (requests.RequestException, OSError, ValueError, KeyError) as e:
+      out.append({"slug": cfg["slug"], "changed": False, "error": True,
+                  "reason": f"probe failed: {type(e).__name__}: {str(e)[:200]}"})
+  return out
+
+
 def bump_patch(version: str) -> str:
   """'1.0.3' -> '1.0.4' (the sync workflow's version for a rebuilt collection)."""
   major, minor, patch = (int(x) for x in version.split("."))
