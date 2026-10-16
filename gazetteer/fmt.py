@@ -2,7 +2,8 @@
 
 values are stripped; None becomes ''. filters: strip (default), lease_number, prefix:<text> (text + value when
 non-empty), map:<table> (lookup in the config's `maps`, a missing key keeps the value), slug,
-round (nearest integer), default:<text> (text when the value is empty).
+round (nearest integer), default:<text> (text when the value is empty), blank:<text> (empty when the value is <text>,
+ignoring case: a source's placeholder), else:<FIELD> (that field's value when the value is empty).
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ def slug(value: str) -> str:
   return re.sub(r"[^a-z0-9]+", "-", (value or "").lower()).strip("-")
 
 
-def _apply(value: str, flt: str, maps: dict) -> str:
+def _apply(value: str, flt: str, maps: dict, attrs: dict) -> str:
   name, _, arg = flt.partition(":")
   if name == "strip":
     return value.strip()
@@ -48,6 +49,10 @@ def _apply(value: str, flt: str, maps: dict) -> str:
       return value
   if name == "default":
     return value if value else arg
+  if name == "blank":
+    return "" if value.lower() == arg.lower() else value
+  if name == "else":
+    return value if value else str(attrs.get(arg) or "").strip()
   raise ValueError(f"unknown template filter: {flt}")
 
 
@@ -60,7 +65,7 @@ def render(template: str, attrs: dict, maps: dict | None = None) -> str:
     raw = attrs.get(field)
     value = "" if raw is None else str(raw).strip()
     for f in filters:
-      value = _apply(value, f, maps)
+      value = _apply(value, f, maps, attrs)
     return value
 
   return re.sub(r"\s+", " ", _FIELD.sub(sub, template)).strip()

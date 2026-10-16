@@ -24,7 +24,8 @@ providers:
   - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
 source_page: https://www.arcgis.com/home/item.html?id=794de45b9d774d21aed3bf9b5313ee24
 place_id: {template: "FWS:CH:{entity_id}", pattern: "^FWS:CH:\\d+(:part(-\\d+)?)?$", dedupe: {order: OBJECTID}}
-name: "{comname} critical habitat (final)"
+# species without a common name read "No common name" in `comname`: name those by `sciname` (2026-10-16)
+name: "{comname|blank:No common name|else:sciname} critical habitat (final)"
 source_id: "{entity_id}"
 status:
   value: final

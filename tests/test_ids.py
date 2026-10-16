@@ -54,6 +54,15 @@ def test_map_filter_and_whitespace_collapse():
   assert render("{A} {B}", {"A": "Ocean Wind LLC\r\n", "B": None}) == "Ocean Wind LLC"
 
 
+def test_blank_and_else_filters_name_a_species_without_a_common_name_by_its_scientific_name_regression():
+  # fws critical habitat: 8 proposed and 118 final features read comname "No common name" (2026-10-16)
+  t = "{comname|blank:No common name|else:sciname} critical habitat (proposed)"
+  assert render(t, {"comname": "No common name", "sciname": "Maesa walkeri"}) == "Maesa walkeri critical habitat (proposed)"
+  assert render(t, {"comname": "no common name", "sciname": "Maesa walkeri"}) == "Maesa walkeri critical habitat (proposed)"
+  assert render(t, {"comname": "Rota blue damselfly", "sciname": "Ischnura luta"}) == "Rota blue damselfly critical habitat (proposed)"
+  assert render(t, {"comname": None, "sciname": " Ischnura luta "}) == "Ischnura luta critical habitat (proposed)"
+
+
 def test_pattern_check_rejects_bad_and_duplicate_ids():
   with pytest.raises(ValueError, match="do not match"):
     check_place_ids(["BOEM:nope"], LEASE["pattern"])
