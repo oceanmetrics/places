@@ -300,8 +300,14 @@ def local_rows(staging: Path, base: str = BASE, fetch=None) -> list[dict]:
   return rows
 
 
+# reads go to the S3 origin, not the CDN: storage.oceanmetrics.io caches the catalog's JSON for a day (max-age=86400), so
+# right after a publish it still serves the old versions.json and ledgers (2026-10-16). URLs written out keep `base`
+def origin(url: str) -> str:
+  return BASE_DIRECT + url[len(BASE):] if url.startswith(BASE) else url
+
+
 def get_json(url: str, timeout: int = 60):
-  req = urllib.request.Request(url, headers={"User-Agent": "oceanmetrics-places/layers-json"})
+  req = urllib.request.Request(origin(url), headers={"User-Agent": "oceanmetrics-places/layers-json"})
   with urllib.request.urlopen(req, timeout=timeout) as r:
     return json.load(r)
 

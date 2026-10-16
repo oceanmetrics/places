@@ -236,3 +236,9 @@ def test_crossing_extent_is_unwrapped_for_fit_bounds():
   assert bl.layer_row(coll)["bbox"] == [177.8, -15.4, 295.5, 48.5]
   assert bl.layer_row(COLL)["bbox"] == [-125.0, 32.0, -117.0, 42.0]
   assert bl.layer_row({**COLL, "extent": {}})["bbox"] is None
+
+
+def test_reads_go_to_the_s3_origin_not_the_cdn():
+  """regression: the CDN caches versions.json for a day, so a build right after a publish read the old versions."""
+  assert bl.origin(bl.BASE + "versions.json") == bl.BASE_DIRECT + "versions.json"
+  assert bl.origin("file:///tmp/layers.json") == "file:///tmp/layers.json"

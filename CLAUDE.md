@@ -93,7 +93,9 @@ tree, git-ignored) and uploaded by `scripts/publish_collections.sh [--republish 
 `portolan add` 0.8.0 quirks (it rewrites other collections' JSON, auto-bumps ledgers, leaves stale checksums) and runs
 the `rashid check` gate. Read `catalog/staging/RUNBOOK_PUBLISH.md` first: it has the hold/flag table of collections that
 must not be published yet (e.g. `mr_*` pending VLIZ's reply). `.github/workflows/sync.yml` is the weekly detect ->
-rebuild -> publish job on the self-hosted `msens` runner; `pages.yml` deploys `web/` on pushes touching `web/` or
+rebuild -> publish (through `publish_collections.sh --republish`) -> H3 / index / layers.json job on the self-hosted
+`macmini` runner (Mondays 07:43 UTC; this repo is the only publisher of the place collections since 2026-10-16, when the
+BOEM / NOAA AOA ones moved here from erddap-places); it reads the published catalog from the S3 origin, not the CDN; `pages.yml` deploys `web/` on pushes touching `web/` or
 `client/`; `validate-contribution.yml` checks PRs adding `contrib/OM-<ulid>/` (see CONTRIBUTING.md).
 
 `client/` has its own `CHANGELOG.md` and version in `client/package.json`; add an entry with any user-facing change.
