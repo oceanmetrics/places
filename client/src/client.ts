@@ -163,12 +163,13 @@ export function createClient(initial: ClientConfig = {}) {
    */
   async function search(q: string, opts: SearchOptions = {}): Promise<IndexPlace[]> {
     const { bbox, limit = 20 } = opts
-    const types = arr(opts.type).map(norm), auths = arr(opts.authority).map(norm)
+    const types = arr(opts.type).map(norm), auths = arr(opts.authority).map(norm), colls = new Set(arr(opts.collection))
     const query = norm(q ?? ''), words = query.split(/\s+/).filter(Boolean)
     const scored: Array<[number, IndexPlace]> = []
     for (const p of await loadIndex()) {
       if (types.length && !types.includes(norm(p.place_type))) continue
       if (auths.length && !auths.includes(norm(p.authority))) continue
+      if (colls.size && !colls.has(p.collection)) continue
       if (bbox && p.bbox && !bboxIntersects(bbox, p.bbox)) continue
       let score = 0
       if (words.length) {

@@ -26,19 +26,32 @@
   }
 
   // search: the places index when it is published, else the layer list is filtered by the same text ----
+  // scope: '' = all layers, ON_MAP = the layers on the map, else one layer's slug
+  const ON_MAP = '@map'
   let q = $state('')
+  let scope = $state('')
+  const scopeSlugs = $derived.by(() => {
+    if (!scope) return undefined
+    const slugs = scope === ON_MAP ? selected.map((s) => s.slug) : [scope]
+    return slugs.map((s) => manifest.layers.find((l) => l.slug === s)?.collection ?? s)
+  })
+  // the scope falls back to all layers when its layers leave the map or the manifest
+  $effect(() => {
+    if (scope === ON_MAP && !selected.length) scope = ''
+    else if (scope && scope !== ON_MAP && manifest.status === 'ok' && !known.has(scope)) scope = ''
+  })
   let hits = $state<IndexPlace[]>([])
   let searching = $state(false)
   let timer: ReturnType<typeof setTimeout> | undefined
   let token = 0
   $effect(() => {
-    const text = q.trim()
+    const text = q.trim(), within = scopeSlugs
     clearTimeout(timer)
     if (!text) { hits = []; searching = false; return }
     searching = true
     const my = ++token
     timer = setTimeout(async () => {
-      const r = await searchPlaces(text)
+      const r = await searchPlaces(text, 12, within)
       if (my === token) { hits = r; searching = false }
     }, 200)
   })
@@ -90,6 +103,20 @@
   <aside class="panel" aria-label="Search and layers">
     <label class="sr" for="q">Search places</label>
     <input id="q" type="search" placeholder="Search places or filter layers…" bind:value={q} autocomplete="off" />
+    {#if manifest.status === 'ok' && manifest.layers.length}
+      <label class="scope">
+        <span class="muted">Search in</span>
+        <select bind:value={scope}>
+          <option value="">All layers</option>
+          {#if selected.length}<option value={ON_MAP}>Layers on the map ({selected.length})</option>{/if}
+          {#each groupByAuthority(manifest.layers) as g (g.authority)}
+            <optgroup label={g.authority}>
+              {#each g.layers as l (l.slug)}<option value={l.slug}>{layerLabel(l)}</option>{/each}
+            </optgroup>
+          {/each}
+        </select>
+      </label>
+    {/if}
 
     {#if index.status === 'error' && q.trim()}
       <p class="notice">The places index is not available yet, so name search is off. Layers are filtered by that text instead.</p>
@@ -227,6 +254,8 @@
   .home { flex: 1; min-height: 0; display: grid; grid-template-columns: 22rem 1fr; height: calc(100dvh - var(--header-h)); }
   .panel { overflow-y: auto; padding: 12px 14px 24px; background: var(--bg-card); border-right: 1px solid var(--border); }
   .stage { position: relative; min-height: 0; }
+  .scope { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; }
+  .scope select { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 4px; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .panel h2 { margin: 1rem 0 .3rem; }
   .panel h3 { margin: 1rem 0 .2rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }

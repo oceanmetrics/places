@@ -1,6 +1,7 @@
 // the shared URL grammar (plan §7), the same as CalCOFI explore:
 //   ?layers=slug[:colour][:opacity][:width],…   draw order, first on top; `layers=off` = none
 //   &place=<place_id>
+//   &proj=mercator                               the map projection; absent = globe (the default)
 // colour = 6 hex digits without `#` (a leading `#` is accepted), opacity 0..1 (2 dp), width 0.5..4 px (0.5 steps).
 
 export interface LayerSel {
@@ -14,7 +15,10 @@ export interface ViewState {
   /** null = the parameter is absent (no layers chosen); [] = `layers=off` */
   layers: LayerSel[] | null
   place : string | null
+  proj  : Projection
 }
+
+export type Projection = 'globe' | 'mercator'
 
 const HEX = /^#?([0-9a-fA-F]{6})$/
 
@@ -53,7 +57,7 @@ export function serializeLayers(ls: LayerSel[]): string {
 /** read the view from a query string (with or without the leading `?`). */
 export function parseView(search: string): ViewState {
   const p = new URLSearchParams(search)
-  return { layers: parseLayers(p.get('layers')), place: p.get('place') || null }
+  return { layers: parseLayers(p.get('layers')), place: p.get('place') || null, proj: p.get('proj') === 'mercator' ? 'mercator' : 'globe' }
 }
 
 /**
@@ -67,6 +71,9 @@ export function buildSearch(view: Partial<ViewState>, current = ''): string {
   }
   if ('place' in view) {
     if (!view.place) p.delete('place'); else p.set('place', view.place)
+  }
+  if ('proj' in view) {
+    if (view.proj === 'mercator') p.set('proj', 'mercator'); else p.delete('proj')
   }
   const s = p.toString().replace(/%3A/gi, ':').replace(/%2C/gi, ',')
   return s ? '?' + s : ''

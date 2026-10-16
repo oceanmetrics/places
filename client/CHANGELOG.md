@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- `search()` takes `collection` (a slug or a list): keep only places of those collections, e.g. to search within one
+  layer. An empty list means no filter.
+
 ## Unreleased (data only, no client change)
 
 - A layer whose places are cut at the antimeridian (e.g. `noaa_sanctuaries` with Papahanaumokuakea) gets a layers.json
