@@ -60,6 +60,25 @@ export function parseView(search: string): ViewState {
   return { layers: parseLayers(p.get('layers')), place: p.get('place') || null, proj: p.get('proj') === 'mercator' ? 'mercator' : 'globe' }
 }
 
+/** view settings that follow the user from page to page (not part of a page's own state). */
+export const CARRIED = ['proj'] as const
+
+/**
+ * add the carried settings of the current query to an in-app url that does not set them itself, so a page change
+ * keeps e.g. `proj=mercator`. `url` is a path with an optional query (and hash).
+ */
+export function carryView(url: string, current: string): string {
+  const cur = new URLSearchParams(current)
+  const [rest, hash = ''] = url.split('#')
+  const [path, q = ''] = rest.split('?')
+  const p = new URLSearchParams(q)
+  let changed = false
+  for (const k of CARRIED) if (!p.has(k) && cur.has(k)) { p.set(k, cur.get(k)!); changed = true }
+  if (!changed) return url
+  const s = p.toString().replace(/%3A/gi, ':').replace(/%2C/gi, ',').replace(/%2F/gi, '/')
+  return path + (s ? '?' + s : '') + (hash ? '#' + hash : '')
+}
+
 /**
  * write the view into a query string, keeping every other parameter (e.g. `base`, `theme`).
  * place ids carry a colon; it is left unescaped so links read well.

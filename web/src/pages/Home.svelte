@@ -81,6 +81,12 @@
       .catch((e: unknown) => { if (my === pt) placeError = `Place ${id} could not be read: ${(e as Error).message}` })
   })
   const pickHit = (h: IndexPlace) => write({ place: h.place_id })
+  // a hit's second line: its layer (the same place can be in several), type and area; empty parts are left out
+  const hitLine = (h: IndexPlace) => {
+    const l = manifest.layers.find((x) => x.collection === h.collection)
+    return [l ? layerLabel(l) : h.collection, h.place_type, h.area_km2 ? `${fmtN(Math.round(h.area_km2))} km²` : '']
+      .filter(Boolean).join(' · ')
+  }
 
   // the one open layer-info card in the list (a second click, another row, or Esc closes it) ----
   let info = $state<string | null>(null)
@@ -130,7 +136,7 @@
             <li>
               <button type="button" onclick={() => pickHit(h)}>
                 <strong>{h.name}</strong>
-                <span class="muted">{h.authority} · {h.place_type}{h.area_km2 ? ` · ${fmtN(Math.round(h.area_km2))} km²` : ''}</span>
+                <span class="muted">{hitLine(h)}</span>
               </button>
             </li>
           {:else}
@@ -251,7 +257,8 @@
 </div>
 
 <style>
-  .home { flex: 1; min-height: 0; display: grid; grid-template-columns: 22rem 1fr; height: calc(100dvh - var(--header-h)); }
+  /* flex: none so the height holds; with flex: 1 the column grew to the layer list's length and the map's centre fell below the fold */
+  .home { flex: none; min-height: 0; display: grid; grid-template-columns: 22rem 1fr; height: calc(100dvh - var(--header-h)); }
   .panel { overflow-y: auto; padding: 12px 14px 24px; background: var(--bg-card); border-right: 1px solid var(--border); }
   .stage { position: relative; min-height: 0; }
   .scope { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; }

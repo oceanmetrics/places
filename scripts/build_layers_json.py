@@ -42,6 +42,9 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from gazetteer.legacy import legacy_title  # noqa: E402
+
 BASE = "https://storage.oceanmetrics.io/gazetteer/"
 BASE_DIRECT = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/"   # path-style: the dotted bucket name breaks tls on the virtual-hosted form
 SCHEMA = 1
@@ -193,7 +196,7 @@ def citation(coll: dict, slug: str, version: str | None, updated: str | None, ba
     return squash(coll["citation"])
   year = (updated or "")[:4] or str(datetime.now(timezone.utc).year)
   v = f", v{version}" if version else ""
-  return f"{attribution_text(coll)} {coll.get('title') or slug}{v}. Ocean Metrics gazetteer, {year}. {base.rstrip('/')}/{slug}/"
+  return f"{attribution_text(coll)} {legacy_title(slug, coll.get('title')) or slug}{v}. Ocean Metrics gazetteer, {year}. {base.rstrip('/')}/{slug}/"
 
 
 def layer_row(coll: dict, style: dict | None = None, version: str | None = None, base: str = BASE,
@@ -208,7 +211,7 @@ def layer_row(coll: dict, style: dict | None = None, version: str | None = None,
   status = coll.get("gazetteer:status") or None
   return {
     "slug"            : slug,
-    "title"           : coll.get("title") or slug,
+    "title"           : legacy_title(slug, coll.get("title")) or slug,
     "collection"      : slug,
     "pmtiles"         : pmtiles_url(slug, base),
     "source_layer"    : layers[0] if layers else slug,

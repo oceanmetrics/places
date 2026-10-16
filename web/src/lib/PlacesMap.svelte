@@ -61,6 +61,12 @@
   }
   const credits = new CreditsControl()
 
+  // fit padding that keeps the fitted bounds clear of the zoom/projection buttons (right) and the credits box (bottom) ----
+  const fitPadding = () => {
+    const h = el?.clientHeight ?? 0
+    return { top: 32, left: 32, right: 56, bottom: Math.min(Math.max(32, credits.box.offsetHeight + 16), Math.round(h / 3)) }
+  }
+
   // projection: globe by default, mercator with ?proj=mercator; the button writes the URL, the URL drives the map ----
   const proj = $derived(parseView(loc.search).proj)
   class ProjectionControl implements maplibregl.IControl {
@@ -117,8 +123,16 @@
     if (!ready) return
     const sel = selected.map((s) => ({ ...s })), _l = layers.length
     void _l
-    queue = queue.then(() => doSync(sel)).then(refreshCredits)
+    queue = queue.then(() => doSync(sel)).then(refreshCredits).then(fitOnce)
   })
+
+  // the `fit` bounds, once, after the first credits refresh: the padding needs the credits box at its final height
+  let fitPending = true
+  function fitOnce() {
+    if (!fitPending || !map) return
+    fitPending = false
+    if (fit && !highlight) map.fitBounds([[fit[0], fit[1]], [fit[2], fit[3]]], { padding: fitPadding(), maxZoom: 10, duration: 0 })
+  }
 
   // the highlighted place ----
   let lastFit = ''
@@ -132,7 +146,7 @@
     if (key !== lastFit && highlight.bbox) {
       lastFit = key
       const [w, s, e, n] = highlight.bbox as BBox
-      map.fitBounds([[w, s], [e, n]], { padding: 48, maxZoom: 10, duration: 600 })
+      map.fitBounds([[w, s], [e, n]], { padding: fitPadding(), maxZoom: 10, duration: 600 })
     }
   })
 
@@ -181,7 +195,8 @@
   onMount(() => {
     registerPmtiles(maplibregl, pmtiles)
     const m = new maplibregl.Map({
-      container: el, style, center: [-121, 36], zoom: 3.4, attributionControl: false, hash: false, renderWorldCopies: true,
+      // the whole globe on a first visit; the flat map opens closer, as before
+      container: el, style, center: [-121, 36], zoom: proj === 'globe' ? 2 : 3.4, attributionControl: false, hash: false, renderWorldCopies: true,
     })
     map = m
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
@@ -193,7 +208,6 @@
       applyTheme(m, theme.dark)
       m.setProjection({ type: proj })
       projCtrl.set(proj)
-      if (fit && !highlight) m.fitBounds([[fit[0], fit[1]], [fit[2], fit[3]]], { padding: 32, maxZoom: 10, duration: 0 })
       m.addSource(HL, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       const acc = '#f5b528'   // the brand's one warm spark (oceanmetrics.io/brand/v1)
       m.addLayer({ id: `${HL}-fill`, type: 'fill', source: HL, filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': acc, 'fill-opacity': 0.25 } }, LABELS_BELOW)
@@ -244,7 +258,7 @@
 
   /** let a parent move the map. */
   export function fitTo(b: BBox) {
-    map?.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 48, maxZoom: 10, duration: 600 })
+    map?.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: fitPadding(), maxZoom: 10, duration: 600 })
   }
 </script>
 

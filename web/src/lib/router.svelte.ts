@@ -1,4 +1,5 @@
 // a tiny history router: the URL is the single source of truth (path = page, query = map state)
+import { carryView } from './grammar'
 import { matchRoute, type Route } from './helpers'
 
 export const loc = $state({ path: location.pathname, search: location.search })
@@ -7,9 +8,12 @@ export const route = (): Route => matchRoute(loc.path)
 
 const sync = () => { loc.path = location.pathname; loc.search = location.search }
 
-/** go to an in-app url; `replace` rewrites the current history entry (used for map state, which should not flood history). */
+/**
+ * go to an in-app url; `replace` rewrites the current history entry (used for map state, which should not flood history).
+ * a page change (not a replace) keeps the carried view settings, e.g. `proj=mercator`.
+ */
 export function navigate(url: string, opts: { replace?: boolean } = {}) {
-  const u = new URL(url, location.href)
+  const u = new URL(opts.replace ? url : carryView(url, location.search), location.href)
   history[opts.replace ? 'replaceState' : 'pushState'](null, '', u.pathname + u.search + u.hash)
   sync()
   if (!opts.replace) window.scrollTo(0, 0)
