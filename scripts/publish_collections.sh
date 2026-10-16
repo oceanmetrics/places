@@ -184,13 +184,37 @@ if mine:
 print(f"gate ok: no errors in the publish set ({elsewhere} pre-existing error lines elsewhere in the pulled tree)")
 PYEOF
 
-# 7. upload (no --delete anywhere; root files last) ----
+# 7. upload (no --delete anywhere; root files last, merged into the live ones) ----
 if [[ $do_upload -eq 1 ]]; then
   for s in $slugs; do
     aws s3 sync "$dir_pub/$s/" "$s3_dest/$s/" --exclude '.portolan/*'
   done
-  aws s3 cp "$dir_pub/versions.json" "$s3_dest/versions.json" --content-type application/json
-  aws s3 cp "$dir_pub/catalog.json"  "$s3_dest/catalog.json"  --content-type application/json
+  # the root files: the bucket has other publishers (erddap-places places/, erddap/, stats/ ...) and `aws s3 sync` keeps a
+  # same-size local copy, so the pulled ones can be stale (on 2026-10-16 an upload of them put places back to 1.2.0).
+  # fetch the live ones now and change only the publish set's entries and child links
+  root_v="$(mktemp)"; root_c="$(mktemp)"
+  aws s3 cp "$s3_dest/versions.json" "$root_v" --only-show-errors
+  aws s3 cp "$s3_dest/catalog.json"  "$root_c" --only-show-errors
+  python3 - "$root_v" "$root_c" "$dir_pub" "$slugs" <<'PYEOF'
+import json, os, sys
+root_v, root_c, d, slugs = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4].split()
+live_v, mine_v = json.load(open(root_v)), json.load(open(os.path.join(d, "versions.json")))
+for s in slugs:
+    live_v["collections"][s] = mine_v["collections"][s]
+live_v["updated"] = max(live_v.get("updated") or "", mine_v.get("updated") or "")
+live_c, mine_c = json.load(open(root_c)), json.load(open(os.path.join(d, "catalog.json")))
+have = {l.get("href") for l in live_c["links"]}
+live_c["links"] += [l for l in mine_c["links"] if l.get("rel") == "child" and l.get("href") not in have
+                    and l["href"].split("/")[1] in slugs]
+for f, obj, kw in ((root_v, live_v, {}), (root_c, live_c, {"ensure_ascii": False})):
+    with open(f, "w") as fh:
+        json.dump(obj, fh, indent=2, **kw); fh.write("\n")
+print("root files: updated", " ".join(slugs), "in the live versions.json /", len(live_c["links"]), "catalog links")
+PYEOF
+  aws s3 cp "$root_v" "$s3_dest/versions.json" --content-type application/json
+  aws s3 cp "$root_c" "$s3_dest/catalog.json"  --content-type application/json
+  cp "$root_v" "$dir_pub/versions.json"; cp "$root_c" "$dir_pub/catalog.json"
+  rm -f "$root_v" "$root_c"
   for s in $slugs; do
     code=$(curl -s -o /dev/null -w "%{http_code}" -L "https://storage.oceanmetrics.io/gazetteer/$s/collection.json")
     echo "verify $s collection.json: $code"
