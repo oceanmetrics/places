@@ -127,6 +127,15 @@ def test_local_rows_take_created_from_the_published_ledger(tmp_path):
   assert bl.local_rows(tmp_path, fetch=boom)[0]["created"] == "2026-09-01"  # a staged ledger wins
 
 
+def test_legacy_places_layer_gets_a_real_title_regression():
+  # erddap-places' `places` was published with the portolan default title "Places"; the site credited sanctuaries to it
+  row = bl.layer_row({**COLL, "id": "places", "title": "Places"})
+  assert row["title"].startswith("erddap-places statistics places")
+  assert row["title"] in row["citation"]
+  assert bl.layer_row({**COLL, "id": "places", "title": "Sanctuaries for erddap-places"})["title"] == "Sanctuaries for erddap-places"
+  assert bl.layer_row(COLL)["title"] == "Acme leases"
+
+
 def test_style_overrides_default_paint():
   style = {"layers": [{"id": "a", "type": "fill", "paint": {"fill-color": "#123456", "fill-opacity": 0.8}}]}
   paint = bl.layer_row(COLL, style)["paint"]

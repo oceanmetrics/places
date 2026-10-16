@@ -125,6 +125,28 @@ def test_bbox_and_type_fall_back_to_the_geometry_when_the_columns_are_absent(tmp
   assert rows[0]["name"] is None and rows[0]["license"] is None
 
 
+def test_legacy_places_rows_get_a_place_type_from_the_id_prefix_regression(tmp_path):
+  # erddap-places' `places` has no place_type column or gazetteer:place_type: its rows showed "NMS · · 15,790 km²"
+  d = tmp_path / "st" / "places"
+  d.mkdir(parents=True)
+  ids = ["MRGID:8439", "NMS:MBNMS", "PSGID:939"]
+  geoms = [square(i * 5, 0) for i in range(3)]
+  pq.write_table(pa.table({"place_id": ids, "geometry": pa.array([shapely.to_wkb(g) for g in geoms], type=pa.binary())}), d / "places.parquet")
+  (d / "collection.json").write_text(json.dumps({"id": "places", "title": "Places"}))
+  _, _, rows, _ = run(tmp_path / "st", tmp_path / "out")
+  assert {r["place_id"]: (r["authority"], r["place_type"]) for r in rows} == {
+    "MRGID:8439": ("MRGID", "eez"), "NMS:MBNMS": ("NMS", "protected_area"), "PSGID:939": ("PSGID", "protected_area")}
+
+
+def test_a_place_type_column_wins_over_the_legacy_table(tmp_path):
+  d = tmp_path / "st" / "places"
+  d.mkdir(parents=True)
+  pq.write_table(pa.table({"place_id": ["NMS:MBNMS"], "place_type": ["sanctuary"],
+                           "geometry": pa.array([shapely.to_wkb(square(0, 0))], type=pa.binary())}), d / "places.parquet")
+  _, _, rows, _ = run(tmp_path / "st", tmp_path / "out")
+  assert rows[0]["place_type"] == "sanctuary"
+
+
 def test_dateline_crossing_place_gets_the_unwrapped_bbox_and_a_wrapped_centroid(tmp_path):
   """regression: a place stored split at +/-180 had bbox -180..180, useless for fitBounds; xmax may now exceed 180."""
   split = shapely.MultiPolygon([Polygon([(177, 10), (180, 10), (180, 14), (177, 14)]),      # east of the antimeridian cut

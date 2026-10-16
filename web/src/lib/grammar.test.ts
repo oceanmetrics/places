@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSearch, parseLayers, parseView, serializeLayers } from './grammar'
+import { buildSearch, carryView, parseLayers, parseView, serializeLayers } from './grammar'
 
 describe('layers= grammar', () => {
   it('parses slug-only entries in order', () => {
@@ -92,6 +92,14 @@ describe('view in the query string', () => {
     expect(buildSearch({ layers: null }, '?theme=dark&layers=a')).toBe('?theme=dark')
     expect(buildSearch({ layers: [] })).toBe('?layers=off')
     expect(buildSearch({}, '')).toBe('')
+  })
+
+  it('carries proj=mercator to another page unless the target sets proj itself', () => {
+    expect(carryView('/p/NMS:MBNMS', '?layers=a&proj=mercator')).toBe('/p/NMS:MBNMS?proj=mercator')
+    expect(carryView('/?layers=b&place=X:1', '?proj=mercator')).toBe('/?layers=b&place=X:1&proj=mercator')
+    expect(carryView('/l/a?base=http://x/#top', '?proj=mercator')).toBe('/l/a?base=http://x/&proj=mercator#top')
+    expect(carryView('/p/X:1?proj=globe', '?proj=mercator')).toBe('/p/X:1?proj=globe')
+    expect(carryView('/credits', '?layers=a')).toBe('/credits')
   })
 
   it('defaults to the globe; proj=mercator is the only value written', () => {

@@ -32,6 +32,7 @@ import shapely
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from gazetteer.bbox import union_bbox, wrap_bbox  # noqa: E402
+from gazetteer.legacy import legacy_place_type  # noqa: E402
 
 BASE = "https://storage.oceanmetrics.io/gazetteer/"
 ROW_GROUP = 5000
@@ -284,7 +285,7 @@ def batch_rows(batch: pa.RecordBatch, src: Source) -> tuple[dict, list[dict]]:
   row_auth = _strs(_col(batch, cols, "authority") if "authority" in cols else _col(batch, cols, "gazetteer"), n)
   authority = [row_auth[i] or squash(coll.get("gazetteer:authority")) or authority_of(ids[i]) for i in range(n)]
   row_pt = _strs(_col(batch, cols, "place_type"), n)
-  place_type = [v or squash(coll.get("gazetteer:place_type")) for v in row_pt]
+  place_type = [v or squash(coll.get("gazetteer:place_type")) or legacy_place_type(src.slug, ids[i]) for i, v in enumerate(row_pt)]
   row_lic = _strs(_col(batch, cols, "license"), n)
   lic = [v or squash(coll.get("license")) for v in row_lic]
   row_att = _strs(_col(batch, cols, "attribution"), n)
