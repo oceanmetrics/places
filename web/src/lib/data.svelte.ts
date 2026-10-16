@@ -24,10 +24,13 @@ export function loadManifest(): Promise<void> {
   return started
 }
 
-/** search the places index, optionally within collections; on failure (e.g. the index is not published yet) mark it and return []. */
+/**
+ * search the places index, optionally within collections, one hit per place (copies of a place in other layers are in
+ * the hit's `also`); on failure (e.g. the index is not published yet) mark it and return [].
+ */
 export async function searchPlaces(q: string, limit = 12, collection?: string[]): Promise<IndexPlace[]> {
   try {
-    const r = await search(q, { limit, collection })
+    const r = await search(q, { limit, collection, group: true })
     index.status = 'ok'
     return r
   } catch (e) {

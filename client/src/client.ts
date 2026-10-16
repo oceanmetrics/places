@@ -56,6 +56,26 @@ export function layerLabel(layer: Pick<Layer, 'title'> & { status_label?: string
 }
 
 /** the credit line for attribution strings: deduped; the shared "Processed by Ocean Metrics." said once at the end. */
+/**
+ * collapse copies of one place (same `group_id`) into one hit at the position of its first copy: the copy with the
+ * lowest `rank` is shown (ties keep the search order) and the others go to its `also`, in rank order.
+ * hits without a group_id pass through. the input rows are not modified.
+ */
+export function groupHits(hits: IndexPlace[], rank: (p: IndexPlace) => number = () => 0): IndexPlace[] {
+  const groups = new Map<string, IndexPlace[]>()
+  const order: Array<IndexPlace | string> = []
+  for (const h of hits) {
+    if (!h.group_id) { order.push(h); continue }
+    if (!groups.has(h.group_id)) { groups.set(h.group_id, []); order.push(h.group_id) }
+    groups.get(h.group_id)!.push(h)
+  }
+  return order.map((o) => {
+    if (typeof o !== 'string') return o
+    const [best, ...rest] = groups.get(o)!.map((h, i) => [h, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((x) => x[0])
+    return rest.length ? { ...best, also: rest } : best
+  })
+}
+
 export function creditLine(parts: string[]): string {
   const seen = new Set<string>(), cores: string[] = []
   let processed = false
@@ -149,6 +169,7 @@ export function createClient(initial: ClientConfig = {}) {
           area_km2: r.area_km2 == null ? null : Number(r.area_km2), license: r.license ?? null,
           attribution: r.attribution ?? null, version: r.version ?? null,
           updated: r.updated == null ? null : (plain(r.updated) as string),
+          group_id: r.group_id == null ? null : String(r.group_id),
         })))
       indexP.catch(() => { indexP = null })
     }
@@ -182,7 +203,30 @@ export function createClient(initial: ClientConfig = {}) {
     }
     scored.sort((a, b) => a[0] - b[0] || (b[1].area_km2 ?? 0) - (a[1].area_km2 ?? 0) || a[1].name.localeCompare(b[1].name)
       || a[1].collection.localeCompare(b[1].collection))
-    return scored.slice(0, limit).map((s) => s[1])
+    const hits = scored.map((s) => s[1])
+    return (opts.group ? groupHits(hits, await copyRank(opts.prefer)) : hits).slice(0, limit)
+  }
+
+  /** a sort key for copies of one place: position in `prefer`, then the layer's `search_rank` (layers.json). */
+  async function copyRank(prefer: string[] = []): Promise<(p: IndexPlace) => number> {
+    let ranks = new Map<string, number>()
+    try { ranks = new Map((await listLayers()).map((l) => [l.collection, l.search_rank ?? 0])) } catch { /* no manifest: rank 0 */ }
+    return (p) => {
+      const i = prefer.indexOf(p.collection)
+      return (i < 0 ? prefer.length : i) * 100 + (ranks.get(p.collection) ?? 0)
+    }
+  }
+
+  /**
+   * the other copies of a place (same `group_id`, other rows), in preference order; [] when it has none.
+   * `slug` picks the row when the place_id is in several collections.
+   */
+  async function samePlace(placeId: string, opts: { slug?: string; prefer?: string[] } = {}): Promise<IndexPlace[]> {
+    const rows = await loadIndex()
+    const me = rows.find((r) => r.place_id === placeId && (!opts.slug || r.collection === opts.slug))
+    if (!me?.group_id) return []
+    const rank = await copyRank(opts.prefer)
+    return rows.filter((r) => r.group_id === me.group_id && r !== me).sort((a, b) => rank(a) - rank(b))
   }
 
   // places ----
@@ -259,7 +303,7 @@ export function createClient(initial: ClientConfig = {}) {
     return creditLine(parts)
   }
 
-  return { configure, listLayers, getLayer, addLayer, removeLayer, search, getPlace, creditsFor }
+  return { configure, listLayers, getLayer, addLayer, removeLayer, search, samePlace, getPlace, creditsFor }
 }
 
 // the default client ----
@@ -270,5 +314,6 @@ export const getLayer = def.getLayer
 export const addLayer = def.addLayer
 export const removeLayer = def.removeLayer
 export const search = def.search
+export const samePlace = def.samePlace
 export const getPlace = def.getPlace
 export const creditsFor = def.creditsFor

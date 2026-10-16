@@ -69,12 +69,12 @@ describe('search', () => {
       collection: 'fx_leases', bbox: [-124, 33, -123, 34],
       centroid: [-123.5, 33.5], area_km2: expect.any(Number), license: 'CC-PDDC',
       attribution: 'Fixture Agency, via MarineCadastre. Processed by Ocean Metrics.', version: '1.0.3',
-      updated: '2026-10-01T12:00:00Z',
+      updated: '2026-10-01T12:00:00Z', group_id: null,
     })
   })
   it('reads the centroid from the live centroid_lon / centroid_lat columns (regression: it was always null)', async () => {
     const hits = await c.search('', { limit: 100 })
-    expect(hits.length).toBe(9)
+    expect(hits.length).toBe(10)
     expect(hits.every((p) => p.centroid !== null && p.collection !== '' && p.geom_type !== null)).toBe(true)
     expect((await c.search('delta'))[0].centroid).toEqual([-117.5, 39.5])
   })
@@ -96,8 +96,33 @@ describe('search', () => {
   it('filters by collection, one slug or several', async () => {
     expect((await c.search('FX:C-3', { collection: 'fx_aoa' })).map((p) => [p.collection, p.name])).toEqual([['fx_aoa', 'Charlie lease (AOA copy)']])
     expect((await c.search('lease', { collection: ['fx_leases'] })).every((p) => p.collection === 'fx_leases')).toBe(true)
-    expect((await c.search('', { collection: [], limit: 100 })).length).toBe(9)
+    expect((await c.search('', { collection: [], limit: 100 })).length).toBe(10)
     expect((await c.search('', { collection: 'no_such_slug' })).length).toBe(0)
+  })
+  it('lists every copy of a place without `group`', async () => {
+    const hits = await c.search('zulu')
+    expect(hits.map((p) => [p.collection, p.place_id, p.group_id])).toEqual([
+      ['fx_aoa', 'AOA:Z9', 'fx_aoa/AOA:Z9'], ['fx_leases', 'FX:Z-9', 'fx_aoa/AOA:Z9']])
+  })
+  it('with `group`, shows the copy with the lower search_rank and lists the others in `also`', async () => {
+    const [h, ...rest] = await c.search('zulu', { group: true })
+    expect(rest).toEqual([])
+    expect([h.collection, h.place_id, h.also?.map((p) => p.place_id)]).toEqual(['fx_leases', 'FX:Z-9', ['AOA:Z9']])
+  })
+  it('`prefer` overrides search_rank (an app that wants its own copy)', async () => {
+    const [h] = await c.search('zulu', { group: true, prefer: ['fx_aoa'] })
+    expect([h.place_id, h.also?.map((p) => p.place_id)]).toEqual(['AOA:Z9', ['FX:Z-9']])
+  })
+  it('grouping does not touch places without copies, nor the cached index rows', async () => {
+    const all = await c.search('', { group: true, limit: 100 })
+    expect(all.length).toBe(9)
+    expect((await c.search('zulu')).every((p) => p.also === undefined)).toBe(true)
+  })
+  it('samePlace lists the other copies, [] for a place with none', async () => {
+    expect((await c.samePlace('AOA:Z9')).map((p) => [p.collection, p.place_id])).toEqual([['fx_leases', 'FX:Z-9']])
+    expect((await c.samePlace('FX:Z-9', { slug: 'fx_leases' })).map((p) => p.place_id)).toEqual(['AOA:Z9'])
+    expect(await c.samePlace('FX:A-1')).toEqual([])
+    expect(await c.samePlace('NOPE:1')).toEqual([])
   })
   it('filters by bbox, including one that crosses the antimeridian', async () => {
     expect((await c.search('', { bbox: [-125, 32.5, -122.5, 34.5] })).map((p) => p.place_id)).toEqual(['FX:A-1'])

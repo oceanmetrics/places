@@ -45,7 +45,7 @@ def test_row_exact():
     "citation": "Acme Agency, via MarineCadastre. Public domain. Processed by Ocean Metrics. Acme leases, v1.0.3. "
                 "Ocean Metrics gazetteer, 2026. https://storage.oceanmetrics.io/gazetteer/acme_leases/",
     # an older collection (no layer status, no parquet asset, no ledger) keeps the new keys, all null
-    "status": None, "status_history": None, "status_label": None, "created": None, "source_date": None,
+    "status": None, "status_history": None, "status_label": None, "search_rank": 0, "created": None, "source_date": None,
     "parquet": None, "parquet_sha256": None, "h3": None,
   }
 
@@ -125,6 +125,11 @@ def test_local_rows_take_created_from_the_published_ledger(tmp_path):
   assert bl.local_rows(tmp_path, fetch=boom)[0]["created"] is None
   (d / "versions.json").write_text(json.dumps({"versions": [{"version": "0.9.0", "created": "2026-09-01T00:00:00Z"}]}))
   assert bl.local_rows(tmp_path, fetch=boom)[0]["created"] == "2026-09-01"  # a staged ledger wins
+
+
+def test_search_rank_puts_the_agency_layer_before_aggregators_and_legacy_copies():
+  rank = lambda slug: bl.layer_row({**COLL, "id": slug})["search_rank"]
+  assert (rank("noaa_sanctuaries"), rank("mpa_inventory"), rank("noaa_hapc"), rank("places")) == (0, 1, 1, 2)
 
 
 def test_legacy_places_layer_gets_a_real_title_regression():

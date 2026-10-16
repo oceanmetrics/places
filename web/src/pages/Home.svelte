@@ -2,7 +2,7 @@
   import { getPlace, layerLabel, type IndexPlace, type PlaceFeature } from '@oceanmetrics/places'
   import { BASE, index, manifest, searchPlaces } from '../lib/data.svelte'
   import { buildSearch, parseView, type LayerSel } from '../lib/grammar'
-  import { collectionDir, defaultColour, fmtDate, fmtN, groupByAuthority, layerPath, placePath, sanitizeHtml, withBase } from '../lib/helpers'
+  import { collectionDir, defaultColour, fmtDate, fmtLonLat, fmtN, groupByAuthority, layerPath, placePath, sanitizeHtml, withBase } from '../lib/helpers'
   import { loc, navigate } from '../lib/router.svelte'
 
   // the URL is the state: layers=… and place=… are read here and written back with replaceState ----
@@ -81,12 +81,19 @@
       .catch((e: unknown) => { if (my === pt) placeError = `Place ${id} could not be read: ${(e as Error).message}` })
   })
   const pickHit = (h: IndexPlace) => write({ place: h.place_id })
-  // a hit's second line: its layer (the same place can be in several), type and area; empty parts are left out
-  const hitLine = (h: IndexPlace) => {
-    const l = manifest.layers.find((x) => x.collection === h.collection)
-    return [l ? layerLabel(l) : h.collection, h.place_type, h.area_km2 ? `${fmtN(Math.round(h.area_km2))} km²` : '']
-      .filter(Boolean).join(' · ')
-  }
+  // a hit's second line: its layer, type, area, and its position when another hit has the same name (homonyms,
+  // zones split into parts); copies of the same place in other layers are grouped under the hit (`also`) ----
+  const layerOf = (h: IndexPlace) => { const l = manifest.layers.find((x) => x.collection === h.collection); return l ? layerLabel(l) : h.collection }
+  const repeated = $derived.by(() => {
+    const n = new Map<string, number>()
+    for (const h of hits) { const k = h.name.trim().toLowerCase(); n.set(k, (n.get(k) ?? 0) + 1) }
+    return new Set([...n].filter(([, c]) => c > 1).map(([k]) => k))
+  })
+  const hitLine = (h: IndexPlace) =>
+    [layerOf(h), h.place_type, h.area_km2 ? `${fmtN(Math.round(h.area_km2))} km²` : '',
+     repeated.has(h.name.trim().toLowerCase()) ? fmtLonLat(h.centroid) : ''].filter(Boolean).join(' · ')
+  const hitKey = (h: IndexPlace) => `${h.collection}/${h.place_id}`
+  let openCopies = $state<string | null>(null)
 
   // the one open layer-info card in the list (a second click, another row, or Esc closes it) ----
   let info = $state<string | null>(null)
@@ -132,12 +139,25 @@
       <section aria-live="polite">
         <h2>Places {searching ? '…' : `(${hits.length})`}</h2>
         <ul class="hits">
-          {#each hits as h (h.place_id)}
+          {#each hits as h (hitKey(h))}
             <li>
               <button type="button" onclick={() => pickHit(h)}>
                 <strong>{h.name}</strong>
                 <span class="muted">{hitLine(h)}</span>
               </button>
+              {#if h.also?.length}
+                <button type="button" class="copies" aria-expanded={openCopies === hitKey(h)}
+                  onclick={() => (openCopies = openCopies === hitKey(h) ? null : hitKey(h))}>
+                  {openCopies === hitKey(h) ? '▾' : '▸'} also in {h.also.length} other layer{h.also.length > 1 ? 's' : ''}
+                </button>
+                {#if openCopies === hitKey(h)}
+                  <ul class="also">
+                    {#each h.also as a (hitKey(a))}
+                      <li><button type="button" onclick={() => pickHit(a)}>{layerOf(a)}<span class="muted"> · {a.place_id}</span></button></li>
+                    {/each}
+                  </ul>
+                {/if}
+              {/if}
             </li>
           {:else}
             {#if !searching}<li class="muted">No places match.</li>{/if}
@@ -270,6 +290,13 @@
   .hits button { all: unset; display: block; width: 100%; box-sizing: border-box; cursor: pointer; padding: 6px 4px; border-bottom: 1px solid var(--border); }
   .hits button:hover, .hits button:focus-visible { background: var(--bg-tint); }
   .hits span { display: block; font-size: 12px; }
+  .hits li { border-bottom: 1px solid var(--border); }
+  .hits li > button:first-child { border-bottom: 0; }
+  .hits .copies { all: unset; cursor: pointer; display: block; padding: 0 4px 6px; font-size: 12px; color: var(--link); }
+  .hits .also { margin: 0 0 6px 12px; }
+  .hits .also button { all: unset; cursor: pointer; display: block; padding: 3px 4px; font-size: 12px; border: 0; }
+  .hits .also button:hover, .hits .copies:hover { text-decoration: underline; }
+  .hits .also span { display: inline; }
   .layers label { display: flex; gap: 8px; align-items: center; padding: 4px 0; cursor: pointer; }
   .lrow { display: flex; align-items: center; gap: 4px; }
   .lrow label { flex: 1; min-width: 0; }

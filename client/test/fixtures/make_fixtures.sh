@@ -31,7 +31,9 @@ SELECT * FROM (VALUES
   ('AOA:N1', 'AOA', 'N1', 'Northern aquaculture area', 'aoa', 'identified', 'POLYGON((-123 36,-122 36,-122 37,-123 37,-123 36))'),
   ('AOA:S2', 'AOA', 'S2', 'Southern aquaculture area', 'aoa', 'identified', 'POLYGON((-119 32,-118 32,-118 33,-119 33,-119 32))'),
   -- the same place_id as in fx_leases, in another collection (BOEM:OCS-P 0562 is in two live collections)
-  ('FX:C-3', 'AOA', 'C-3', 'Charlie lease (AOA copy)', 'lease', 'identified', 'POLYGON((-90 28,-89 28,-89 29,-90 29,-90 28))')
+  ('FX:C-3', 'AOA', 'C-3', 'Charlie lease (AOA copy)', 'lease', 'identified', 'POLYGON((-90 28,-89 28,-89 29,-90 29,-90 28))'),
+  -- the same place as FX:Z-9 in fx_leases (same name and polygon): one group_id, as build_index.py writes it
+  ('AOA:Z9', 'AOA', 'Z9', 'Zulu lease', 'lease', 'identified', 'POLYGON((-100 25,-99 25,-99 26,-100 26,-100 25))')
 ) t(place_id, authority, source_id, name, place_type, status, wkt);
 COPY (
   SELECT place_id, authority, source_id, name, place_type, status,
@@ -50,7 +52,7 @@ COPY (
 --   duckdb -c "DESCRIBE SELECT * FROM read_parquet('https://storage.oceanmetrics.io/gazetteer/index/places_index.parquet')"
 -- place_id varchar, name varchar, authority varchar, place_type varchar, geom_type varchar, collection varchar,
 -- bbox struct(xmin double, ymin double, xmax double, ymax double), centroid_lon double, centroid_lat double,
--- area_km2 double, license varchar, attribution varchar, version varchar, updated varchar.
+-- area_km2 double, license varchar, attribution varchar, version varchar, updated varchar, group_id varchar.
 -- a place cut at the antimeridian (FX:PM) carries the UNWRAPPED bbox and centroid (beyond 180), as build_index.py writes them.
 COPY (
   SELECT place_id::VARCHAR AS place_id, name::VARCHAR AS name, authority::VARCHAR AS authority, place_type::VARCHAR AS place_type,
@@ -64,7 +66,8 @@ COPY (
          (CASE collection WHEN 'fx_leases' THEN 'Fixture Agency, via MarineCadastre. Processed by Ocean Metrics.'
                           ELSE 'NOAA AOA program. Processed by Ocean Metrics.' END)::VARCHAR AS attribution,
          (CASE collection WHEN 'fx_leases' THEN '1.0.3' ELSE '2.0.0' END)::VARCHAR AS version,
-         '2026-10-01T12:00:00Z'::VARCHAR AS updated
+         '2026-10-01T12:00:00Z'::VARCHAR AS updated,
+         (CASE WHEN place_id IN ('FX:Z-9', 'AOA:Z9') THEN 'fx_aoa/AOA:Z9' END)::VARCHAR AS group_id
   FROM (SELECT 'fx_leases' AS collection, * FROM read_parquet('fx_leases/places.parquet')
         UNION ALL BY NAME SELECT 'fx_aoa' AS collection, * FROM read_parquet('fx_aoa/places.parquet'))
   ORDER BY collection, place_id

@@ -51,6 +51,9 @@ export interface Layer {
   status_history? : LayerStatus[] | null
   /** 'rescinded 2025-07-30' (value with '_' as space, then the date): show it as `${title} (${status_label})`, see `layerLabel`. */
   status_label?   : string | null
+  /** which copy of a place to show when it is in several layers (lower first): 0 the agency's own layer, 1 layers that
+   * re-use other agencies' boundaries (MPA Inventory, HAPCs), 2 legacy copies. absent in older manifests (= 0). */
+  search_rank?    : number | null
   /** ISO date of the collection's first published version. */
   created?        : string | null
   /** latest upstream data edit date across the collection's sources (ISO date). */
@@ -96,6 +99,10 @@ export interface IndexPlace {
   attribution: string | null
   version   : string | null
   updated   : string | null
+  /** rows that are the same place in different collections share it (null: no other copy). see `search({ group })`. */
+  group_id  : string | null
+  /** with `search({ group: true })`: the other copies of this place, in preference order. */
+  also?     : IndexPlace[]
 }
 
 export interface SearchOptions {
@@ -106,6 +113,10 @@ export interface SearchOptions {
   /** keep places of these collection slugs (an index row's `collection`, a layers.json `collection`). */
   collection?: string | string[]
   limit?    : number
+  /** one hit per place: copies sharing a `group_id` collapse into the preferred one, the rest go to its `also`. */
+  group?    : boolean
+  /** collection slugs to prefer when grouping, first wins; then layers.json `search_rank`, then the search order. */
+  prefer?   : string[]
 }
 
 /**

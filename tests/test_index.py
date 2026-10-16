@@ -91,13 +91,14 @@ def test_index_rows_exact(staging, tmp_path):
     "geom_type": "MultiPolygon", "collection": "noaa_mpa_inventory",
     "bbox": {"xmin": -120.0, "ymin": 30.0, "xmax": -118.0, "ymax": 32.0},
     "centroid_lon": -119.0, "centroid_lat": 31.0, "area_km2": 10.5, "license": "CC-PDDC",
-    "attribution": "NOAA MPA Center", "version": "1.0.0", "updated": "2026-10-01T00:00:00Z"}
-  assert by["MPA:BBB2"]["area_km2"] is None  # null where absent
+    "attribution": "NOAA MPA Center", "version": "1.0.0", "updated": "2026-10-01T00:00:00Z", "group_id": None}
+  # no area column value: the geodesic area of the polygon (a 4 x 4 degree square at 33-37 N)
+  assert 161_000 < by["MPA:BBB2"]["area_km2"] < 163_000      # about 444 km x 365 km
   # no row columns for these: collection metadata fills them; squash() collapses the doubled space
   b = by["MRGID:8439"]
   assert (b["authority"], b["place_type"], b["license"], b["version"], b["geom_type"]) == ("MRGID", "eez", "CC-BY-4.0", "2.0.0", "MultiPolygon")
   assert b["attribution"] == "Flanders Marine Institute (VLIZ)."
-  assert b["area_km2"] is None
+  assert b["area_km2"] > 0
   # geometry-derived type and centroid for a line without a geom_type column
   line = by["PSGID:77"]
   assert (line["geom_type"], line["centroid_lon"], line["centroid_lat"]) == ("LineString", 0.0, 2.0)
@@ -123,6 +124,32 @@ def test_bbox_and_type_fall_back_to_the_geometry_when_the_columns_are_absent(tmp
   assert rows[0]["bbox"] == {"xmin": 10.0, "ymin": 10.0, "xmax": 14.0, "ymax": 14.0}
   assert (rows[0]["geom_type"], rows[0]["authority"], rows[0]["centroid_lon"]) == ("Polygon", "X", 12.0)
   assert rows[0]["name"] is None and rows[0]["license"] is None
+
+
+def test_area_is_geodesic_for_polygons_and_null_for_lines_and_points_regression(tmp_path):
+  # only erddap-places' `places` had area_km2 (20 of 14,730 rows), so search's larger-area tiebreak floated it up
+  d = tmp_path / "st" / "mixed"
+  d.mkdir(parents=True)
+  geoms = [square(0, 0, 1.0), LineString([(0, 0), (1, 1)]), shapely.Point(3, 3)]
+  pq.write_table(pa.table({"place_id": ["X:poly", "X:line", "X:pt"],
+                           "geometry": pa.array([shapely.to_wkb(g) for g in geoms], type=pa.binary())}), d / "places.parquet")
+  _, _, rows, _ = run(tmp_path / "st", tmp_path / "out")
+  by = {r["place_id"]: r["area_km2"] for r in rows}
+  assert 12_300 < by["X:poly"] < 12_320          # 1 x 1 degree at the equator, WGS84: 12,308.8 km2
+  assert by["X:line"] is None and by["X:pt"] is None
+
+
+def test_the_same_place_in_two_collections_shares_a_group_id(tmp_path):
+  for slug, pid in (("noaa_sanctuaries", "ONMS:mbnms"), ("mpa_inventory", "MPAINV:NMS11")):
+    d = tmp_path / "st" / slug
+    d.mkdir(parents=True)
+    pq.write_table(pa.table({"place_id": [pid, f"{pid}-other"], "name": ["Monterey Bay NMS", "Elsewhere"],
+                             "geometry": pa.array([shapely.to_wkb(square(-123, 35)), shapely.to_wkb(square(10 if slug == "mpa_inventory" else 20, 0))],
+                                                  type=pa.binary())}), d / "places.parquet")
+  _, _, rows, _ = run(tmp_path / "st", tmp_path / "out")
+  by = {r["place_id"]: r["group_id"] for r in rows}
+  assert by["ONMS:mbnms"] == by["MPAINV:NMS11"] == "mpa_inventory/MPAINV:NMS11"
+  assert by["ONMS:mbnms-other"] is None and by["MPAINV:NMS11-other"] is None
 
 
 def test_legacy_places_rows_get_a_place_type_from_the_id_prefix_regression(tmp_path):

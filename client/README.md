@@ -89,6 +89,10 @@ larger `area_km2`. Options: `bbox: [west, south, east, north]` (west > east cros
 `authority`, `collection` (each a string or array; `collection` = layer slug, to search within layers), `limit`
 (default 20). An empty `q` lists by filter.
 
+The same place can be in several layers (index `group_id`). `group: true` returns one hit per place, the copy with
+the lowest layers.json `search_rank` first and the other copies in `also`; `prefer: ['places']` puts an app's own
+copy first. `samePlace(placeId, { slug })` lists the other copies of one place.
+
 ```ts
 const hits = await search('humboldt', { type: 'lease', authority: 'BOEM', bbox: [-125, 38, -123, 42], limit: 10 })
 // [{ place_id, name, authority, place_type, geom_type, collection, bbox, centroid: [lon, lat], area_km2, license,

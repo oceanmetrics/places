@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0
+
+- Same place, several layers: index rows carry `group_id` (the same place in different collections, e.g. Florida
+  Keys NMS in `noaa_sanctuaries`, `mpa_inventory`, `noaa_hapc` and erddap-places' `places`, or listed twice in one).
+  `IndexPlace.group_id` is null for a place with no other copy.
+- `search(q, { group: true })` returns one hit per place: the copy with the lowest layers.json `search_rank` (0 the
+  agency's own layer, 1 layers re-using other agencies' boundaries, 2 legacy copies), the others in `also`.
+  `prefer: [slug, ...]` overrides the order (erddap-places can prefer its own `places` copy).
+- New `samePlace(placeId, { slug, prefer })`: the other copies of a place, in preference order.
+- New `groupHits(hits, rank)` (pure) for apps that group their own lists.
+- `Layer.search_rank` (absent in older manifests = 0).
+- Data: `area_km2` is now filled for every polygon (geodesic, WGS84) where the source has none; it was null for all
+  but erddap-places' `places`, so the larger-area tiebreak always ranked that copy first.
+
 ## 0.1.4
 
 - `search()` takes `collection` (a slug or a list): keep only places of those collections, e.g. to search within one

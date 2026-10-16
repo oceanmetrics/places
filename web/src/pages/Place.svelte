@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { getPlace, layerLabel, type PlaceFeature } from '@oceanmetrics/places'
+  import { getPlace, layerLabel, samePlace, type IndexPlace, type PlaceFeature } from '@oceanmetrics/places'
   import { onMount } from 'svelte'
   import Credit from '../lib/Credit.svelte'
   import CopyButton from '../lib/CopyButton.svelte'
   import { BASE, manifest, loadManifest } from '../lib/data.svelte'
   import {
-    calcofiLink, erddapLink, fmtValue, geojsonSql, layerForPlace, layerPath, parquetUrl, sanitizeHtml, withBase,
+    calcofiLink, erddapLink, fmtValue, geojsonSql, layerForPlace, layerPath, parquetUrl, placePath, sanitizeHtml, withBase,
   } from '../lib/helpers'
 
   let { id }: { id: string } = $props()
@@ -13,12 +13,16 @@
   let feature = $state<PlaceFeature | null>(null)
   let status = $state<'loading' | 'ok' | 'missing' | 'error'>('loading')
   let message = $state('')
+  let copies = $state<IndexPlace[]>([])   // the same place in other layers (index group_id)
 
   onMount(async () => {
     await loadManifest()
     try {
       const f = await getPlace(id, { unwrap: true })
-      if (f) { feature = f; status = 'ok' } else status = 'missing'
+      if (f) {
+        feature = f; status = 'ok'
+        samePlace(id, { slug: f.collection }).then((c) => { copies = c }).catch(() => { copies = [] })
+      } else status = 'missing'
     } catch (e) {
       status = 'error'
       message = String((e as Error).message ?? e)
@@ -56,6 +60,17 @@
         <m.default highlight={feature} popups={false} />
       {/await}
     </div>
+
+    {#if copies.length}
+      <h2>Same place in other layers</h2>
+      <p class="muted">Each layer keeps its own boundary, version and licence.</p>
+      <ul class="copies">
+        {#each copies as c (c.collection + '/' + c.place_id)}
+          {@const cl = manifest.layers.find((l) => l.collection === c.collection)}
+          <li><a href={withBase(placePath(c.place_id), BASE)}>{cl ? layerLabel(cl) : c.collection}</a> <span class="muted">· {c.place_id}{c.version ? ` · v${c.version}` : ''}</span></li>
+        {/each}
+      </ul>
+    {/if}
 
     <h2>Metadata</h2>
     <table class="kv">
@@ -102,6 +117,7 @@
 </main>
 
 <style>
+  .copies { margin: 0 0 8px; padding-left: 1.2rem; }
   .mapbox { position: relative; height: 22rem; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 12px 0; }
   @media (max-width: 600px) { .mapbox { height: 16rem; } }
 </style>

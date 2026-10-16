@@ -43,6 +43,7 @@ from urllib.parse import urljoin
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+from gazetteer.dedup import search_rank  # noqa: E402
 from gazetteer.legacy import legacy_title  # noqa: E402
 
 BASE = "https://storage.oceanmetrics.io/gazetteer/"
@@ -231,6 +232,7 @@ def layer_row(coll: dict, style: dict | None = None, version: str | None = None,
     "status"          : status,
     "status_history"  : coll.get("gazetteer:status_history") or None,
     "status_label"    : status_label(status),
+    "search_rank"     : search_rank(slug),
     "created"         : created_date(ledger),
     "source_date"     : source_date(coll),
     "parquet"         : f"{base.rstrip('/')}/{slug}/places.parquet" if parquet_asset(coll) else None,

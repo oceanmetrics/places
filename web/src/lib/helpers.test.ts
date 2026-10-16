@@ -110,6 +110,15 @@ describe('theme', () => {
   })
 })
 
+describe('position label', () => {
+  it('formats lon/lat with hemispheres and wraps an unwrapped longitude', async () => {
+    const { fmtLonLat } = await import('./helpers')
+    expect(fmtLonLat([-81.42, 24.63])).toBe('24.6°N 81.4°W')
+    expect(fmtLonLat([188, -14.3])).toBe('14.3°S 172.0°W')
+    expect(fmtLonLat(null)).toBe('')
+  })
+})
+
 describe('formatting and sql', () => {
   it('formats counts, dates and values', () => {
     expect(fmtN(12345)).toBe('12,345')

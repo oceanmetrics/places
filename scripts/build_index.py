@@ -28,10 +28,12 @@ from urllib.parse import urljoin
 import pyarrow as pa
 import pyarrow.parquet as pq
 import shapely
+from pyproj import Geod
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from gazetteer.bbox import union_bbox, wrap_bbox  # noqa: E402
+from gazetteer.dedup import same_place_groups  # noqa: E402
 from gazetteer.legacy import legacy_place_type  # noqa: E402
 
 BASE = "https://storage.oceanmetrics.io/gazetteer/"
@@ -46,6 +48,7 @@ INDEX_SCHEMA = pa.schema([
   ("geom_type", pa.string()), ("collection", pa.string()), ("bbox", BBOX_T),
   ("centroid_lon", pa.float64()), ("centroid_lat", pa.float64()), ("area_km2", pa.float64()),
   ("license", pa.string()), ("attribution", pa.string()), ("version", pa.string()), ("updated", pa.string()),
+  ("group_id", pa.string()),
 ])
 XW_COLS = ["mrgid", "psgid", "wdpa_id", "mpainv_site_id", "mpatlas_id", "wikidata_qid", "gers_id"]
 XW_SCHEMA = pa.schema([("place_id", pa.string())] + [(c, pa.string()) for c in XW_COLS])
@@ -70,6 +73,18 @@ GEOM_NAMES = {0: "Point", 1: "LineString", 2: "LinearRing", 3: "Polygon", 4: "Mu
 
 # helpers ----
 EDGE = 1e-6
+GEOD = Geod(ellps="WGS84")
+POLYGONAL = {3, 6}   # shapely type ids of Polygon, MultiPolygon
+
+
+def geodesic_km2(geom) -> float | None:
+  """area on the WGS84 ellipsoid in km2 (3 dp) of a polygonal geometry, else None. a place stored split at +/-180
+  has the same area as its unwrapped parts, so the stored geometry is used as is."""
+  if geom is None or shapely.get_type_id(geom) not in POLYGONAL:
+    return None
+  a, _ = GEOD.geometry_area_perimeter(geom)
+  return round(abs(a) / 1e6, 3)
+
 
 
 def unwrap_crossing(geom):
@@ -302,13 +317,17 @@ def batch_rows(batch: pa.RecordBatch, src: Source) -> tuple[dict, list[dict]]:
   row_ver = _strs(_col(batch, cols, "version"), n)
   ver = [v or src.version for v in row_ver]
   updated = squash(coll.get("updated") or (coll.get("gazetteer:provenance") or {}).get("built"))
+  # area: the source's own column, else the geodesic area of a polygon (the search ranks and labels by it) ----
   area = _col(batch, cols, "area_km2")
   area = [None if v is None or v != v else float(v) for v in area.to_pylist()] if area is not None else [None] * n
+  if geoms is not None:
+    area = [a if a is not None else geodesic_km2(geoms[i]) if ok[i] else None for i, a in enumerate(area)]
 
   index = {
     "place_id": ids, "name": _strs(_col(batch, cols, "name"), n), "authority": authority, "place_type": place_type,
     "geom_type": geom_type, "collection": [src.slug] * n, "bbox": bbox, "centroid_lon": clon, "centroid_lat": clat,
     "area_km2": area, "license": lic, "attribution": att, "version": ver, "updated": [updated] * n,
+    "group_id": [None] * n,
   }
 
   # crosswalk: source columns, then the place_id prefix fills what is still unknown ----
@@ -360,10 +379,13 @@ def build(sources: list[Source], out: Path) -> dict:
     pend_x: list[dict] = []
 
     def flush_index():
+      # every row at once: group_id compares places across collections (gazetteer.dedup)
       nonlocal pend_i
       if pend_i:
-        iw.write_table(_table({k: sum((p[k] for p in pend_i), []) for k in INDEX_SCHEMA.names}, INDEX_SCHEMA),
-                       row_group_size=ROW_GROUP)
+        cols = {k: sum((p[k] for p in pend_i), []) for k in INDEX_SCHEMA.names}
+        keys = ("place_id", "name", "collection", "geom_type", "bbox")
+        cols["group_id"] = same_place_groups([dict(zip(keys, v)) for v in zip(*(cols[k] for k in keys))])
+        iw.write_table(_table(cols, INDEX_SCHEMA), row_group_size=ROW_GROUP)
         pend_i = []
 
     for src in sources:
@@ -383,8 +405,6 @@ def build(sources: list[Source], out: Path) -> dict:
           counts[src.slug] += batch.num_rows
           pend_i.append(index)
           pend_x.extend(xw)
-          if sum(len(p["place_id"]) for p in pend_i) >= ROW_GROUP:
-            flush_index()
       except (ValueError, OSError, pa.ArrowException) as e:
         print(f"warning: {src.slug}: skipped ({e})", file=sys.stderr)
       if src.coll.get("updated"):
@@ -464,8 +484,9 @@ One row per place ({sum(stats["counts"].values())} rows, row groups of {ROW_GROU
 | collection | utf8 | slug; the PMTiles/GeoParquet live at `<base><collection>/` |
 | bbox | struct | xmin, ymin, xmax, ymax (double). Convention: a place stored split at the antimeridian has the UNWRAPPED bbox, western parts shifted +360, so **xmax may exceed 180** (e.g. 177..199); fit bounds with it as is, wrap a longitude back with `((x + 540) % 360) - 180`. Other places have the stored bbox |
 | centroid_lon, centroid_lat | double | planar centroid of the stored geometry (bbox centre if absent). Same convention as the bbox: for a place stored split at the antimeridian it is the centroid of the UNWRAPPED parts, so `centroid_lon` may exceed 180 (e.g. 188) and lies inside the bbox |
-| area_km2 | double | null where the source has none |
+| area_km2 | double | the source's own area, else the geodesic (WGS84) area of a polygon; null for points and lines |
 | license, attribution, version, updated | utf8 | per row, from the collection |
+| group_id | utf8 | rows that are the same place in different collections (or listed twice in one) share it: same name after normalising, same geometry kind, bbox IoU >= 0.8 (points within 0.001 deg); `<collection>/<place_id>` of the group's first member; null for a place with no other copy. Every copy keeps its own row, licence and geometry; apps pick which to show (layers.json `search_rank`) |
 
 ## `crosswalk.parquet`
 

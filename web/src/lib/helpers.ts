@@ -37,6 +37,13 @@ export function matchRoute(pathname: string, appBase = APP_BASE): Route {
 }
 
 /** the path of a place page; the colon is left readable. */
+/** a short position label, e.g. "24.6°N 81.4°W" (an unwrapped longitude beyond 180 is wrapped back). */
+export function fmtLonLat(c: [number, number] | null | undefined): string {
+  if (!c) return ''
+  const lon = ((c[0] + 540) % 360) - 180, lat = c[1]
+  return `${Math.abs(lat).toFixed(1)}°${lat < 0 ? 'S' : 'N'} ${Math.abs(lon).toFixed(1)}°${lon < 0 ? 'W' : 'E'}`
+}
+
 export const placePath = (id: string) => '/p/' + encodeURIComponent(id).replace(/%3A/gi, ':')
 export const layerPath = (slug: string) => '/l/' + encodeURIComponent(slug)
 
