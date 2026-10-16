@@ -178,6 +178,18 @@ def exclude_features(feats: list[dict], rules: dict | None) -> tuple[list[dict],
 
 # shapefile in a zip ------------------------------------------------------------------------------------------------
 
+def get_fresh(url: str, s: requests.Session, **kw) -> requests.Response:
+  """GET that survives a stale cached redirect: when a redirected request ends in 403, retry once with a cache-busting
+  query. NOAA's CDN can hand out a cached 307 to a pre-signed S3 URL that has already expired (X-Amz-Expires 10 h):
+  seen 2026-10-16 on the Mac mini runner, while the laptop got a fresh one; `Cache-Control: no-cache` did not help.
+  """
+  r = s.get(url, **kw)
+  if r.status_code == 403 and r.history:
+    r.close()
+    r = s.get(f"{url}{'&' if '?' in url else '?'}_={int(time.time())}", **kw)
+  return r
+
+
 def head_info(url: str, s: requests.Session | None = None) -> dict:
   """HTTP validators of a static download: {etag, last_modified, content_length} (any may be None).
 
@@ -185,7 +197,7 @@ def head_info(url: str, s: requests.Session | None = None) -> dict:
   valid for GET only (HEAD on it returns 403).
   """
   s = s or session()
-  with s.get(url, stream=True, allow_redirects=True, timeout=60) as r:
+  with get_fresh(url, s, stream=True, allow_redirects=True, timeout=60) as r:
     r.raise_for_status()
     h = r.headers
     return {"etag": h.get("ETag"), "last_modified": h.get("Last-Modified"),
@@ -200,7 +212,7 @@ def download(url: str, dest_dir: Path, s: requests.Session | None = None) -> Pat
   info = head_info(url, s)
   if dest.exists() and info["content_length"] and dest.stat().st_size == info["content_length"]:
     return dest
-  with s.get(url, stream=True, timeout=300) as r:
+  with get_fresh(url, s, stream=True, timeout=300) as r:
     r.raise_for_status()
     tmp = dest.with_suffix(dest.suffix + ".part")
     with open(tmp, "wb") as fh:

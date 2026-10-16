@@ -40,6 +40,11 @@ on:
         type: boolean
         required: false
         default: true
+      refresh:
+        description: 'refresh index/ and layers.json even if nothing was rebuilt (e.g. after a builder change)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read                   # nothing is committed: the published ledgers are the version history
@@ -149,9 +154,10 @@ jobs:
           done
 
       # the H3 membership of a rebuilt collection no longer matches its parquet (layers.json drops a stale one), and the
-      # index and layers.json list versions and checksums: rebuild all three from the published catalog, upload last
+      # index and layers.json list versions and checksums: rebuild all three from the published catalog, upload last.
+      # `refresh` (manual runs) rebuilds index/ and layers.json alone when nothing changed, e.g. after a builder change
       - name: refresh H3 membership, index/ and layers.json
-        if: ${{ steps.build.outputs.built != '' && (github.event_name == 'schedule' || inputs.publish) }}
+        if: ${{ (steps.build.outputs.built != '' && (github.event_name == 'schedule' || inputs.publish)) || inputs.refresh }}
         env:
           AWS_ACCESS_KEY_ID    : ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -160,8 +166,10 @@ jobs:
           slugs=$(for b in ${{ steps.build.outputs.built }}; do echo "--slug ${b%%:*}"; done)
           lj="$RUNNER_TEMP/layers.json"
           uv run scripts/build_layers_json.py --no-local --out "$lj"
-          uv run scripts/build_h3_membership.py $slugs --layers "file://$lj" --out "$RUNNER_TEMP/h3" --upload
-          uv run scripts/build_layers_json.py --no-local --out "$lj"
+          if [ -n "$slugs" ]; then   # without --slug the script would rebuild every collection's membership
+            uv run scripts/build_h3_membership.py $slugs --layers "file://$lj" --out "$RUNNER_TEMP/h3" --upload
+            uv run scripts/build_layers_json.py --no-local --out "$lj"
+          fi
           uv run scripts/build_index.py --no-local --out "$RUNNER_TEMP/index"
           aws s3 sync "$RUNNER_TEMP/index/" s3://oceanmetrics.io-public/gazetteer/index/ --exclude '.portolan/*'
           aws s3 cp "$lj" s3://oceanmetrics.io-public/gazetteer/index/layers.json --content-type application/json

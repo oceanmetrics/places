@@ -3,9 +3,10 @@ import json
 import zipfile
 
 import pytest
+import requests
 
 from gazetteer import fetch
-from gazetteer.fetch import extract_stem, fetch_arcgis
+from gazetteer.fetch import extract_stem, fetch_arcgis, head_info
 
 
 class Resp:
@@ -141,3 +142,47 @@ def test_shapefile_reprojection_to_wgs84_with_densified_edges(tmp_path):
   b = feats[0]["geometry"].bounds
   assert -121.0 < b[0] < -119.0 and 33.0 < b[1] < 36.0           # lon/lat near the Albers origin (-120, 0 -> ~34N)
   assert len(feats[0]["geometry"].exterior.coords) > 30        # 40 km of edge at 1 km spacing
+
+
+class RedirectResp:
+  def __init__(self, status, history=(), headers=None):
+    self.status_code, self.history, self.headers, self.closed = status, list(history), headers or {}, False
+  def raise_for_status(self):
+    if self.status_code >= 400:
+      raise requests.HTTPError(f"{self.status_code}")
+  def close(self):
+    self.closed = True
+  def __enter__(self):
+    return self
+  def __exit__(self, *a):
+    self.close()
+
+
+def test_head_info_retries_a_stale_presigned_redirect_with_a_cache_buster_regression():
+  # NOAA's CDN served the mini a cached 307 to an expired pre-signed S3 URL: 403, while a fresh redirect works
+  class Stale:
+    headers = {}
+    def __init__(self):
+      self.urls = []
+    def get(self, url, **kw):
+      self.urls.append(url)
+      if "?_=" not in url:
+        return RedirectResp(403, history=["307"])
+      return RedirectResp(200, history=["307"], headers={"ETag": '"e1"', "Content-Length": "9"})
+  s = Stale()
+  assert head_info("https://x/s3//aoa-socal.zip", s) == {"etag": '"e1"', "last_modified": None, "content_length": 9}
+  assert s.urls[0] == "https://x/s3//aoa-socal.zip" and s.urls[1].startswith("https://x/s3//aoa-socal.zip?_=")
+
+
+def test_a_403_without_a_redirect_is_not_retried():
+  class Denied:
+    headers = {}
+    def __init__(self):
+      self.n = 0
+    def get(self, url, **kw):
+      self.n += 1
+      return RedirectResp(403)
+  s = Denied()
+  with pytest.raises(requests.HTTPError):
+    head_info("https://x/a.zip", s)
+  assert s.n == 1
