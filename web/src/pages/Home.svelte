@@ -153,7 +153,7 @@
                 {#if openCopies === hitKey(h)}
                   <ul class="also">
                     {#each h.also as a (hitKey(a))}
-                      <li><button type="button" onclick={() => pickHit(a)}>{layerOf(a)}<span class="muted"> · {a.place_id}</span></button></li>
+                      <li><button type="button" onclick={() => pickHit(a)}>{layerOf(a)} <span class="muted">· {a.place_id}</span></button></li>
                     {/each}
                   </ul>
                 {/if}
