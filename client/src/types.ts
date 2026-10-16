@@ -103,6 +103,8 @@ export interface SearchOptions {
   bbox?     : BBox
   type?     : string | string[]
   authority?: string | string[]
+  /** keep places of these collection slugs (an index row's `collection`, a layers.json `collection`). */
+  collection?: string | string[]
   limit?    : number
 }
 

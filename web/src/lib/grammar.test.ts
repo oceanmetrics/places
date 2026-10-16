@@ -75,12 +75,13 @@ describe('view in the query string', () => {
         { slug: 'b', colour: null, opacity: null, width: null },
       ],
       place: 'NMS:PMNM',
+      proj: 'globe',
     })
-    expect(parseView('')).toEqual({ layers: null, place: null })
+    expect(parseView('')).toEqual({ layers: null, place: null, proj: 'globe' })
   })
 
   it('writes layers and place, round-tripping through parseView', () => {
-    const v = { layers: [{ slug: 'a', colour: '#ff0000', opacity: 0.5, width: 2 }, { slug: 'b', colour: null, opacity: null, width: null }], place: 'AOA:N1' }
+    const v = { layers: [{ slug: 'a', colour: '#ff0000', opacity: 0.5, width: 2 }, { slug: 'b', colour: null, opacity: null, width: null }], place: 'AOA:N1', proj: 'globe' as const }
     const s = buildSearch(v)
     expect(s).toBe('?layers=a:ff0000:0.5:2,b&place=AOA:N1')
     expect(parseView(s)).toEqual(v)
@@ -91,5 +92,13 @@ describe('view in the query string', () => {
     expect(buildSearch({ layers: null }, '?theme=dark&layers=a')).toBe('?theme=dark')
     expect(buildSearch({ layers: [] })).toBe('?layers=off')
     expect(buildSearch({}, '')).toBe('')
+  })
+
+  it('defaults to the globe; proj=mercator is the only value written', () => {
+    expect(parseView('?proj=mercator').proj).toBe('mercator')
+    expect(parseView('?proj=globe').proj).toBe('globe')
+    expect(parseView('?proj=lambert').proj).toBe('globe')
+    expect(buildSearch({ proj: 'mercator' }, '?layers=a')).toBe('?layers=a&proj=mercator')
+    expect(buildSearch({ proj: 'globe' }, '?layers=a&proj=mercator')).toBe('?layers=a')
   })
 })

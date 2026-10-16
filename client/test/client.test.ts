@@ -93,6 +93,12 @@ describe('search', () => {
     expect((await c.search('lease', { type: ['easement', 'aoa'] })).length).toBe(0)
     expect((await c.search('', { type: 'easement' })).map((p) => p.place_id)).toEqual(['FX:D-4'])
   })
+  it('filters by collection, one slug or several', async () => {
+    expect((await c.search('FX:C-3', { collection: 'fx_aoa' })).map((p) => [p.collection, p.name])).toEqual([['fx_aoa', 'Charlie lease (AOA copy)']])
+    expect((await c.search('lease', { collection: ['fx_leases'] })).every((p) => p.collection === 'fx_leases')).toBe(true)
+    expect((await c.search('', { collection: [], limit: 100 })).length).toBe(9)
+    expect((await c.search('', { collection: 'no_such_slug' })).length).toBe(0)
+  })
   it('filters by bbox, including one that crosses the antimeridian', async () => {
     expect((await c.search('', { bbox: [-125, 32.5, -122.5, 34.5] })).map((p) => p.place_id)).toEqual(['FX:A-1'])
     const ids = (await c.search('', { bbox: [170, 15, -170, 25] })).map((p) => p.place_id)

@@ -5,9 +5,10 @@
   import { addLayer, creditsFor, layerLabel, registerPmtiles, removeLayer, layerId, type BBox, type Layer, type PlaceFeature } from '@oceanmetrics/places'
   import { onMount } from 'svelte'
   import { applyTheme, BASEMAP_CREDIT, LABELS_BELOW, style } from './basemap'
-  import type { LayerSel } from './grammar'
+  import { buildSearch, parseView, type LayerSel, type Projection } from './grammar'
   import { layerPath, sanitizeHtml, withBase, fmtDate, placePath } from './helpers'
   import { BASE } from './data.svelte'
+  import { loc, navigate } from './router.svelte'
   import { theme } from './theme.svelte'
 
   interface Props {
@@ -17,12 +18,14 @@
     layers?: Layer[]
     /** a place drawn on top, with a fit to its bounds when it changes */
     highlight?: PlaceFeature | null
+    /** bounds to fit once the map loads (e.g. a layer page), when there is no highlight */
+    fit?: BBox | null
     /** click a feature: popup with name/status/attribution (off for the place page) */
     popups?: boolean
     onpick?: (placeId: string | null) => void
     onlayererror?: (slug: string) => void
   }
-  let { selected = [], layers = [], highlight = null, popups = true, onpick, onlayererror }: Props = $props()
+  let { selected = [], layers = [], highlight = null, fit = null, popups = true, onpick, onlayererror }: Props = $props()
 
   let el: HTMLDivElement
   let map: maplibregl.Map | undefined
@@ -57,6 +60,32 @@
     onRemove() { this.box.remove() }
   }
   const credits = new CreditsControl()
+
+  // projection: globe by default, mercator with ?proj=mercator; the button writes the URL, the URL drives the map ----
+  const proj = $derived(parseView(loc.search).proj)
+  class ProjectionControl implements maplibregl.IControl {
+    box = document.createElement('div')
+    btn = document.createElement('button')
+    constructor() {
+      this.box.className = 'maplibregl-ctrl maplibregl-ctrl-group'
+      this.btn.type = 'button'
+      this.btn.innerHTML = '<span class="maplibregl-ctrl-icon" aria-hidden="true"></span>'
+      this.btn.addEventListener('click', () => {
+        const next: Projection = proj === 'globe' ? 'mercator' : 'globe'
+        navigate(loc.path + buildSearch({ proj: next }, loc.search), { replace: true })
+      })
+      this.box.append(this.btn)
+    }
+    set(p: Projection) {
+      // maplibre's own globe icons: plain = "switch to globe", -enabled = "switch to flat map"
+      this.btn.className = p === 'globe' ? 'maplibregl-ctrl-globe-enabled' : 'maplibregl-ctrl-globe'
+      this.btn.title = p === 'globe' ? 'Flat map (Mercator)' : 'Globe'
+      this.btn.setAttribute('aria-label', p === 'globe' ? 'Switch to a flat Mercator map' : 'Switch to the globe')
+    }
+    onAdd() { return this.box }
+    onRemove() { this.box.remove() }
+  }
+  const projCtrl = new ProjectionControl()
 
   const refreshCredits = async () => {
     const slugs = selected.map((s) => s.slug).filter((s) => layers.some((l) => l.slug === s))
@@ -156,11 +185,15 @@
     })
     map = m
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
+    m.addControl(projCtrl, 'top-right')
     m.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')
     m.addControl(credits, 'bottom-right')
 
     m.on('load', () => {
       applyTheme(m, theme.dark)
+      m.setProjection({ type: proj })
+      projCtrl.set(proj)
+      if (fit && !highlight) m.fitBounds([[fit[0], fit[1]], [fit[2], fit[3]]], { padding: 32, maxZoom: 10, duration: 0 })
       m.addSource(HL, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       const acc = '#f5b528'   // the brand's one warm spark (oceanmetrics.io/brand/v1)
       m.addLayer({ id: `${HL}-fill`, type: 'fill', source: HL, filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': acc, 'fill-opacity': 0.25 } }, LABELS_BELOW)
@@ -194,6 +227,13 @@
     }
 
     return () => { m.remove(); map = undefined }
+  })
+
+  $effect(() => {
+    const p = proj
+    if (!map || !ready) return
+    if (map.getProjection()?.type !== p) map.setProjection({ type: p })
+    projCtrl.set(p)
   })
 
   // the basemap follows the app theme (header toggle or OS; src/lib/theme.svelte.ts)

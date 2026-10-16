@@ -9,6 +9,7 @@
   onMount(() => { loadManifest() })
 
   const layer = $derived(manifest.layers.find((l) => l.slug === slug))
+  const sel = $derived([{ slug, colour: null, opacity: null, width: null }])
 </script>
 
 <main class="page">
@@ -22,6 +23,14 @@
     <div class="row">
       <a class="btn" href={withBase(`/?layers=${encodeURIComponent(layer.slug)}`, BASE)}>Add to map</a>
       <a class="btn secondary" href={calcofiLink(layer.slug)} target="_blank" rel="noopener noreferrer">Use in CalCOFI explore</a>
+    </div>
+
+    <div class="mapbox">
+      {#await import('../lib/PlacesMap.svelte')}
+        <p class="muted">Loading the map…</p>
+      {:then m}
+        <m.default selected={sel} layers={manifest.layers} fit={layer.bbox} />
+      {/await}
     </div>
 
     <h2>About</h2>
@@ -56,3 +65,8 @@
     </div>
   {/if}
 </main>
+
+<style>
+  .mapbox { position: relative; height: 22rem; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 12px 0; }
+  @media (max-width: 600px) { .mapbox { height: 16rem; } }
+</style>

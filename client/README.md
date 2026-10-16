@@ -86,7 +86,8 @@ Searches `places_index.parquet` (no geometry; one row per place across all layer
 range requests (footer first) and kept in memory; searching is then local. Every word of `q` must occur in the name
 or place id (case and accent insensitive). Ranking: exact name or id, name prefix, word prefix, substring; ties by
 larger `area_km2`. Options: `bbox: [west, south, east, north]` (west > east crosses the antimeridian), `type`,
-`authority` (string or array), `limit` (default 20). An empty `q` lists by filter.
+`authority`, `collection` (each a string or array; `collection` = layer slug, to search within layers), `limit`
+(default 20). An empty `q` lists by filter.
 
 ```ts
 const hits = await search('humboldt', { type: 'lease', authority: 'BOEM', bbox: [-125, 38, -123, 42], limit: 10 })
