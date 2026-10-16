@@ -56,6 +56,10 @@ dir_pub="${PLACES_PUB:-$dir_repo/catalog/pub}"
 dir_staging="${PLACES_STAGING:-$dir_repo/catalog/staging}"
 s3_dest="s3://oceanmetrics.io-public/gazetteer"
 
+# 0. a freshly pulled tree has no .portolan/ (every upload excludes it) and portolan add refuses to run outside a
+#    catalog: recreate the marker the local tree has (first seen on the macmini runner, 2026-10-16) ----
+[[ -f "$dir_pub/.portolan/config.yaml" ]] || { mkdir -p "$dir_pub/.portolan"; printf '# Portolan configuration\n' > "$dir_pub/.portolan/config.yaml"; }
+
 # 1. snapshot every shared file portolan add may rewrite ----
 snap="$(mktemp -d)"
 trap 'rm -rf "$snap"' EXIT
