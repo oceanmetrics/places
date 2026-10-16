@@ -85,3 +85,20 @@ def test_change_detection_rules():
   zipped = {"sources": [{"data_last_edit": "2025-08-19T00:00:00Z", "http": {"etag": "e1", "last_modified": "L", "content_length": 5}}]}
   assert changed_sources({}, zipped, [{"data_last_edit": None, "etag": "e1", "last_modified": "L", "content_length": 5}]) is None
   assert "etag" in changed_sources({}, zipped, [{"data_last_edit": None, "etag": "e2", "last_modified": "L", "content_length": 5}])
+
+
+def test_detect_all_reports_a_failed_probe_and_checks_the_others():
+  """regression: one 403 (NOAA's CDN redirecting to an expired pre-signed S3 URL, 2026-10-16) stopped detection for
+  every collection."""
+  import requests
+  from gazetteer.pipeline import detect_all
+
+  def one(cfg, base):
+    if cfg["slug"] == "bad":
+      raise requests.HTTPError("403 Client Error: Forbidden for url: https://s3.amazonaws.com/x.zip")
+    return {"slug": cfg["slug"], "changed": True, "reason": "data_last_edit changed"}
+
+  res = detect_all([{"slug": "a"}, {"slug": "bad"}, {"slug": "c"}], "https://x", detect_one=one)
+  assert [r["slug"] for r in res] == ["a", "bad", "c"]
+  assert res[0]["changed"] and res[2]["changed"]
+  assert res[1]["changed"] is False and res[1]["error"] is True and res[1]["reason"].startswith("probe failed: HTTPError: 403")

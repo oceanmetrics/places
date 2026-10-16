@@ -233,3 +233,9 @@ def test_remote_children_without_a_places_parquet_are_skipped(tmp_path):
   srcs = bi.remote_sources("https://example.test/g/", tmp_path, fetch=lambda u, timeout=60: docs[u], get_file=get_file)
   assert [(s.slug, s.version, s.origin) for s in srcs] == [("places", "1.2.0", "published")]
   assert got == ["https://example.test/g/places/places.parquet"]
+
+
+def test_reads_go_to_the_s3_origin_not_the_cdn():
+  """regression: the CDN caches versions.json for a day, so a build right after a publish read the old versions."""
+  assert bi.origin(bi.BASE + "places/versions.json") == bi.BASE_DIRECT + "places/versions.json"
+  assert bi.origin("https://example.org/x.json") == "https://example.org/x.json"

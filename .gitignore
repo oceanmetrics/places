@@ -7,6 +7,7 @@ __pycache__/
 # build working dirs
 cache/
 catalog/staging/
+catalog/pub/
 
 # built catalog artifacts (the Portolan tree is built here and published to S3 / R2, not committed)
 catalog/**/*.parquet

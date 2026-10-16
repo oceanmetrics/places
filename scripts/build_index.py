@@ -143,15 +143,24 @@ class Source:
   version: str | None = None
 
 
+# reads go to the S3 origin, not the CDN: storage.oceanmetrics.io caches the catalog's JSON for a day (max-age=86400), so
+# right after a publish it still serves the old versions.json and ledgers (2026-10-16). URLs written out keep BASE
+BASE_DIRECT = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/"
+
+
+def origin(url: str) -> str:
+  return BASE_DIRECT + url[len(BASE):] if url.startswith(BASE) else url
+
+
 def get_json(url: str, timeout: int = 60):
-  req = urllib.request.Request(url, headers={"User-Agent": "oceanmetrics-places/build-index"})
+  req = urllib.request.Request(origin(url), headers={"User-Agent": "oceanmetrics-places/build-index"})
   with urllib.request.urlopen(req, timeout=timeout) as r:
     return json.load(r)
 
 
 def download(url: str, dest: Path, timeout: int = 300) -> Path:
   dest.parent.mkdir(parents=True, exist_ok=True)
-  req = urllib.request.Request(url, headers={"User-Agent": "oceanmetrics-places/build-index"})
+  req = urllib.request.Request(origin(url), headers={"User-Agent": "oceanmetrics-places/build-index"})
   with urllib.request.urlopen(req, timeout=timeout) as r, open(dest, "wb") as f:
     while chunk := r.read(1 << 20):
       f.write(chunk)
