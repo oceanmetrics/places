@@ -2,7 +2,7 @@
   import maplibregl from 'maplibre-gl'
   import 'maplibre-gl/dist/maplibre-gl.css'
   import * as pmtiles from 'pmtiles'
-  import { addLayer, creditsFor, layerLabel, registerPmtiles, removeLayer, layerId, type BBox, type Layer, type PlaceFeature } from '@oceanmetrics/places'
+  import { addLayer, creditsFor, layerLabel, registerPmtiles, removeLayer, layerId, DRAW_KINDS, type BBox, type Layer, type PlaceFeature } from '@oceanmetrics/places'
   import { onMount } from 'svelte'
   import { applyTheme, BASEMAP_CREDIT, LABELS_BELOW, style } from './basemap'
   import { buildSearch, parseView, type LayerSel, type Projection } from './grammar'
@@ -115,7 +115,7 @@
       }
     }
     // draw order: first entry on top; move bottom-up, then the highlight above everything
-    for (const w of [...want].reverse()) for (const k of ['fill', 'line', 'circle'] as const) if (m.getLayer(layerId(w.slug, k))) m.moveLayer(layerId(w.slug, k), LABELS_BELOW)
+    for (const w of [...want].reverse()) for (const k of DRAW_KINDS) if (m.getLayer(layerId(w.slug, k))) m.moveLayer(layerId(w.slug, k), LABELS_BELOW)
     for (const id of [`${HL}-fill`, `${HL}-line`, `${HL}-point`]) if (m.getLayer(id)) m.moveLayer(id, LABELS_BELOW)
   }
 
@@ -225,7 +225,7 @@
       }
     })
 
-    const interactive = () => m.getStyle().layers.map((l) => l.id).filter((id) => id.startsWith('places:'))
+    const interactive = () => m.getStyle().layers.filter((l) => l.id.startsWith('places:') && l.type !== 'raster').map((l) => l.id)
     if (popups) {
       m.on('click', (e) => {
         const ids = interactive()

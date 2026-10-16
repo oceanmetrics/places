@@ -236,7 +236,8 @@ export function createClient(initial: ClientConfig = {}) {
     const authority = id.split(':')[0]
     const layers = await listLayers()
     const rank = (l: Layer) => (l.authority === authority ? 0 : l.authority == null ? 1 : 2)
-    return [...layers].sort((a, b) => rank(a) - rank(b)).map((l) => l.slug)
+    // raster (reference) layers have no parquet of ours: their places are not read here
+    return [...layers].filter((l) => l.kind !== 'raster').sort((a, b) => rank(a) - rank(b)).map((l) => l.slug)
   }
 
   /**

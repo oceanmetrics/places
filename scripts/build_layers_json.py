@@ -4,7 +4,9 @@
 standalone (stdlib only): merges two sources of truth, local staged builds win over published ones.
   (a) catalog/staging/*/collection.json   (fresh, not yet published builds)
   (b) <base>/catalog.json -> each child collection.json, plus versions.json for the current version
-a collection is a map layer when it carries a PMTiles asset. either source may be absent.
+a collection is a map layer when it carries a PMTiles asset (`kind: "vector"`) or a `gazetteer:raster` tile source
+(`kind: "raster"`: a reference layer drawn from its publisher's own tile service, e.g. Marine Regions' WMTS, with no
+parquet or PMTiles of ours; `raster` = {tiles, tile_size, minzoom, maxzoom, link}). either source may be absent.
 
 URLs: every layer's `pmtiles` is CANONICAL, on the storage host (`base`, https://storage.oceanmetrics.io/gazetteer/):
 each request there costs one 302 to the bucket. apps MAY rewrite a `pmtiles` URL onto `base_direct` (the bucket's own
@@ -61,6 +63,9 @@ PAINT = {
   },
   "point": {
     "circle": {"circle-color": "#e08a1e", "circle-radius": 4, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1},
+  },
+  "raster": {
+    "raster": {"raster-opacity": 0.8},
   },
 }
 LICENSE_URLS = {
@@ -137,6 +142,20 @@ def source_date(coll: dict) -> str | None:
   return max(days) if days else None
 
 
+def raster_source(coll: dict) -> dict | None:
+  """a reference collection's tile source (`gazetteer:raster`), normalised: {tiles, tile_size, minzoom, maxzoom, link}."""
+  r = coll.get("gazetteer:raster")
+  if not r or not r.get("tiles"):
+    return None
+  tiles = r["tiles"] if isinstance(r["tiles"], list) else [r["tiles"]]
+  return {"tiles": tiles, "tile_size": r.get("tile_size", 256), "minzoom": r.get("minzoom", 0),
+          "maxzoom": r.get("maxzoom", 22), "link": r.get("link")}
+
+
+def is_map_layer(coll: dict) -> bool:
+  return has_pmtiles(coll) or raster_source(coll) is not None
+
+
 def has_pmtiles(coll: dict) -> bool:
   if any(a.get("type") == "application/vnd.pmtiles" for a in (coll.get("assets") or {}).values()):
     return True
@@ -155,7 +174,7 @@ def default_paint(kind: str, style: dict | None = None) -> dict:
     paint["line"] = dict(PAINT["polygon"]["line"])
   for lyr in (style or {}).get("layers", []):
     t = lyr.get("type")
-    if t in ("fill", "line", "circle") and isinstance(lyr.get("paint"), dict):
+    if t in ("fill", "line", "circle", "raster") and isinstance(lyr.get("paint"), dict):
       paint.setdefault(t, {}).update(lyr["paint"])
   return paint
 
@@ -210,17 +229,20 @@ def layer_row(coll: dict, style: dict | None = None, version: str | None = None,
   layers = coll.get("pmtiles:layers") or []
   updated = coll.get("updated")
   status = coll.get("gazetteer:status") or None
+  raster = raster_source(coll)
   return {
     "slug"            : slug,
     "title"           : legacy_title(slug, coll.get("title")) or slug,
     "collection"      : slug,
-    "pmtiles"         : pmtiles_url(slug, base),
-    "source_layer"    : layers[0] if layers else slug,
+    "kind"            : "raster" if raster else "vector",
+    "raster"          : raster,
+    "pmtiles"         : None if raster else pmtiles_url(slug, base),
+    "source_layer"    : None if raster else layers[0] if layers else slug,
     "geom_type"       : geom_type if isinstance(geom_type, str) else geom_type[0] if len(geom_type) == 1 else "Mixed",
     "n"               : n,
     "updated"         : updated,
     "version"         : ver,
-    "paint"           : default_paint(geom_kind(geom_type), style),
+    "paint"           : default_paint("raster" if raster else geom_kind(geom_type), style),
     "authority"       : coll.get("gazetteer:authority"),
     "place_type"      : coll.get("gazetteer:place_type"),
     "bbox"            : layer_bbox(coll),
@@ -290,7 +312,7 @@ def local_rows(staging: Path, base: str = BASE, fetch=None) -> list[dict]:
   rows = []
   for f in sorted(staging.glob("*/collection.json")):
     coll = json.loads(f.read_text())
-    if not has_pmtiles(coll):
+    if not is_map_layer(coll):
       continue
     style_f = f.parent / "styles" / "default.json"
     style = json.loads(style_f.read_text()) if style_f.exists() else None
@@ -336,7 +358,7 @@ def remote_rows(base: str = BASE, fetch=get_json) -> list[dict]:
     except (urllib.error.URLError, OSError, ValueError) as e:
       print(f"warning: {href}: {e}", file=sys.stderr)
       return None
-    if not has_pmtiles(coll):
+    if not is_map_layer(coll):
       return None
     style = None
     ref = (coll.get("assets") or {}).get("styles/default")

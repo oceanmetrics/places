@@ -11,7 +11,7 @@ afterAll(() => srv.close())
 describe('listLayers', () => {
   it('fetches layers.json from the configured base', async () => {
     const layers = await c.listLayers()
-    expect(layers.map((l) => l.slug)).toEqual(['fx_leases', 'fx_aoa', 'fx_stations', 'fx_lines'])
+    expect(layers.map((l) => l.slug)).toEqual(['fx_leases', 'fx_aoa', 'fx_stations', 'fx_lines', 'fx_ref'])
     expect(layers[0]).toMatchObject({ source_layer: 'fx_leases', n: 6, license: 'CC-PDDC' })
   })
   it('carries the layer status, first-release date and the pinned parquet (null when the layer has none)', async () => {
@@ -38,7 +38,7 @@ describe('listLayers', () => {
         return String(url).endsWith('index/layers.json') ? Promise.resolve(new Response(null, { status })) : fetch(url, init)
       }) as typeof fetch
       const fb = createClient({ base: srv.base, fetch: f })
-      expect((await fb.listLayers()).length).toBe(4)
+      expect((await fb.listLayers()).length).toBe(5)
       expect(seen).toEqual([srv.base + 'index/layers.json', srv.base + 'layers.json'])
     }
   })
@@ -53,7 +53,7 @@ describe('listLayers', () => {
     const bad = createClient({ base: srv.base + 'missing/' })
     await expect(bad.listLayers()).rejects.toThrow(/layers\.json: 404/)
     bad.configure({ base: srv.base })
-    expect((await bad.listLayers()).length).toBe(4)
+    expect((await bad.listLayers()).length).toBe(5)
   })
 })
 
@@ -182,6 +182,12 @@ describe('getPlace', () => {
   })
   it('returns null for an unknown id', async () => {
     expect(await c.getPlace('FX:NOPE')).toBeNull()
+  })
+  it('an unpinned lookup never reads a raster (reference) layer: it has no parquet here', async () => {
+    const fresh = createClient({ base: srv.base })
+    const before = srv.requests.length
+    expect(await fresh.getPlace('FXR:1')).toBeNull()
+    expect(srv.requests.slice(before).some((r) => r.includes('fx_ref/'))).toBe(false)
   })
   it('uses a filtered range read: only the matching row group, not the whole file', async () => {
     const fresh = createClient({ base: srv.base })

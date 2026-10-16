@@ -8,6 +8,18 @@ export interface LayerPaint {
   fill?  : Record<string, unknown>
   line?  : Record<string, unknown>
   circle?: Record<string, unknown>
+  raster?: Record<string, unknown>
+}
+
+/** a reference layer's tile source (layers.json `raster`): drawn from its publisher's own tile service. */
+export interface RasterSource {
+  /** XYZ tile URL templates ({z}/{x}/{y}). */
+  tiles    : string[]
+  tile_size: number
+  minzoom  : number
+  maxzoom  : number
+  /** the layer's page at its publisher (e.g. marineregions.org): where its data live. */
+  link     : string | null
 }
 
 /** a dated status event of a whole layer (layers.json `status` and the items of `status_history`). */
@@ -25,10 +37,15 @@ export interface Layer {
   slug            : string
   title           : string
   collection      : string
-  /** absolute URL of the collection's PMTiles archive. */
-  pmtiles         : string
-  /** the vector-tile layer name inside the archive (equals the slug). */
-  source_layer    : string
+  /** 'vector': our PMTiles; 'raster': a reference layer drawn from its publisher's tiles (`raster`), with no PMTiles or
+   *  parquet here. absent in manifests before client 0.3.0 (= 'vector'). */
+  kind?           : 'vector' | 'raster'
+  /** the tile source of a raster layer; null for vector layers. */
+  raster?         : RasterSource | null
+  /** absolute URL of the collection's PMTiles archive; null for a raster layer. */
+  pmtiles         : string | null
+  /** the vector-tile layer name inside the archive (equals the slug); null for a raster layer. */
+  source_layer    : string | null
   geom_type       : string
   /** number of features. */
   n               : number | null

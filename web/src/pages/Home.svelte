@@ -194,7 +194,11 @@
           {@const l = manifest.layers.find((x) => x.slug === s.slug)}
           <li class="card">
             <div class="row">
-              <input type="color" aria-label="Colour of {l ? layerLabel(l) : s.slug}" value={s.colour ?? defaultColour(l)} oninput={(e) => patch(s.slug, { colour: e.currentTarget.value })} />
+              {#if l?.kind === 'raster'}
+                <span class="sw raster" title="Map tiles from the publisher (colours are theirs)"></span>
+              {:else}
+                <input type="color" aria-label="Colour of {l ? layerLabel(l) : s.slug}" value={s.colour ?? defaultColour(l)} oninput={(e) => patch(s.slug, { colour: e.currentTarget.value })} />
+              {/if}
               <a href={withBase(layerPath(s.slug), BASE)} class="grow">{l ? layerLabel(l) : s.slug}</a>
               <button class="btn secondary small" type="button" aria-label="Zoom to {l ? layerLabel(l) : s.slug}" title="Zoom to layer" disabled={!l?.bbox} onclick={() => zoomTo(s.slug)}>⌖</button>
               <button class="btn secondary small" type="button" aria-label="Move up" disabled={i === 0} onclick={() => move(i, -1)}>▲</button>
@@ -204,7 +208,9 @@
             {#if l}
               <div class="sliders">
                 <label>Opacity <input type="range" min="0" max="1" step="0.05" value={s.opacity ?? 1} oninput={(e) => patch(s.slug, { opacity: Math.round(+e.currentTarget.value * 100) / 100 })} /></label>
-                <label>Width <input type="range" min="0.5" max="4" step="0.5" value={s.width ?? 1} oninput={(e) => patch(s.slug, { width: +e.currentTarget.value })} /></label>
+                {#if l.kind !== 'raster'}
+                  <label>Width <input type="range" min="0.5" max="4" step="0.5" value={s.width ?? 1} oninput={(e) => patch(s.slug, { width: +e.currentTarget.value })} /></label>
+                {/if}
                 {#if s.colour || s.opacity != null || s.width != null}
                   <button class="btn secondary small" type="button" onclick={() => patch(s.slug, { colour: null, opacity: null, width: null })}>Reset style</button>
                 {/if}
@@ -227,7 +233,11 @@
             <div class="lrow">
               <label>
                 <input type="checkbox" aria-label={layerLabel(l)} checked={isOn(l.slug)} onchange={() => toggle(l.slug)} />
-                <span class="sw" style:background={defaultColour(l)}></span>
+                {#if l.kind === 'raster'}
+                  <span class="sw raster" title="Map tiles from the publisher"></span>
+                {:else}
+                  <span class="sw" style:background={defaultColour(l)}></span>
+                {/if}
                 <span class="grow">{layerLabel(l)}</span>
                 <span class="muted n">{fmtN(l.n)}</span>
               </label>
@@ -306,6 +316,8 @@
   .linfo { font-size: 13px; margin: 2px 0 8px; display: grid; gap: 6px; }
   .linfo .attr { color: var(--text-muted); }
   .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; border: 1px solid var(--border); }
+  .sw.raster { background: repeating-linear-gradient(45deg, var(--text-muted) 0 2px, transparent 2px 4px); }
+  .onmap .sw.raster { width: 26px; height: 18px; }
   .grow { flex: 1; min-width: 0; }
   .n { font-size: 12px; font-variant-numeric: tabular-nums; }
   .onmap .card { padding: 8px 10px; margin: 6px 0; }

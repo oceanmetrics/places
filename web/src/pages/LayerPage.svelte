@@ -10,6 +10,7 @@
 
   const layer = $derived(manifest.layers.find((l) => l.slug === slug))
   const sel = $derived([{ slug, colour: null, opacity: null, width: null }])
+  const tileHost = (u: string | undefined) => { try { return u ? new URL(u.replace(/[{}]/g, '')).host : '–' } catch { return '–' } }
 </script>
 
 <main class="page">
@@ -41,11 +42,19 @@
         <tr><th>Version</th><td>{layer.version ?? '–'}</td></tr>
         <tr><th>Updated</th><td>{fmtDate(layer.updated)}</td></tr>
         <tr><th>README</th><td><a href={collectionDir(BASE, layer.collection)} target="_blank" rel="noopener noreferrer">collection README</a></td></tr>
-        <tr><th>Files</th><td>
-          <a href={parquetUrl(BASE, layer.collection)}>places.parquet</a> ·
-          <a href={layer.pmtiles}>places.pmtiles</a> ·
-          <a href={collectionUrl(BASE, layer.collection)}>collection.json</a>
-        </td></tr>
+        {#if layer.kind === 'raster'}
+          <tr><th>Map tiles</th><td>served by <code>{tileHost(layer.raster?.tiles?.[0])}</code> (the publisher's own tile service)</td></tr>
+          <tr><th>Data</th><td>
+            {#if layer.raster?.link}<a href={layer.raster.link} target="_blank" rel="noopener noreferrer">at the publisher</a> · {/if}
+            <a href={collectionUrl(BASE, layer.collection)}>collection.json</a> (metadata only: no copy of the data here)
+          </td></tr>
+        {:else}
+          <tr><th>Files</th><td>
+            <a href={parquetUrl(BASE, layer.collection)}>places.parquet</a> ·
+            <a href={layer.pmtiles}>places.pmtiles</a> ·
+            <a href={collectionUrl(BASE, layer.collection)}>collection.json</a>
+          </td></tr>
+        {/if}
       </tbody>
     </table>
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { unwrapAntimeridian, wkbToGeometry, layerSpec, registerPmtiles, createClient } from '../src/index'
+import { unwrapAntimeridian, wkbToGeometry, layerSpec, registerPmtiles, createClient, isRaster } from '../src/index'
 import type { Layer, MapLike } from '../src/index'
 import { FIXTURES } from './server'
 
@@ -31,6 +31,16 @@ describe('layerSpec', () => {
     expect(layerSpec(by('fx_stations')).layers.map((l) => l.type)).toEqual(['circle'])
     expect(layerSpec(by('fx_lines')).layers.map((l) => l.type)).toEqual(['line'])
   })
+  it('a raster (reference) layer is one raster layer on its publisher\'s tiles, with attribution', () => {
+    const r = by('fx_ref')
+    const s = layerSpec(r, { opacity: 0.5, colour: '#ff0000', width: 3 })
+    expect(s.source).toEqual({ type: 'raster', tiles: r.raster!.tiles, tileSize: 256, minzoom: 0, maxzoom: 12,
+      attribution: r.attribution_html })
+    expect(s.layers).toEqual([{ id: 'places:fx_ref:raster', type: 'raster', source: 'places:fx_ref', paint: { 'raster-opacity': 0.5 } }])
+    expect(isRaster(r)).toBe(true)
+    expect(isRaster(by('fx_leases'))).toBe(false)
+    expect(() => layerSpec({ ...r, raster: null })).toThrow(/no tiles/)
+  })
   it('colour, opacity and width override the default paint', () => {
     const [fill, line] = layerSpec(by('fx_leases'), { colour: '#ff0000', opacity: 0.3, width: 2 }).layers
     expect(fill.paint).toEqual({ 'fill-color': '#ff0000', 'fill-opacity': 0.3 })
@@ -53,6 +63,13 @@ describe('addLayer / removeLayer', () => {
     expect(map.layers.length).toBe(0)
     expect(map.sources.size).toBe(0)
     client.removeLayer(map, 'fx_leases')                    // absent: no throw
+  })
+  it('adds and removes a raster layer', async () => {
+    const map = new FakeMap()
+    expect(await client.addLayer(map, 'fx_ref')).toEqual(['places:fx_ref:raster'])
+    expect(map.sources.get('places:fx_ref').type).toBe('raster')
+    client.removeLayer(map, 'fx_ref')
+    expect(map.layers.length + map.sources.size).toBe(0)
   })
   it('inserts below beforeId only when that layer exists', async () => {
     const map = new FakeMap()

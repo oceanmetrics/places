@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0
+
+- Raster (reference) layers: a layers.json row with `kind: "raster"` is drawn from its publisher's own tile service
+  (`raster` = `{ tiles, tile_size, minzoom, maxzoom, link }`, XYZ templates), with no PMTiles or parquet here. This is
+  how Marine Regions layers will appear once VLIZ confirms the traffic is fine: they asked us not to republish their
+  products. `addLayer` / `layerSpec` make one MapLibre `raster` layer (`places:<slug>:raster`, `opacity` sets
+  `raster-opacity`; `colour` and `width` do not apply); `removeLayer` removes it.
+- Breaking for TypeScript: `Layer.pmtiles` and `Layer.source_layer` are `string | null` (null for raster layers).
+  New `Layer.kind` (absent in older manifests = `'vector'`), `Layer.raster`, `LayerPaint.raster`, type `RasterSource`.
+- New `isRaster(layer)`, `DRAW_KINDS` and type `DrawKind` (`'fill' | 'line' | 'circle' | 'raster'`), for apps that
+  reorder or query the map layers `addLayer` made.
+- `getPlace` without `slug` skips raster layers (they have no parquet to read).
+
 ## 0.2.0
 
 - Same place, several layers: index rows carry `group_id` (the same place in different collections, e.g. Florida

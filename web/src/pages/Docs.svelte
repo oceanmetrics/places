@@ -3,7 +3,7 @@
   import { layersJsonUrl, recipes, REPO_URL, stacRoot, withBase } from '../lib/helpers'
 
   const r = recipes(`${BASE}boem_wind_leases/places.parquet`)
-  const manifestFields = 'slug, title, collection, pmtiles, source_layer, geom_type, n, updated, version, paint, authority, place_type, bbox, attribution, attribution_html, license, license_url, citation'
+  const manifestFields = 'slug, title, collection, kind, raster, pmtiles, source_layer, geom_type, n, updated, version, paint, authority, place_type, bbox, attribution, attribution_html, license, license_url, citation'
 </script>
 
 <main class="page">
@@ -21,6 +21,9 @@
   <pre>{layersJsonUrl(BASE)}</pre>
   <p>Fields: <code>{manifestFields}</code>. It is the contract between this site, CalCOFI explore, erddap-places and the atlas.
     The places index (search across all layers, no geometry) is <code>{BASE}index/places_index.parquet</code>.</p>
+  <p>A row with <code>kind: "raster"</code> is a reference layer: it is drawn from its publisher's own tile service
+    (<code>raster.tiles</code>, an XYZ template) and links to the data at <code>raster.link</code>. There is no
+    <code>places.pmtiles</code> or <code>places.parquet</code> for it here.</p>
 
   <h2>URL grammar</h2>
   <p>The map and the apps share one grammar:</p>

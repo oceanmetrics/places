@@ -32,7 +32,7 @@ COLL = {
 def test_row_exact():
   row = bl.layer_row(COLL)
   assert row == {
-    "slug": "acme_leases", "title": "Acme leases", "collection": "acme_leases",
+    "slug": "acme_leases", "title": "Acme leases", "collection": "acme_leases", "kind": "vector", "raster": None,
     "pmtiles": "https://storage.oceanmetrics.io/gazetteer/acme_leases/places.pmtiles",
     "source_layer": "acme_leases", "geom_type": "MultiPolygon", "n": 7,
     "updated": "2026-10-01T12:00:00Z", "version": "1.0.3",
@@ -48,6 +48,30 @@ def test_row_exact():
     "status": None, "status_history": None, "status_label": None, "search_rank": 0, "created": None, "source_date": None,
     "parquet": None, "parquet_sha256": None, "h3": None,
   }
+
+
+REF = {
+  "type": "Collection", "id": "mr_eez", "stac_version": "1.1.0", "title": "Marine Regions EEZ (v12)", "license": "CC-BY-4.0",
+  "links": [], "assets": {}, "geoparquet:geometry_type": "MultiPolygon", "geoparquet:feature_count": 285,
+  "extent": {"spatial": {"bbox": [[-180.0, -85.5, 180.0, 87.0]]}},
+  "gazetteer:authority": "MRGID", "gazetteer:place_type": "eez",
+  "gazetteer:attribution": "Flanders Marine Institute (2023). Maritime Boundaries Geodatabase, version 12.",
+  "gazetteer:raster": {"tiles": "https://geo.example/wmts?LAYER=eez&TILEMATRIX=EPSG:900913:{z}&TILEROW={y}&TILECOL={x}",
+                       "maxzoom": 12, "link": "https://www.marineregions.org/eez.php"},
+}
+
+
+def test_reference_collection_is_a_raster_row_with_no_files_of_ours():
+  # marine regions asked us not to republish their products (2026-10-16): the map draws their own tiles
+  row = bl.layer_row(REF)
+  assert row["kind"] == "raster"
+  assert row["raster"] == {"tiles": [REF["gazetteer:raster"]["tiles"]], "tile_size": 256, "minzoom": 0, "maxzoom": 12,
+                           "link": "https://www.marineregions.org/eez.php"}
+  assert row["pmtiles"] is None and row["source_layer"] is None and row["parquet"] is None and row["h3"] is None
+  assert row["paint"] == {"raster": {"raster-opacity": 0.8}}
+  assert row["n"] == 285 and row["license"] == "CC-BY-4.0"
+  assert bl.is_map_layer(REF) and not bl.has_pmtiles(REF)
+  assert not bl.is_map_layer({**REF, "gazetteer:raster": {"tiles": []}})
 
 
 def test_h3_is_advertised_only_for_the_parquet_it_was_built_from(tmp_path):
