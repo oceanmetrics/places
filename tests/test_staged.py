@@ -141,7 +141,9 @@ def test_pacific_og_leases_leave_out_the_renewable_renacv_leases():
   assert prov["sources"][0]["record_count"] == 34
 
 
-def test_noaa_sanctuaries_status_date_is_not_empty_regression():
+def test_noaa_sanctuaries_status_date_is_empty_not_the_retrieval_day_regression():
+  # the ONMS source serves no edit date: status_date stays empty (d28e9ed), else apps would show e.g.
+  # "Chumash Heritage (designated <retrieval day>)"; source_date keeps the retrieval-day fallback
   d = staged("noaa_sanctuaries")
   t = pq.read_table(d / "places.parquet", columns=["status", "status_date", "source_date"]).to_pylist()
-  assert all(r["status"] == "designated" and r["status_date"] == r["source_date"].isoformat() for r in t)
+  assert all(r["status"] == "designated" and not r["status_date"] and r["source_date"] is not None for r in t)
