@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EEZ SDG 14 prototype</title>
+<title>EEZ ocean indicators</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/pmtiles@3.2.1/dist/pmtiles.js"></script>
@@ -21,6 +21,8 @@
   h1 { font-size: 16px; margin: 0 0 4px; }
   .sub { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
   label { display: block; margin: 3px 0; cursor: pointer; }
+  .group { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 8px 0 2px; }
+  #series { max-height: 42vh; overflow-y: auto; }
   .legend { margin: 10px 0 4px; }
   .ramp { height: 10px; border-radius: 3px; }
   .ticks { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
@@ -39,7 +41,7 @@
 <body>
 <div id="map"></div>
 <div class="panel">
-  <h1>SDG 14 by Exclusive Economic Zone</h1>
+  <h1>Ocean indicators by Exclusive Economic Zone</h1>
   <p class="sub">Prototype · Ocean Metrics · <span class="tag">internal vector tiles</span></p>
   <div id="series"></div>
   <div class="legend">
@@ -75,7 +77,7 @@ function colorAt(t) {
   return `rgb(${lerp(a[0], b[0], f)},${lerp(a[1], b[1], f)},${lerp(a[2], b[2], f)})`;
 }
 function quantile(xs, q) { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(q * (s.length - 1))]; }
-function fmt(v) { return Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1); }
+function fmt(v) { return Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(1) : v.toFixed(2); }
 
 async function main() {
   const data = await (await fetch("data/values.json")).json();
@@ -102,32 +104,37 @@ async function main() {
         { id: "vliz", type: "raster", source: "vliz", layout: { visibility: "none" }, paint: { "raster-opacity": 0.85 } } ] } });
   map.addControl(new maplibregl.NavigationControl(), "top-right");
 
+  // colour position works on log10 for count-like series (richness, records, Hill numbers)
+  const tx = (code, v) => data.series[code].scale === "log" ? Math.log10(Math.max(v, 1)) : v;
+  const untx = (code, v) => data.series[code].scale === "log" ? 10 ** v : v;
   function domain(code) {
-    const vals = Object.values(data.eez).map(e => e[code]).filter(Boolean).map(v => v.value);
+    const vals = Object.values(data.eez).map(e => e[code]).filter(Boolean).map(v => tx(code, v.value));
     return data.series[code].domain || [quantile(vals, 0.05), quantile(vals, 0.95)];
   }
   function paint() {
     const [lo, hi] = domain(current), expr = ["match", ["to-string", ["get", "source_id"]]];
     for (const [id, e] of Object.entries(data.eez)) {
       const v = e[current];
-      expr.push(id, v ? colorAt((v.value - lo) / (hi - lo)) : NODATA);
+      expr.push(id, v ? colorAt((tx(current, v.value) - lo) / (hi - lo)) : NODATA);
     }
     expr.push(NODATA);
     map.setPaintProperty("eez-fill", "fill-color", expr);
     const s = data.series[current];
     document.getElementById("ramp").style.background = `linear-gradient(90deg, ${RAMP.join(",")})`;
-    document.getElementById("lo").textContent = fmt(lo);
-    document.getElementById("mid").textContent = s.units;
-    document.getElementById("hi").textContent = fmt(hi) + (s.domain ? "" : "+");
+    document.getElementById("lo").textContent = fmt(untx(current, lo));
+    document.getElementById("mid").textContent = s.units + (s.scale === "log" ? " (log scale)" : "");
+    document.getElementById("hi").textContent = fmt(untx(current, hi)) + (s.domain ? "" : "+");
     document.getElementById("sdesc").innerHTML =
-      `${s.description}. <a href="${s.link}">UN SDG ${s.indicator}</a>${s.domain ? "" : " (colour range: 5th–95th percentile)"}.`;
+      `${s.description}. <a href="${s.link}">${s.indicator ? "UN SDG " + s.indicator : "OBIS"}</a>${s.domain ? "" : " (colour range: 5th–95th percentile)"}.`;
   }
 
   const box = document.getElementById("series");
+  let group = null;
   for (const code of codes) {
     const s = data.series[code];
+    if (s.group !== group) { group = s.group; box.insertAdjacentHTML("beforeend", `<div class="group">${group}</div>`); }
     box.insertAdjacentHTML("beforeend",
-      `<label><input type="radio" name="series" value="${code}" ${code === current ? "checked" : ""}> <b>${s.indicator}</b> ${s.short}</label>`);
+      `<label><input type="radio" name="series" value="${code}" ${code === current ? "checked" : ""}> ${s.indicator ? `<b>${s.indicator}</b> ` : ""}${s.short}</label>`);
   }
   box.addEventListener("change", ev => { current = ev.target.value; paint(); });
   document.getElementById("official").addEventListener("change", ev =>
@@ -136,9 +143,12 @@ async function main() {
   function describe(id) {
     const e = data.eez[id], v = e && e[current], s = data.series[current];
     if (!e) return "";
-    const val = v ? `<b>${fmt(v.value)} ${s.units}</b> (${v.year}, ${v.basis} M49 ${v.m49})`
-                  : (e.pol_type === "200NM" ? "no value reported" : `${e.pol_type}: no single-state value`);
-    return `<b>${e.name}</b><br>${s.indicator} ${s.short}: ${val}`;
+    const val = !v ? null : v.basis === "polygon"
+      ? `<b>${fmt(v.value)} ${s.units}</b> (OBIS, all years; polygon simplified ${v.tolerance}°)`
+      : `<b>${fmt(v.value)} ${s.units}</b> (${v.year}, ${v.basis} M49 ${v.m49})`;
+    const txt = v ? val
+                  : (e.pol_type === "200NM" || v === undefined ? "no value" : `${e.pol_type}: no single-state value`);
+    return `<b>${e.name}</b><br>${s.indicator ? s.indicator + " " : ""}${s.short}: ${txt}`;
   }
   const hover = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
   map.on("mousemove", "eez-fill", ev => {

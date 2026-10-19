@@ -1,4 +1,4 @@
-"""serve proto/eez_sdg on localhost only, with HTTP Range (PMTiles reads byte ranges)."""
+"""serve proto/eez_indicators on localhost only, with HTTP Range (PMTiles reads byte ranges)."""
 from __future__ import annotations
 
 import os

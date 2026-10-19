@@ -1,6 +1,6 @@
 """build the prototype's data/: values.json (public derived table) and eez.pmtiles (INTERNAL vector tiles, local only).
 
-  uv run proto/eez_sdg/build.py            # then: uv run proto/eez_sdg/serve.py  ->  http://localhost:5190/
+  uv run proto/eez_indicators/build.py        # then: uv run proto/eez_indicators/serve.py  ->  http://localhost:5190/
 
 the EEZ vector tiles are the internal mr_eez copy (env PLACES_INTERNAL, default ~/data/oceanmetrics/places-internal),
 linked, not copied; data/ is git-ignored and must never be uploaded until VLIZ agrees how these tiles may be served.
@@ -29,7 +29,7 @@ def main() -> int:
   eezs = pq.read_table(eez_dir / "places.parquet", columns=cols).to_pylist()
   raw = {code: fetch_series(code, data / "sdg_cache") for code in SERIES}
   values = eez_values(eezs, {code: d["data"] for code, d in raw.items()})
-  meta = {code: {**SERIES[code], "description": raw[code]["data"][0]["seriesDescription"],
+  meta = {code: {**SERIES[code], "group": "UN SDG 14 (by country)", "description": raw[code]["data"][0]["seriesDescription"],
                  "source": raw[code]["data"][0]["source"],
                  "link": f"https://unstats.un.org/sdgs/dataportal/database?series={code}"} for code in SERIES}
   coll = json.loads((eez_dir / "collection.json").read_text())
@@ -39,8 +39,8 @@ def main() -> int:
   if link.is_symlink() or link.exists():
     link.unlink()
   link.symlink_to(eez_dir / "places.pmtiles")
-  for code in SERIES:
-    n = sum(1 for v in values.values() if v[code])
+  for code in meta:
+    n = sum(1 for v in values.values() if v.get(code))
     print(f"{code}: {n} of {len(values)} EEZs with a value")
   return 0
 

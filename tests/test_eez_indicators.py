@@ -1,8 +1,8 @@
-"""proto/eez_sdg: one SDG value per Marine Regions EEZ (latest year; territory, else sovereign; none for shared zones)."""
+"""proto/eez_indicators: one SDG value per Marine Regions EEZ (latest year; territory, else sovereign; none for shared zones)."""
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "proto" / "eez_sdg"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "proto" / "eez_indicators"))
 from sdg import eez_value, eez_values, latest_by_area  # noqa: E402
 
 
@@ -35,3 +35,4 @@ def test_eez_values_keyed_by_mrgid_string():
   out = eez_values(eezs, {"ER_MRN_MPA": [rec(56, 2024, "80")]})
   assert out == {"3293": {"name": "Belgian EEZ", "pol_type": "200NM",
                           "ER_MRN_MPA": {"value": 80.0, "year": 2024, "m49": 56, "basis": "territory"}}}
+
