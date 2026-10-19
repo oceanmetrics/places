@@ -13,8 +13,8 @@ Collection set (30 configs in `sources/`): 6 BOEM/AOA (published), 2 CalCOFI, 7 
 
 | collection(s) | status | why | action |
 |---|---|---|---|
-| `mr_eez`, `mr_territorial_seas`, `mr_contiguous_zones`, `mr_high_seas`, `mr_ecs`, `mr_goas`, `mr_world_heritage_marine` | REFERENCE (metadata only) | VLIZ (Bart Vanhoorne, 2026-10-16) asked us not to republish the products as-is, then agreed ("All fine", 22:49) to map display from their GeoWebCache tiles, single-feature WFS on demand, a public index and public derived tables | `publish_collections.sh` publishes collection.json / README / AGENTS / provenance / style and a ledger (`gazetteer/ledger.py`), never `places.parquet` / `places.pmtiles` (refused before upload); the data go to `~/data/oceanmetrics/places-internal/<slug>/` on the publishing machine, which `build_index.py` reads. Publish them FROM THE MAC MINI (or rsync that folder to it): the weekly sync's index refresh runs there |
-| `protectedseas_navigator` | READY (Tier 1, written OK) | CC BY 4.0 (export readme); ProtectedSeas (Alex Driedger, 2026-10-16) welcomed it and sent the Direct Data Export for API users; the Terms of Use carry an indemnity for our distribution (Ben accepts by publishing). Built from the export in `cache/protectedseas_navigator/export/` (raw archive in Ben's Drive, see the YAML) | first publish by hand from the laptop (the export is not on the runner; the weekly detect reports it unchanged there); quarterly refresh by a new export or, later, the Navigator API sync |
+| `mr_eez`, `mr_territorial_seas`, `mr_contiguous_zones`, `mr_high_seas`, `mr_ecs`, `mr_goas`, `mr_world_heritage_marine` | PUBLISHED REFERENCE 1.0.0 (metadata only, 2026-10-19) | VLIZ (Bart Vanhoorne, 2026-10-16) asked us not to republish the products as-is, then agreed ("All fine", 22:49) to map display from their GeoWebCache tiles, single-feature WFS on demand, a public index and public derived tables | `publish_collections.sh` publishes collection.json / README / AGENTS / provenance / style and a ledger (`gazetteer/ledger.py`), never `places.parquet` / `places.pmtiles` (refused before upload); the data go to `~/data/oceanmetrics/places-internal/<slug>/` on the publishing machine, which `build_index.py` reads. Publish them FROM THE MAC MINI (or rsync that folder to it): the weekly sync's index refresh runs there. 2026-10-19: first published from the laptop, internal store rsynced to the mini |
+| `protectedseas_navigator` | PUBLISHED 1.0.0 (2026-10-19, Tier 1, written OK) | CC BY 4.0 (export readme); ProtectedSeas (Alex Driedger, 2026-10-16) welcomed it and sent the Direct Data Export for API users; the Terms of Use carry an indemnity for our distribution (Ben accepts by publishing). Built from the export in `cache/protectedseas_navigator/export/` (raw archive in Ben's Drive, see the YAML) | first published by hand from the laptop 2026-10-19 (30,111 sites; 982 MB parquet, 1.1 GB PMTiles; the export is not on the runner; the weekly detect reports it unchanged there); quarterly refresh by a new export or, later, the Navigator API sync |
 | `noaa_esa_critical_habitat` (NMFS) | HOLD | item `accessInformation` is EMPTY; attribution falls back to "NOAA Fisheries ..." (item owner), unverified; licenceInfo only says "not the official legal definitions" | confirm attribution wording with NMFS (or the item's InPort page) first; 129 MB parquet |
 | `mpa_inventory` | FLAG | licence text is a disclaimer ("not for navigation", "not legal documents"), public-domain statement is on InPort item 69506 not on the layer item; boundaries come from state/other managers | OK to publish after one human read of the README "licence" block; keep the not-for-navigation line in the description |
 | `noaa_hapc` | FLAG | item licenceInfo is a no-warranty disclaimer only, no explicit public-domain statement (federal work, 17 U.S.C. 105 assumed) | same: human confirms, then publish |
@@ -82,7 +82,7 @@ Suggested order (small and safe first, so a problem shows up cheap): `calcofi_st
 `noaa_sanctuaries`, `noaa_nerrs`, `noaa_marine_monuments`, `noaa_state_lateral_boundaries`, `noaa_maritime_limits`,
 `usace_danger_zones`, `noaa_submarine_cables`, `noaa_vessel_routing_measures`, `noaa_state_submerged_lands`, `gebco_undersea`,
 `fws_critical_habitat_proposed`, then (after the flags in step 0 are cleared) `mpa_inventory`, `noaa_hapc`; later
-`noaa_esa_critical_habitat`, `fws_critical_habitat_final` (simplified), and `mr_*` (after VLIZ).
+`noaa_esa_critical_habitat`, `fws_critical_habitat_final` (simplified); `mr_*` (reference, metadata only) and `protectedseas_navigator` went up 2026-10-19.
 
 ## 4. index/ and layers.json LAST
 
@@ -97,7 +97,7 @@ The index and the client manifest describe what is published, so they go up afte
     aws s3 sync catalog/staging/index/ s3://oceanmetrics.io-public/gazetteer/index/ --exclude '.portolan/*'     # no --delete
     aws s3 cp catalog/staging/layers.json s3://oceanmetrics.io-public/gazetteer/layers.json --content-type application/json
 
-The held slugs (`mr_*`, `noaa_esa_critical_habitat`, excluded FWS) must not appear in the index or `layers.json` of this publish; the
+The held slugs (`noaa_esa_critical_habitat`, excluded FWS) must not appear in the index or `layers.json` of this publish; the
 symlink set above guarantees it for local staging (check the table printed by `build_index.py` for the expected slugs and totals).
 After the held slugs are later published, rerun this step with them included.
 
