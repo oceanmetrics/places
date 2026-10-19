@@ -244,7 +244,8 @@ def test_row_groups_are_capped_at_5000(tmp_path):
 
 def test_cli_is_idempotent_and_writes_collection_json_and_readme(staging, tmp_path, capsys):
   out = tmp_path / "out"
-  args = ["--staging", str(staging), "--out", str(out), "--no-remote"]
+  # --no-internal: on the build machine the default ~/data/oceanmetrics/places-internal holds the real mr_* copies
+  args = ["--staging", str(staging), "--out", str(out), "--no-remote", "--no-internal"]
   assert bi.main(args) == 0
   first = {p.name: p.read_bytes() for p in out.iterdir()}
   assert bi.main(args) == 0
