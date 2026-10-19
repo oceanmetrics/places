@@ -102,3 +102,20 @@ def test_detect_all_reports_a_failed_probe_and_checks_the_others():
   assert [r["slug"] for r in res] == ["a", "bad", "c"]
   assert res[0]["changed"] and res[2]["changed"]
   assert res[1]["changed"] is False and res[1]["error"] is True and res[1]["reason"].startswith("probe failed: HTTPError: 403")
+
+
+def test_detect_all_reports_an_arcgis_error_body_and_checks_the_others():
+  """regression: NOAA's maritime boundaries MapServer answered 'Could not find service' (an ArcGIS error body, raised
+  as RuntimeError by `fetch.arcgis_json`, 2026-10-19) and stopped detection for every collection."""
+  from gazetteer.pipeline import detect_all
+
+  def one(cfg, base):
+    if cfg["slug"] == "bad":
+      raise RuntimeError("ArcGIS error from https://x/MapServer/1: {'code': 500, 'message': 'Could not find service.'}")
+    return {"slug": cfg["slug"], "changed": False, "reason": "unchanged"}
+
+  res = detect_all([{"slug": "a"}, {"slug": "bad"}, {"slug": "c"}], "https://x", detect_one=one)
+  assert [r["slug"] for r in res] == ["a", "bad", "c"]
+  assert res[1]["changed"] is False and res[1]["error"] is True
+  assert res[1]["reason"].startswith("probe failed: RuntimeError: ArcGIS error")
+  assert "error" not in res[0] and "error" not in res[2]

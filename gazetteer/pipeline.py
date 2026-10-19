@@ -176,13 +176,14 @@ def detect(cfg: dict, base_url: str, s=None) -> dict:
 def detect_all(cfgs: list[dict], base_url: str, detect_one=None) -> list[dict]:
   """`detect` for every config; a collection whose probe fails is reported (`changed` False, `error` True, the reason)
   instead of stopping the others. e.g. NOAA's CDN served a cached redirect to an expired pre-signed S3 URL over IPv6
-  (403 "Request has expired", 2026-10-16) while IPv4 got the file."""
+  (403 "Request has expired", 2026-10-16) while IPv4 got the file; NOAA's maritime boundaries MapServer answered
+  "Could not find service" (an ArcGIS error body, RuntimeError, 2026-10-19)."""
   detect_one = detect_one or detect
   out = []
   for cfg in cfgs:
     try:
       out.append(detect_one(cfg, base_url))
-    except (requests.RequestException, OSError, ValueError, KeyError) as e:
+    except (requests.RequestException, OSError, RuntimeError, ValueError, KeyError) as e:
       out.append({"slug": cfg["slug"], "changed": False, "error": True,
                   "reason": f"probe failed: {type(e).__name__}: {str(e)[:200]}"})
   return out
