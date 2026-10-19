@@ -8,6 +8,13 @@
 
 <table class="kv">
   <tbody>
+    {#if layer.source_link?.href}
+      <tr>
+        <th>Source</th>
+        <td><a href={layer.source_link.href} target="_blank" rel="noopener noreferrer">{layer.source_link.title}</a>
+          {#if layer.kind === 'raster'}<span class="muted"> · the data stay with the source; maps use its own tiles</span>{/if}</td>
+      </tr>
+    {/if}
     <tr>
       <th>Licence</th>
       <td>

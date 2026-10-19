@@ -13,6 +13,8 @@ describe('listLayers', () => {
     const layers = await c.listLayers()
     expect(layers.map((l) => l.slug)).toEqual(['fx_leases', 'fx_aoa', 'fx_stations', 'fx_lines', 'fx_ref'])
     expect(layers[0]).toMatchObject({ source_layer: 'fx_leases', n: 6, license: 'CC-PDDC' })
+    expect(layers[0].source_link).toEqual({ href: 'https://fixture.example/', title: 'Fixture Agency' })   // credit link
+    expect(layers.find((l) => l.slug === 'fx_ref')!.raster!.feature_url).toBe('fx_ref/wfs/{source_id}.json')
   })
   it('carries the layer status, first-release date and the pinned parquet (null when the layer has none)', async () => {
     const [leases, aoa, stations] = await c.listLayers()
@@ -69,12 +71,12 @@ describe('search', () => {
       collection: 'fx_leases', bbox: [-124, 33, -123, 34],
       centroid: [-123.5, 33.5], area_km2: expect.any(Number), license: 'CC-PDDC',
       attribution: 'Fixture Agency, via MarineCadastre. Processed by Ocean Metrics.', version: '1.0.3',
-      updated: '2026-10-01T12:00:00Z', group_id: null,
+      updated: '2026-10-01T12:00:00Z', group_id: null, source_id: 'A-1', url: 'https://fixture.example/leases/A-1',
     })
   })
   it('reads the centroid from the live centroid_lon / centroid_lat columns (regression: it was always null)', async () => {
     const hits = await c.search('', { limit: 100 })
-    expect(hits.length).toBe(10)
+    expect(hits.length).toBe(13)
     expect(hits.every((p) => p.centroid !== null && p.collection !== '' && p.geom_type !== null)).toBe(true)
     expect((await c.search('delta'))[0].centroid).toEqual([-117.5, 39.5])
   })
@@ -96,7 +98,7 @@ describe('search', () => {
   it('filters by collection, one slug or several', async () => {
     expect((await c.search('FX:C-3', { collection: 'fx_aoa' })).map((p) => [p.collection, p.name])).toEqual([['fx_aoa', 'Charlie lease (AOA copy)']])
     expect((await c.search('lease', { collection: ['fx_leases'] })).every((p) => p.collection === 'fx_leases')).toBe(true)
-    expect((await c.search('', { collection: [], limit: 100 })).length).toBe(10)
+    expect((await c.search('', { collection: [], limit: 100 })).length).toBe(13)
     expect((await c.search('', { collection: 'no_such_slug' })).length).toBe(0)
   })
   it('lists every copy of a place without `group`', async () => {
@@ -115,7 +117,7 @@ describe('search', () => {
   })
   it('grouping does not touch places without copies, nor the cached index rows', async () => {
     const all = await c.search('', { group: true, limit: 100 })
-    expect(all.length).toBe(9)
+    expect(all.length).toBe(12)
     expect((await c.search('zulu')).every((p) => p.also === undefined)).toBe(true)
   })
   it('samePlace lists the other copies, [] for a place with none', async () => {
@@ -178,16 +180,33 @@ describe('getPlace', () => {
     const before = srv.requests.length
     expect(await fresh.getPlace('FX:A-1', { slug: 'fx_aoa' })).toBeNull()
     const touched = srv.requests.slice(before).map((r) => r.split(' ')[1])
-    expect(touched.every((p) => p === 'fx_aoa/places.parquet')).toBe(true)      // no manifest fetch, no walk
+    // no walk: only that parquet (and the manifest, which says whether the slug is a reference layer)
+    expect(touched.every((p) => p === 'fx_aoa/places.parquet' || p === 'index/layers.json')).toBe(true)
+    expect(touched).toContain('fx_aoa/places.parquet')
   })
   it('returns null for an unknown id', async () => {
     expect(await c.getPlace('FX:NOPE')).toBeNull()
   })
-  it('an unpinned lookup never reads a raster (reference) layer: it has no parquet here', async () => {
+  it('a reference (raster) layer place comes from the publisher\'s feature_url, never from a parquet of ours', async () => {
+    // marine regions: VLIZ serves one boundary per request (2026-10-16); we hold no public copy
     const fresh = createClient({ base: srv.base })
     const before = srv.requests.length
-    expect(await fresh.getPlace('FXR:1')).toBeNull()
-    expect(srv.requests.slice(before).some((r) => r.includes('fx_ref/'))).toBe(false)
+    const f = (await fresh.getPlace('FXR:1'))!
+    const touched = srv.requests.slice(before).map((r) => r.split(' ')[1])
+    expect(touched).toContain('fx_ref/wfs/1.json')
+    expect(touched.some((p) => p.includes('fx_ref/places.parquet'))).toBe(false)
+    expect(f.collection).toBe('fx_ref')
+    expect(f.served_by).toBe(`${srv.base}fx_ref/wfs/1.json`)
+    expect(f.geometry.type).toBe('MultiPolygon')                         // two publisher features, one place
+    expect((f.geometry as any).coordinates.length).toBe(2)
+    expect(f.bbox).toEqual([-40, -40, -28, -30])
+    expect(f.properties).toMatchObject({ place_id: 'FXR:1', name: 'First fixture zone', source_id: '1', pol_type: '200NM',
+      url: 'https://fixture.example/zones/1', license: 'CC-BY-4.0' })
+    expect((await fresh.getPlace('FXR:1', { slug: 'fx_ref' }))!.id).toBe('FXR:1')
+  })
+  it('a reference place the publisher does not return is null; one not in the layer is null when pinned', async () => {
+    expect(await c.getPlace('FXR:2')).toBeNull()                          // empty FeatureCollection
+    expect(await c.getPlace('FX:A-1', { slug: 'fx_ref' })).toBeNull()
   })
   it('uses a filtered range read: only the matching row group, not the whole file', async () => {
     const fresh = createClient({ base: srv.base })

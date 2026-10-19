@@ -110,6 +110,13 @@ def build_collection(cfg: dict, table: pa.Table, geo: dict, provenance: dict, di
     # rashid (PTL-PRO-001) wants every `via` link typed text/html; the ArcGIS REST layer page is an HTML page
     links.append({"rel": "via", "href": s["source_url"], "type": "text/html",
                   "title": "Source layer" + (f" ({s['component']})" if s.get("component") else "")})
+  ref = reference_fields(cfg)
+  if ref:
+    # a reference collection: no parquet or pmtiles of ours in public (the publisher asked us not to republish), so no
+    # pmtiles link; the map draws the publisher's tiles (`xyz`, STAC web-map-links)
+    links = [l for l in links if l["rel"] != "pmtiles"]
+    links.append({"rel": "xyz", "href": ref["gazetteer:raster"]["tiles"][0], "type": "image/png",
+                  "title": "Map tiles served by the publisher"})
   def asset(name, href, typ, roles, title=None):
     p = dir / href
     a = {"href": f"./{href}", "type": typ}
@@ -117,21 +124,24 @@ def build_collection(cfg: dict, table: pa.Table, geo: dict, provenance: dict, di
       a["title"] = title
     a.update({"file:size": p.stat().st_size, "file:checksum": multihash(p), "roles": roles})
     return name, a
-  assets = dict([
+  data = [] if ref else [
     asset("places", "places.parquet", "application/vnd.apache.parquet", ["data"]),
     asset("places-tiles", "places.pmtiles", "application/vnd.pmtiles", ["visual"], f"{slug} (vector tiles)"),
+  ]
+  assets = dict(data + [
     asset("styles/default", "styles/default.json", "application/vnd.mapbox.style+json", ["style", "default"], "Default"),
     asset("provenance", "provenance.json", "application/json", ["metadata"], "Source provenance and change-detection record"),
     asset("documentation", "README.md", "text/markdown", ["documentation"]),
   ])
+  tiles = {} if ref else {"pmtiles:min_zoom": header["min_zoom"], "pmtiles:max_zoom": header["max_zoom"],
+                          "pmtiles:tile_type": "mvt", "pmtiles:center": header["center"], "pmtiles:layers": [slug]}
   return {
     "type": "Collection", "id": slug, "stac_version": "1.1.0",
     "description": " ".join(cfg["description"].split()) + f" Built by build.py from {len(provenance['sources'])} source layer(s).",
     "links": links, "stac_extensions": STAC_EXTENSIONS,
     "geoparquet:geometry_type": (gts[0] if len(gts) == 1 else gts), "geoparquet:feature_count": table.num_rows,
     "table:row_count": table.num_rows, "table:primary_geometry": "geometry", "table:columns": cols,
-    "updated": now, "pmtiles:min_zoom": header["min_zoom"], "pmtiles:max_zoom": header["max_zoom"],
-    "pmtiles:tile_type": "mvt", "pmtiles:center": header["center"], "pmtiles:layers": [slug],
+    "updated": now, **tiles,
     "title": cfg["title"],
     "extent": {"spatial": {"bbox": [bbox]}, "temporal": {"interval": [[None, None]]}},
     "license": cfg.get("stac_license") or cfg["license"],   # SPDX id, or "other" (+ the license link) for a custom one
@@ -139,9 +149,30 @@ def build_collection(cfg: dict, table: pa.Table, geo: dict, provenance: dict, di
     "gazetteer:authority": cfg["authority"], "gazetteer:place_type": cfg["place_type"],
     "gazetteer:cadence": cfg.get("cadence", "weekly"), "gazetteer:attribution": " ".join(cfg["attribution"].split()),
     "gazetteer:provenance": provenance,
+    "gazetteer:source_link": source_link(cfg),
+    **({"citation": " ".join(cfg["citation"].split())} if cfg.get("citation") else {}),
     **layer_status_fields(cfg),
+    **ref,
     "assets": assets,
   }
+
+
+def source_link(cfg: dict) -> dict:
+  """the source gazetteer or publisher page every app links back to: {href, title}."""
+  title = cfg.get("source_title") or next((p["name"] for p in cfg.get("providers") or [] if p.get("name")), None)
+  return {"href": cfg.get("source_home") or cfg.get("source_page"), "title": title}
+
+
+def reference_fields(cfg: dict) -> dict:
+  """{'gazetteer:reference', 'gazetteer:raster'} for a reference collection (config `reference`), else {}. the raster
+  block is what build_layers_json.py turns into a `kind: "raster"` row."""
+  ref = cfg.get("reference")
+  if not ref:
+    return {}
+  raster = {"tiles": [ref["tiles"]], "tile_size": ref.get("tile_size", 256), "minzoom": ref.get("minzoom", 0),
+            "maxzoom": ref.get("maxzoom", 22), "link": ref.get("link") or cfg.get("source_page"),
+            "feature_url": ref.get("feature_url")}
+  return {"gazetteer:reference": True, "gazetteer:raster": raster}
 
 
 def layer_status_fields(cfg: dict) -> dict:
@@ -174,11 +205,28 @@ def readme(cfg: dict, table: pa.Table, provenance: dict, collection: dict, versi
   if st:
     events = "\n".join(f"- {e['date']}: {e['value']} ({e['source']}){' - ' + e['note'] if e.get('note') else ''}" for e in hist)
     overlay += f"\n## Layer status\n\n**{st['value'].replace('_', ' ')} {st['date']}** ({st['source']}).\n\n{events}\n"
+  ref = cfg.get("reference")
+  link = source_link(cfg)
+  if ref:
+    what = (f"`{slug}` v{version}, {table.num_rows} features: a **reference collection**. The publisher asked that its "
+            f"products not be republished, so there is no parquet or PMTiles copy here; this folder holds metadata only")
+    quick = reference_quick_start(cfg)
+  else:
+    what = (f"`{slug}` v{version}, {table.num_rows} features, GeoParquet 1.1 (`places.parquet`) and PMTiles "
+            f"(`places.pmtiles`, layer `{slug}`)")
+    quick = f"""```sql
+SELECT place_id, name, status, status_date
+FROM read_parquet('https://storage.oceanmetrics.io/gazetteer/{slug}/places.parquet')
+ORDER BY place_id;
+```"""
+  place_link = (f"\n- **Each place at the source**: `{cfg['place_url']}` (the `url` column of the gazetteer index)"
+                if cfg.get("place_url") else "")
   return f"""# {cfg['title']}
 
 {' '.join(cfg['description'].split())}
 
-- **Collection**: `{slug}` v{version}, {table.num_rows} features, GeoParquet 1.1 (`places.parquet`) and PMTiles (`places.pmtiles`, layer `{slug}`)
+- **Collection**: {what}
+- **Source**: [{link['title']}]({link['href']}){place_link}
 - **Licence**: {cfg['license']} - {' '.join(cfg.get('license_note', '').split())} {cfg['license_url']}
 - **Attribution**: {' '.join(cfg['attribution'].split())}
 - **Refresh**: {cfg.get('cadence', 'weekly')}, by `.github/workflows/sync.yml` (re-fetched only when the source's `editingInfo.dataLastEditDate` or record count changed)
@@ -208,11 +256,7 @@ Native attributes keep the source layer's names; a native name equal to a gazett
 
 ## Quick start
 
-```sql
-SELECT place_id, name, status, status_date
-FROM read_parquet('https://storage.oceanmetrics.io/gazetteer/{slug}/places.parquet')
-ORDER BY place_id;
-```
+{quick}
 
 ## Changes
 
@@ -220,8 +264,47 @@ ORDER BY place_id;
 """
 
 
+def reference_quick_start(cfg: dict) -> str:
+  ref = cfg["reference"]
+  wfs = (f"\nOne place's boundary, from the publisher (replace `{{source_id}}` with the index row's `source_id`):\n\n"
+         f"```\n{ref['feature_url']}\n```\n") if ref.get("feature_url") else ""
+  return f"""Search it in the gazetteer index (names, ids, extents, areas and links back; no geometry):
+
+```sql
+SELECT place_id, source_id, name, area_km2, url
+FROM read_parquet('https://storage.oceanmetrics.io/gazetteer/index/places_index.parquet')
+WHERE collection = '{cfg['slug']}'
+ORDER BY name;
+```
+
+Map tiles, served by the publisher (XYZ, {ref.get('tile_size', 256)} px PNG; `layers.json` row `kind: "raster"`):
+
+```
+{ref['tiles']}
+```
+{wfs}"""
+
+
 def agents(cfg: dict) -> str:
   slug = cfg["slug"]
+  if cfg.get("reference"):
+    return f"""# AGENTS.md - {cfg['title']}
+
+Guidance for AI agents and LLMs working with this collection.
+
+## Overview
+
+{' '.join(cfg['description'].split())}
+
+Licence {cfg['license']}; credit: {' '.join(cfg['attribution'].split())}
+
+## This is a reference collection
+
+The publisher asked that its products not be republished, so there is **no parquet or PMTiles here**. Do not mirror
+or redistribute its boundaries; link to the publisher ({source_link(cfg)['href']}) and each place's own page (the
+index `url` column).
+
+{reference_quick_start(cfg)}"""
   return f"""# AGENTS.md - {cfg['title']}
 
 Guidance for AI agents and LLMs working with this collection.

@@ -27,6 +27,18 @@ attribution: >-
 providers:
   - {name: Flanders Marine Institute (VLIZ), roles: [producer, licensor], url: "https://www.marineregions.org/"}
 source_page: https://www.marineregions.org/downloads.php
+source_title: Marine Regions (VLIZ)
+source_home: https://www.marineregions.org/
+place_url: "https://www.marineregions.org/gazetteer.php?p=details&id={mrgid}"
+# reference collection: VLIZ asked us not to republish the products as-is and to refer to marineregions.org (Bart
+# Vanhoorne, 2026-10-16 12:40), then agreed to map display from their GeoWebCache tiles, single-feature WFS on demand,
+# a public index and derived tables ("All fine", 2026-10-16 22:49; always use the cached tiles, not plain WMS). the
+# parquet and PMTiles stay internal (catalog/staging and the build machine's places-internal store)
+reference:
+  tiles: "https://geo.vliz.be/geoserver/MarineRegions/gwc/service/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=eez_24nm&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:{z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png"
+  maxzoom: 12
+  link: "https://doi.org/10.14284/630"
+  feature_url: "https://geo.vliz.be/geoserver/MarineRegions/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=MarineRegions:eez_24nm&outputFormat=application/json&srsName=EPSG:4326&CQL_FILTER=mrgid={source_id}"
 place_id:
   template: "MRGID:{mrgid}{mr_part}"
   pattern: '^MRGID:\d+(:[a-z0-9-]+)?$'

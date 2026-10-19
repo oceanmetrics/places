@@ -52,7 +52,10 @@ COPY (
 --   duckdb -c "DESCRIBE SELECT * FROM read_parquet('https://storage.oceanmetrics.io/gazetteer/index/places_index.parquet')"
 -- place_id varchar, name varchar, authority varchar, place_type varchar, geom_type varchar, collection varchar,
 -- bbox struct(xmin double, ymin double, xmax double, ymax double), centroid_lon double, centroid_lat double,
--- area_km2 double, license varchar, attribution varchar, version varchar, updated varchar, group_id varchar.
+-- area_km2 double, license varchar, attribution varchar, version varchar, updated varchar, group_id varchar,
+-- source_id varchar, url varchar.
+-- fx_ref is a reference (raster) layer: its places are index rows only (no parquet here); getPlace fetches one boundary
+-- from its feature_url, served in the fixtures as fx_ref/wfs/<source_id>.json.
 -- a place cut at the antimeridian (FX:PM) carries the UNWRAPPED bbox and centroid (beyond 180), as build_index.py writes them.
 COPY (
   SELECT place_id::VARCHAR AS place_id, name::VARCHAR AS name, authority::VARCHAR AS authority, place_type::VARCHAR AS place_type,
@@ -67,9 +70,17 @@ COPY (
                           ELSE 'NOAA AOA program. Processed by Ocean Metrics.' END)::VARCHAR AS attribution,
          (CASE collection WHEN 'fx_leases' THEN '1.0.3' ELSE '2.0.0' END)::VARCHAR AS version,
          '2026-10-01T12:00:00Z'::VARCHAR AS updated,
-         (CASE WHEN place_id IN ('FX:Z-9', 'AOA:Z9') THEN 'fx_aoa/AOA:Z9' END)::VARCHAR AS group_id
+         (CASE WHEN place_id IN ('FX:Z-9', 'AOA:Z9') THEN 'fx_aoa/AOA:Z9' END)::VARCHAR AS group_id,
+         source_id::VARCHAR AS source_id,
+         (CASE WHEN place_id = 'FX:A-1' THEN 'https://fixture.example/leases/A-1' END)::VARCHAR AS url
   FROM (SELECT 'fx_leases' AS collection, * FROM read_parquet('fx_leases/places.parquet')
         UNION ALL BY NAME SELECT 'fx_aoa' AS collection, * FROM read_parquet('fx_aoa/places.parquet'))
+  UNION ALL
+  SELECT place_id, name, 'FXR', 'eez', 'MultiPolygon', 'fx_ref', {'xmin': x0, 'ymin': y0, 'xmax': x0 + 10, 'ymax': y0 + 10},
+         x0 + 5, y0 + 5, 1.0e5, 'CC-BY-4.0', 'Fixture Institute (2023). Fixture zones, version 1.', '1.0.0',
+         '2026-10-01T12:00:00Z', NULL, source_id, 'https://fixture.example/zones/' || source_id
+  FROM (VALUES ('FXR:1', 'First fixture zone', -40.0, -40.0, '1'), ('FXR:2', 'Second fixture zone', -30.0, -40.0, '2'),
+               ('FXR:3', 'Global fixture zone', -170.0, -60.0, '3')) z(place_id, name, x0, y0, source_id)
   ORDER BY collection, place_id
 ) TO 'index/places_index.parquet' (FORMAT parquet, ROW_GROUP_SIZE 4, COMPRESSION zstd);
 

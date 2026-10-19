@@ -3,7 +3,7 @@
   import { layersJsonUrl, recipes, REPO_URL, stacRoot, withBase } from '../lib/helpers'
 
   const r = recipes(`${BASE}boem_wind_leases/places.parquet`)
-  const manifestFields = 'slug, title, collection, kind, raster, pmtiles, source_layer, geom_type, n, updated, version, paint, authority, place_type, bbox, attribution, attribution_html, license, license_url, citation'
+  const manifestFields = 'slug, title, collection, kind, raster, source_link, pmtiles, source_layer, geom_type, n, updated, version, paint, authority, place_type, bbox, attribution, attribution_html, license, license_url, citation'
 </script>
 
 <main class="page">
@@ -24,6 +24,9 @@
   <p>A row with <code>kind: "raster"</code> is a reference layer: it is drawn from its publisher's own tile service
     (<code>raster.tiles</code>, an XYZ template) and links to the data at <code>raster.link</code>. There is no
     <code>places.pmtiles</code> or <code>places.parquet</code> for it here.</p>
+  <p>Every row's <code>source_link</code> names the source gazetteer or publisher to credit and link back to. Each index
+    row's <code>url</code> is that place's own page at the source (its Marine Regions page, a Navigator site's managing
+    authority), and <code>source_id</code> its id there.</p>
 
   <h2>URL grammar</h2>
   <p>The map and the apps share one grammar:</p>

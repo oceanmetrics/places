@@ -17,6 +17,8 @@ GEOMETRY_TYPES = {"MultiPolygon", "Point", "LineString", "MultiLineString"}  # c
 PLACE_TYPES |= {"eez", "territorial_sea", "contiguous_zone", "high_seas", "ecs", "ocean_sea", "world_heritage"}  # mr_* (Marine Regions)
 KINDS |= {"wfs"}                                                      # OGC WFS 2.0 GeoJSON (gazetteer/fetch_wfs.py)
 PLACE_TYPES |= {"mpa", "undersea_feature"}   # mpa_inventory, gebco_undersea
+PLACE_TYPES |= {"managed_area"}              # protectedseas_navigator: MPAs and other area-based management measures
+KINDS |= {"navigator_export"}                # ProtectedSeas Navigator Direct Data Export (gazetteer/navigator.py)
 REQUIRED = ["slug", "title", "description", "authority", "place_type", "version", "license", "attribution",
             "providers", "status", "sources"]
 
@@ -53,6 +55,7 @@ def validate_config(cfg: dict, label: str = "config") -> None:
     layer_status(cfg)
   except ValueError as e:
     errs.append(str(e))
+  errs += reference_problems(cfg)
   for i, src in enumerate(cfg.get("sources") or []):
     if src.get("kind") not in KINDS:
       errs.append(f"sources[{i}].kind must be one of {sorted(KINDS)}")
@@ -79,6 +82,29 @@ def validate_config(cfg: dict, label: str = "config") -> None:
         errs.append(f"sources[{i}]: bad place_id.pattern: {e}")
   if errs:
     raise ValueError(f"{label}: " + "; ".join(errs))
+
+
+def reference_problems(cfg: dict) -> list[str]:
+  """checks of the optional link-back keys: `place_url` (a template of the place's page at its source, rendered per
+  index row) and `reference` (a collection whose data we do not republish: drawn from the publisher's own XYZ tiles,
+  `tiles`, one boundary at a time from `feature_url`, which takes the row's `{source_id}`)."""
+  errs = []
+  pu = cfg.get("place_url")
+  if pu is not None and not (isinstance(pu, str) and "{" in pu and (pu.startswith("http") or pu.startswith("{"))):
+    errs.append("place_url must be a template with at least one {FIELD}: an http(s) URL, or a field holding one")
+  ref = cfg.get("reference")
+  if ref is None:
+    return errs
+  if not isinstance(ref, dict) or not ref.get("tiles"):
+    return errs + ["reference.tiles missing (an XYZ tile URL template)"]
+  if not all(k in ref["tiles"] for k in ("{z}", "{x}", "{y}")):
+    errs.append("reference.tiles needs {z}, {x} and {y}")
+  if ref.get("feature_url") and "{source_id}" not in ref["feature_url"]:
+    errs.append("reference.feature_url needs {source_id}")
+  for k in ("minzoom", "maxzoom", "tile_size"):
+    if k in ref and not isinstance(ref[k], int):
+      errs.append(f"reference.{k} must be an integer")
+  return errs
 
 
 def source_setting(cfg: dict, src: dict, key: str):

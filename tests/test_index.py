@@ -91,7 +91,8 @@ def test_index_rows_exact(staging, tmp_path):
     "geom_type": "MultiPolygon", "collection": "noaa_mpa_inventory",
     "bbox": {"xmin": -120.0, "ymin": 30.0, "xmax": -118.0, "ymax": 32.0},
     "centroid_lon": -119.0, "centroid_lat": 31.0, "area_km2": 10.5, "license": "CC-PDDC",
-    "attribution": "NOAA MPA Center", "version": "1.0.0", "updated": "2026-10-01T00:00:00Z", "group_id": None}
+    "attribution": "NOAA MPA Center", "version": "1.0.0", "updated": "2026-10-01T00:00:00Z", "group_id": None,
+        "source_id": None, "url": None}
   # no area column value: the geodesic area of the polygon (a 4 x 4 degree square at 33-37 N)
   assert 161_000 < by["MPA:BBB2"]["area_km2"] < 163_000      # about 444 km x 365 km
   # no row columns for these: collection metadata fills them; squash() collapses the doubled space
@@ -288,3 +289,40 @@ def test_reads_go_to_the_s3_origin_not_the_cdn():
   """regression: the CDN caches versions.json for a day, so a build right after a publish read the old versions."""
   assert bi.origin(bi.BASE + "places/versions.json") == bi.BASE_DIRECT + "places/versions.json"
   assert bi.origin("https://example.org/x.json") == "https://example.org/x.json"
+
+
+def test_place_url_area_field_and_source_id_link_back_to_the_source(tmp_path):
+  # marine regions and navigator places link to their own page at the source (2026-10-19); navigator's area is the
+  # supplied full-resolution total_area, not the area of the simplified geometry
+  st = tmp_path / "staging"
+  write_layer(st / "mr_eez", {
+    "place_id": ["MRGID:8439", "MRGID:5668"], "name": ["EEZ A", "EEZ B"], "source_id": ["8439", "5668"],
+    "mrgid": [8439, None], "_geoms": [square(-133, -28, 12.0), square(5, 5)],
+  }, {"id": "mr_eez", "gazetteer:authority": "MRGID"})
+  write_layer(st / "protectedseas_navigator", {
+    "place_id": ["PSGID:CA1", "PSGID:CA2"], "name": ["Reserve 1", "Reserve 2"], "source_id": ["CA1", "CA2"],
+    "url": ["https://agency.example/ca1", "not a link"], "total_area": [12.25, None], "_geoms": [square(0, 0), square(4, 4)],
+  }, {"id": "protectedseas_navigator", "gazetteer:authority": "PSGID"})
+  cfgs = {"mr_eez": {"place_url": "https://www.marineregions.org/gazetteer.php?p=details&id={mrgid}"},
+          "protectedseas_navigator": {"place_url": "{url}", "area_field": "total_area"}}
+  out = tmp_path / "index"
+  bi.build(bi.with_config(bi.merge_sources([], bi.local_sources(st)), cfgs), out)
+  rows = {r["place_id"]: r for r in pq.read_table(out / "places_index.parquet").to_pylist()}
+  assert rows["MRGID:8439"]["url"] == "https://www.marineregions.org/gazetteer.php?p=details&id=8439"
+  assert rows["MRGID:8439"]["source_id"] == "8439"
+  assert rows["MRGID:5668"]["url"] is None                       # no mrgid: no link rather than a broken one
+  assert rows["PSGID:CA1"]["url"] == "https://agency.example/ca1"
+  assert rows["PSGID:CA2"]["url"] is None                        # not an http(s) URL
+  assert rows["PSGID:CA1"]["area_km2"] == 12.25
+  assert rows["PSGID:CA2"]["area_km2"] == pytest.approx(49_000, rel=0.05)   # no supplied area: geodesic
+
+
+def test_internal_reference_copy_is_indexed_below_a_local_build(tmp_path):
+  # marine regions files are never published (VLIZ's request), so the index reads the build machine's private copy
+  st, internal = tmp_path / "staging", tmp_path / "internal"
+  for d, name in ((internal, "internal copy"), (st, "staged copy")):
+    write_layer(d / "mr_eez", {"place_id": ["MRGID:1"], "name": [name], "_geoms": [square(0, 0)]}, {"id": "mr_eez"})
+  write_layer(internal / "mr_goas", {"place_id": ["MRGID:2"], "name": ["Ocean"], "_geoms": [square(0, 0)]}, {"id": "mr_goas"})
+  srcs = bi.merge_sources([], bi.local_sources(st), bi.internal_sources(internal))
+  assert [(s.slug, s.origin) for s in srcs] == [("mr_eez", "local"), ("mr_goas", "internal")]
+  assert bi.internal_sources(tmp_path / "absent") == []

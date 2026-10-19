@@ -13,6 +13,12 @@
 #                 build the staged slug with the same version first: uv run build.py build --slug <slug> --version V
 #   env PLACES_PUB / PLACES_STAGING override catalog/pub and catalog/staging (tests, scratch copies).
 #
+# reference collections (collection.json `gazetteer:reference`, e.g. mr_*: the publisher asked us not to republish its
+# products) publish METADATA ONLY: collection.json, README.md, AGENTS.md, provenance.json and the style. their
+# places.parquet / places.pmtiles are never copied into the pub tree or uploaded (checked again before the upload), and
+# are kept instead in the build machine's private store, env PLACES_INTERNAL (default ~/data/oceanmetrics/places-internal),
+# which scripts/build_index.py reads for the index rows.
+#
 # prerequisites (see catalog/staging/RUNBOOK_PUBLISH.md):
 #   - catalog/staging/<slug>/ built and green (uv run build.py check)
 #   - catalog/pub/ holds the published metadata tree:
@@ -54,6 +60,8 @@ if [[ $republish -eq 1 ]]; then want="$version"; else want="1.0.0"; fi
 dir_repo="$(cd "$(dirname "$0")/.." && pwd)"
 dir_pub="${PLACES_PUB:-$dir_repo/catalog/pub}"
 dir_staging="${PLACES_STAGING:-$dir_repo/catalog/staging}"
+dir_internal="${PLACES_INTERNAL:-$HOME/data/oceanmetrics/places-internal}"
+is_reference() { python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("gazetteer:reference") else 1)' "$1/collection.json"; }
 s3_dest="s3://oceanmetrics.io-public/gazetteer"
 
 # 0. a freshly pulled tree has no .portolan/ (every upload excludes it) and portolan add refuses to run outside a
@@ -86,13 +94,27 @@ PYEOF
     rm -rf "$dir_pub/$s"
   fi
   mkdir -p "$dir_pub/$s"
-  cp -R "$dir_staging/$s/." "$dir_pub/$s/"
+  if is_reference "$dir_staging/$s"; then
+    # metadata only into the pub tree; the data files go to the private store
+    rsync -a --exclude 'places.parquet' --exclude 'places.pmtiles' --exclude '*.thumb.*' "$dir_staging/$s/" "$dir_pub/$s/"
+    rm -f "$dir_pub/$s/places.parquet" "$dir_pub/$s/places.pmtiles"
+    mkdir -p "$dir_internal/$s"
+    cp "$dir_staging/$s/places.parquet" "$dir_staging/$s/places.pmtiles" "$dir_staging/$s/collection.json" "$dir_internal/$s/"
+    echo "reference $s: metadata only to the catalog; data kept in $dir_internal/$s"
+  else
+    cp -R "$dir_staging/$s/." "$dir_pub/$s/"
+  fi
 done
 
 # 3. portolan add (records 1.0.0 itself on a first add, an auto patch version on a republish; renders thumbnails) ----
+#    reference collections have no geospatial files, which `portolan add` refuses: their ledger is written in step 4 ----
 cd "$dir_pub"
-# shellcheck disable=SC2046
-portolan add $(for s in $slugs; do echo "$s/"; done) --force --force-thumbnails
+vector_slugs=""; ref_slugs=""
+for s in $slugs; do if is_reference "$s"; then ref_slugs="$ref_slugs $s"; else vector_slugs="$vector_slugs $s"; fi; done
+if [[ -n "${vector_slugs// }" ]]; then
+  # shellcheck disable=SC2046
+  portolan add $(for s in $vector_slugs; do echo "$s/"; done) --force --force-thumbnails
+fi
 
 # 4. restore the snapshotted shared files. first publish: keep the target slugs' fresh ledgers (add's 1.0.0).
 #    republish: restore the target slugs' PULLED ledger too, then bump to the requested version ----
@@ -104,10 +126,15 @@ for f in $shared catalog.json; do
   [[ $keep -eq 0 ]] && [[ -f "$snap/$f" ]] && cp "$snap/$f" "$dir_pub/$f"
 done
 if [[ $republish -eq 1 ]]; then
-  for s in $slugs; do
+  for s in $vector_slugs; do
     portolan version bump "$s" "$version" -m "$note" -y
   done
 fi
+for s in $ref_slugs; do
+  [[ $republish -eq 1 ]] || rm -f "$s/versions.json"
+  PYTHONPATH="$dir_repo" uv run --project "$dir_repo" python -m gazetteer.ledger "$dir_pub" "$s" "$want" \
+    "$( [[ $republish -eq 1 ]] && echo "$note" || echo "reference collection: metadata only (the data stay with the publisher)" )"
+done
 
 # 4b. extent across +/-180: portolan writes a crossing geo bbox (west > east) as two halves, and on a republish unions it
 #     with the old -180..180 extent; measure it from the parquet as one RFC 7946 bbox (gazetteer/bbox.py). after the
@@ -190,6 +217,11 @@ PYEOF
 
 # 7. upload (no --delete anywhere; root files last, merged into the live ones) ----
 if [[ $do_upload -eq 1 ]]; then
+  for s in $slugs; do
+    if is_reference "$dir_pub/$s" && find "$dir_pub/$s" \( -name '*.parquet' -o -name '*.pmtiles' \) | grep -q .; then
+      echo "REFUSED: reference collection $s has data files in the pub tree; nothing uploaded" >&2; exit 1
+    fi
+  done
   for s in $slugs; do
     aws s3 sync "$dir_pub/$s/" "$s3_dest/$s/" --exclude '.portolan/*'
   done

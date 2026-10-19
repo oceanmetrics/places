@@ -17,6 +17,9 @@ from .validate import check_parquet, check_pmtiles
 log = logging.getLogger(__name__)
 
 
+REPO = Path(__file__).resolve().parent.parent
+
+
 def fetch_source(src: dict, cache: Path, delay: float = 0.5, s=None) -> SourceResult:
   """fetch one configured source (ArcGIS layer or zipped shapefile) into the cache directory."""
   if src["kind"] == "arcgis":
@@ -28,6 +31,9 @@ def fetch_source(src: dict, cache: Path, delay: float = 0.5, s=None) -> SourceRe
   if src["kind"] == "wfs":
     from .fetch_wfs import fetch_wfs   # OGC WFS 2.0 GeoJSON (Marine Regions product layers)
     return fetch_wfs(src, delay=max(delay, 1.0), s=s)
+  if src["kind"] == "navigator_export":
+    from .navigator import fetch_navigator_export   # ProtectedSeas Navigator Direct Data Export (local files)
+    return fetch_navigator_export(src, cache)
   raise ValueError(f"unknown source kind {src['kind']}")
 
 
@@ -61,7 +67,19 @@ def build_layer(cfg: dict, staging: Path, cache: Path, version: str | None = Non
                       cfg["description"], cfg["attribution"], cfg.get("tile_properties"), cfg.get("tile_maxzoom"),
                       bool(cfg.get("tile_keep_all")))
   header, _ = tiles.read_pmtiles(out / "places.pmtiles")
-  (out / "styles" / "default.json").write_text(json.dumps(stac.style_json(slug, header["max_zoom"], "Mixed" if cfg.get("mixed_geometry") else cfg.get("geometry_type", "MultiPolygon")), indent=2) + "\n")
+  write_metadata(cfg, out, table, geo, prov, header, now, version)
+  problems = check_parquet(out / "places.parquet", cfg) + check_pmtiles(out / "places.pmtiles", slug)
+  if problems:
+    raise RuntimeError(f"{slug}: " + "; ".join(problems))
+  return {"slug": slug, "features": table.num_rows, "parquet_bytes": (out / "places.parquet").stat().st_size,
+          "pmtiles_bytes": (out / "places.pmtiles").stat().st_size, "license": cfg["license"],
+          "dropped": dropped, "max_zoom": header["max_zoom"]}
+
+
+def write_metadata(cfg: dict, out: Path, table, geo: dict, prov: dict, header: dict, now: str, version: str) -> dict:
+  """style, provenance.json, AGENTS.md, README.md and collection.json for the files already in `out`."""
+  (out / "styles").mkdir(exist_ok=True)
+  (out / "styles" / "default.json").write_text(json.dumps(stac.style_json(cfg["slug"], header["max_zoom"], "Mixed" if cfg.get("mixed_geometry") else cfg.get("geometry_type", "MultiPolygon")), indent=2) + "\n")
   (out / "provenance.json").write_text(json.dumps(prov, indent=2, default=str) + "\n")
   (out / "AGENTS.md").write_text(stac.agents(cfg))
   # the README lists the asset sizes, so write a placeholder first, build the collection, then fill it in
@@ -70,12 +88,27 @@ def build_layer(cfg: dict, staging: Path, cache: Path, version: str | None = Non
   (out / "README.md").write_text(stac.readme(cfg, table, prov, coll, version))
   coll = stac.build_collection(cfg, table, geo, prov, out, header, now, cfg.get("column_docs") or {})
   (out / "collection.json").write_text(json.dumps(coll, indent=2, default=str) + "\n")
-  problems = check_parquet(out / "places.parquet", cfg) + check_pmtiles(out / "places.pmtiles", slug)
-  if problems:
-    raise RuntimeError(f"{slug}: " + "; ".join(problems))
-  return {"slug": slug, "features": table.num_rows, "parquet_bytes": (out / "places.parquet").stat().st_size,
-          "pmtiles_bytes": (out / "places.pmtiles").stat().st_size, "license": cfg["license"],
-          "dropped": dropped, "max_zoom": header["max_zoom"]}
+  return coll
+
+
+def restac_layer(cfg: dict, staging: Path) -> dict:
+  """rewrite a staged collection's metadata from its YAML and staged files, without fetching or rebuilding the data
+  (e.g. after a metadata-only config change such as `reference` or `place_url`). the build time stays the staged one."""
+  import pyarrow.parquet as pq
+  out = staging / cfg["slug"]
+  pf = pq.ParquetFile(out / "places.parquet")
+  geo = json.loads(pf.schema_arrow.metadata[b"geo"])
+  prov = json.loads((out / "provenance.json").read_text())
+  header, _ = tiles.read_pmtiles(out / "places.pmtiles")
+  old = json.loads((out / "collection.json").read_text())
+  coll = write_metadata(cfg, out, _SchemaRows(pf), geo, prov, header, old["updated"], prov["version"])
+  return {"slug": cfg["slug"], "reference": bool(coll.get("gazetteer:reference")), "assets": sorted(coll["assets"])}
+
+
+class _SchemaRows:
+  """what stac.build_collection / readme read from a table (schema and row count), without loading the geometry."""
+  def __init__(self, pf):
+    self.schema, self.num_rows = pf.schema_arrow, pf.metadata.num_rows
 
 
 def published_provenance(base_url: str, slug: str, s=None) -> dict | None:
@@ -131,6 +164,9 @@ def detect(cfg: dict, base_url: str, s=None) -> dict:
     elif src["kind"] == "wfs":
       from .fetch_wfs import probe_wfs      # layer title (product version) + feature count
       probes.append(probe_wfs(s, src))
+    elif src["kind"] == "navigator_export":
+      from .navigator import probe_navigator_export   # the local export's checksum (none on the runner: unchanged)
+      probes.append(probe_navigator_export(src, REPO / "cache" / cfg["slug"], published))
     else:
       probes.append(fetch.probe_shapefile_zip(s, src))
   reason = changed_sources(cfg, published, probes)

@@ -4,6 +4,7 @@ import { compressors } from 'hyparquet-compressors'
 import { addLayerSpec, removeLayerSpec } from './map'
 import { geometryBBox, unwrapAntimeridian } from './unwrap'
 import { wkbToGeometry } from './wkb'
+import type { Geometry } from 'geojson'
 import type {
   AddLayerOptions, BBox, ClientConfig, CreditRef, GetPlaceOptions, IndexPlace, Layer, MapLike, PlaceFeature, SearchOptions,
 } from './types'
@@ -74,6 +75,15 @@ export function groupHits(hits: IndexPlace[], rank: (p: IndexPlace) => number = 
     const [best, ...rest] = groups.get(o)!.map((h, i) => [h, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((x) => x[0])
     return rest.length ? { ...best, also: rest } : best
   })
+}
+
+/** one geometry from several features of a place (a publisher may split it): polygons merge into a MultiPolygon. */
+export function mergeGeometries(gs: Geometry[]): Geometry {
+  if (gs.length === 1) return gs[0]
+  if (gs.every((g) => g.type === 'Polygon' || g.type === 'MultiPolygon')) {
+    return { type: 'MultiPolygon', coordinates: gs.flatMap((g: any) => (g.type === 'Polygon' ? [g.coordinates] : g.coordinates)) }
+  }
+  return { type: 'GeometryCollection', geometries: gs }
 }
 
 export function creditLine(parts: string[]): string {
@@ -170,6 +180,7 @@ export function createClient(initial: ClientConfig = {}) {
           attribution: r.attribution ?? null, version: r.version ?? null,
           updated: r.updated == null ? null : (plain(r.updated) as string),
           group_id: r.group_id == null ? null : String(r.group_id),
+          source_id: r.source_id == null ? null : String(r.source_id), url: r.url == null ? null : String(r.url),
         })))
       indexP.catch(() => { indexP = null })
     }
@@ -248,6 +259,8 @@ export function createClient(initial: ClientConfig = {}) {
    * more than one collection and an unpinned lookup returns the first (the id's authority first, then manifest order).
    */
   async function getPlace(id: string, opts: GetPlaceOptions = {}): Promise<PlaceFeature | null> {
+    const ref = await referencePlace(id, opts)
+    if (ref !== undefined) return ref
     for (const slug of opts.slug ? [opts.slug] : await candidateSlugs(id)) {
       let rows: Record<string, any>[]
       try {
@@ -268,6 +281,35 @@ export function createClient(initial: ClientConfig = {}) {
       return { type: 'Feature', id, bbox, properties, geometry, collection: slug } as PlaceFeature
     }
     return null
+  }
+
+  /**
+   * a place of a raster (reference) layer: its boundary from the publisher's `feature_url` (no parquet of ours), with
+   * the index row's fields as properties. undefined when the place is not in a reference layer (read the parquet);
+   * null when it is but the layer offers no per-place geometry or the publisher has no such feature.
+   */
+  async function referencePlace(id: string, opts: GetPlaceOptions): Promise<PlaceFeature | null | undefined> {
+    const layers = await listLayers()
+    const isRef = (slug: string) => layers.some((l) => l.slug === slug && l.kind === 'raster')
+    if (opts.slug && !isRef(opts.slug)) return undefined
+    if (!opts.slug && !layers.some((l) => l.kind === 'raster')) return undefined
+    const rows = await loadIndex()
+    const row = rows.find((r) => r.place_id === id && (opts.slug ? r.collection === opts.slug : isRef(r.collection)))
+    if (!row) return opts.slug ? null : undefined
+    const layer = layers.find((l) => l.slug === row.collection)!
+    const tpl = layer.raster?.feature_url
+    if (!tpl || !row.source_id) return null
+    const url = new URL(tpl.replace('{source_id}', encodeURIComponent(row.source_id)), base()).toString()
+    const r = await doFetch()(url)
+    if (!r.ok) throw new Error(`${layer.slug}: ${r.status} ${r.statusText} (${url})`)
+    const fc = await r.json()
+    const feats: any[] = (fc?.type === 'FeatureCollection' ? fc.features : [fc]).filter((f: any) => f?.geometry)
+    if (!feats.length) return null
+    let geometry = mergeGeometries(feats.map((f) => f.geometry))
+    if (opts.unwrap) geometry = unwrapAntimeridian(geometry)
+    const { also: _a, bbox: _b, centroid: _c, ...index } = row
+    const properties = { ...feats[0].properties, ...index }
+    return { type: 'Feature', id, bbox: geometryBBox(geometry), properties, geometry, collection: row.collection, served_by: url } as PlaceFeature
   }
 
   /**

@@ -44,6 +44,7 @@ def test_row_exact():
     "license": "CC-PDDC", "license_url": "https://example.org/pd",
     "citation": "Acme Agency, via MarineCadastre. Public domain. Processed by Ocean Metrics. Acme leases, v1.0.3. "
                 "Ocean Metrics gazetteer, 2026. https://storage.oceanmetrics.io/gazetteer/acme_leases/",
+    "source_link": None,
     # an older collection (no layer status, no parquet asset, no ledger) keeps the new keys, all null
     "status": None, "status_history": None, "status_label": None, "search_rank": 0, "created": None, "source_date": None,
     "parquet": None, "parquet_sha256": None, "h3": None,
@@ -66,12 +67,22 @@ def test_reference_collection_is_a_raster_row_with_no_files_of_ours():
   row = bl.layer_row(REF)
   assert row["kind"] == "raster"
   assert row["raster"] == {"tiles": [REF["gazetteer:raster"]["tiles"]], "tile_size": 256, "minzoom": 0, "maxzoom": 12,
-                           "link": "https://www.marineregions.org/eez.php"}
+                           "link": "https://www.marineregions.org/eez.php", "feature_url": None}
   assert row["pmtiles"] is None and row["source_layer"] is None and row["parquet"] is None and row["h3"] is None
   assert row["paint"] == {"raster": {"raster-opacity": 0.8}}
   assert row["n"] == 285 and row["license"] == "CC-BY-4.0"
   assert bl.is_map_layer(REF) and not bl.has_pmtiles(REF)
   assert not bl.is_map_layer({**REF, "gazetteer:raster": {"tiles": []}})
+
+
+def test_source_link_from_the_collection_or_its_publisher_page():
+  # every row links back to its source gazetteer (marine regions, navigator) for credit (2026-10-19)
+  assert bl.source_link({**REF, "gazetteer:source_link": {"href": "https://www.marineregions.org/", "title": "Marine Regions"}}) \
+    == {"href": "https://www.marineregions.org/", "title": "Marine Regions"}
+  old = {**COLL, "links": COLL["links"] + [{"rel": "via", "href": "https://acme.example/data", "type": "text/html",
+                                              "title": "Upstream publisher page"}]}
+  assert bl.source_link(old) == {"href": "https://acme.example/data", "title": "Acme Agency"}
+  assert bl.layer_row(old)["source_link"] == {"href": "https://acme.example/data", "title": "Acme Agency"}
 
 
 def test_h3_is_advertised_only_for_the_parquet_it_was_built_from(tmp_path):
@@ -154,6 +165,7 @@ def test_local_rows_take_created_from_the_published_ledger(tmp_path):
 def test_search_rank_puts_the_agency_layer_before_aggregators_and_legacy_copies():
   rank = lambda slug: bl.layer_row({**COLL, "id": slug})["search_rank"]
   assert (rank("noaa_sanctuaries"), rank("mpa_inventory"), rank("noaa_hapc"), rank("places")) == (0, 1, 1, 2)
+  assert rank("protectedseas_navigator") == 1 and rank("mr_eez") == 0
 
 
 def test_legacy_places_layer_gets_a_real_title_regression():

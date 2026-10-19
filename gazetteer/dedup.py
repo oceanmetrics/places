@@ -22,9 +22,10 @@ POINT_TOL = 0.001   # degrees, about 100 m
 PLACEHOLDER = re.compile(r"^(no common name|unnamed|unknown|no name|n/?a)\b")
 
 # which copy of a place an app shows by default (layers.json `search_rank`, lower first): the agency's own layer (0),
-# then layers that re-use other agencies' boundaries (1: the MPA Inventory; HAPCs drawn on sanctuary lines), then
+# then layers that re-use other agencies' boundaries (1: the MPA Inventory, ProtectedSeas Navigator; HAPCs drawn on
+# sanctuary lines), then
 # legacy copies (2: erddap-places' `places`). an app can override it (client `search({ group, prefer })`).
-SEARCH_RANK = {"mpa_inventory": 1, "noaa_hapc": 1, "places": 2}
+SEARCH_RANK = {"mpa_inventory": 1, "noaa_hapc": 1, "protectedseas_navigator": 1, "places": 2}
 
 
 def search_rank(slug: str) -> int:

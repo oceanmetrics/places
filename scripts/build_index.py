@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import tempfile
@@ -33,10 +34,13 @@ from pyproj import Geod
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from gazetteer.bbox import union_bbox, wrap_bbox  # noqa: E402
+from gazetteer.config import load_all  # noqa: E402
 from gazetteer.dedup import same_place_groups  # noqa: E402
+from gazetteer.fmt import render  # noqa: E402
 from gazetteer.legacy import legacy_place_type  # noqa: E402
 
 BASE = "https://storage.oceanmetrics.io/gazetteer/"
+INTERNAL = Path("~/data/oceanmetrics/places-internal")   # the build machine's private reference copies (env PLACES_INTERNAL)
 ROW_GROUP = 5000
 INDEX_VERSION = "1.0.0"
 
@@ -48,7 +52,7 @@ INDEX_SCHEMA = pa.schema([
   ("geom_type", pa.string()), ("collection", pa.string()), ("bbox", BBOX_T),
   ("centroid_lon", pa.float64()), ("centroid_lat", pa.float64()), ("area_km2", pa.float64()),
   ("license", pa.string()), ("attribution", pa.string()), ("version", pa.string()), ("updated", pa.string()),
-  ("group_id", pa.string()),
+  ("group_id", pa.string()), ("source_id", pa.string()), ("url", pa.string()),
 ])
 XW_COLS = ["mrgid", "psgid", "wdpa_id", "mpainv_site_id", "mpatlas_id", "wikidata_qid", "gers_id"]
 XW_SCHEMA = pa.schema([("place_id", pa.string())] + [(c, pa.string()) for c in XW_COLS])
@@ -155,8 +159,38 @@ class Source:
   slug: str
   path: Path
   coll: dict
-  origin: str  # local | published
+  origin: str  # local | internal | published
   version: str | None = None
+  place_url: str | None = None   # the config's `place_url` template: each place's page at its source
+  area_field: str | None = None  # the config's `area_field`: the source's own area (km2) wins over a geodesic one
+
+
+TEMPLATE_FIELD = re.compile(r"\{([^{}|]+)")
+
+
+def with_config(sources: list[Source], cfgs: dict[str, dict]) -> list[Source]:
+  """copy each source's link-back template and area field from its YAML (collections without one keep None)."""
+  for s in sources:
+    cfg = cfgs.get(s.slug) or {}
+    s.place_url, s.area_field = cfg.get("place_url"), cfg.get("area_field")
+  return sources
+
+
+def place_links(template: str | None, batch: pa.RecordBatch, cols: dict[str, str]) -> list[str | None]:
+  """the place's page at its source per row, rendered from `template`; null unless it is an http(s) URL."""
+  n = batch.num_rows
+  if not template:
+    return [None] * n
+  names = list(dict.fromkeys(TEMPLATE_FIELD.findall(template)))
+  vals = {f: batch.column(cols[f.lower()]).to_pylist() if f.lower() in cols else [None] * n for f in names}
+  out = []
+  for i in range(n):
+    if any(vals[f][i] is None for f in names):
+      out.append(None)
+      continue
+    u = render(template, {f: clean_id(vals[f][i]) if isinstance(vals[f][i], float) else vals[f][i] for f in names})
+    out.append(u if re.match(r"^https?://\S+$", u) else None)
+  return out
 
 
 # reads go to the S3 origin, not the CDN: storage.oceanmetrics.io caches the catalog's JSON for a day (max-age=86400), so
@@ -192,14 +226,20 @@ def parquet_href(coll: dict) -> str | None:
   return None
 
 
-def local_sources(staging: Path) -> list[Source]:
+def local_sources(staging: Path, origin: str = "local") -> list[Source]:
   out = []
   for f in sorted(staging.glob("*/places.parquet")):
     cj = f.parent / "collection.json"
     coll = json.loads(cj.read_text()) if cj.exists() else {}
-    out.append(Source(f.parent.name, f, coll, "local", coll.get("version")
+    out.append(Source(f.parent.name, f, coll, origin, coll.get("version")
                       or (coll.get("gazetteer:provenance") or {}).get("version")))
   return out
+
+
+def internal_sources(internal: Path | None) -> list[Source]:
+  """the build machine's private copies of reference collections (e.g. Marine Regions: never published as files, but
+  their places are in the index), <internal>/<slug>/places.parquet + collection.json."""
+  return local_sources(internal, "internal") if internal and internal.is_dir() else []
 
 
 def remote_sources(base: str, cache: Path, fetch=get_json, get_file=download) -> list[Source]:
@@ -233,9 +273,10 @@ def remote_sources(base: str, cache: Path, fetch=get_json, get_file=download) ->
     return [s for s in ex.map(one, hrefs) if s]
 
 
-def merge_sources(published: list[Source], local: list[Source]) -> list[Source]:
-  """one source per slug, a local staged build replacing the published one; sorted by slug."""
+def merge_sources(published: list[Source], local: list[Source], internal: list[Source] = ()) -> list[Source]:
+  """one source per slug: a local staged build, else the internal copy, else the published one; sorted by slug."""
   by = {s.slug: s for s in published}
+  by.update({s.slug: s for s in internal})
   by.update({s.slug: s for s in local})
   return [by[k] for k in sorted(by)]
 
@@ -318,7 +359,9 @@ def batch_rows(batch: pa.RecordBatch, src: Source) -> tuple[dict, list[dict]]:
   ver = [v or src.version for v in row_ver]
   updated = squash(coll.get("updated") or (coll.get("gazetteer:provenance") or {}).get("built"))
   # area: the source's own column, else the geodesic area of a polygon (the search ranks and labels by it) ----
-  area = _col(batch, cols, "area_km2")
+  area = _col(batch, cols, (src.area_field or "").lower()) if src.area_field else None
+  if area is None:
+    area = _col(batch, cols, "area_km2")
   area = [None if v is None or v != v else float(v) for v in area.to_pylist()] if area is not None else [None] * n
   if geoms is not None:
     area = [a if a is not None else geodesic_km2(geoms[i]) if ok[i] else None for i, a in enumerate(area)]
@@ -327,7 +370,8 @@ def batch_rows(batch: pa.RecordBatch, src: Source) -> tuple[dict, list[dict]]:
     "place_id": ids, "name": _strs(_col(batch, cols, "name"), n), "authority": authority, "place_type": place_type,
     "geom_type": geom_type, "collection": [src.slug] * n, "bbox": bbox, "centroid_lon": clon, "centroid_lat": clat,
     "area_km2": area, "license": lic, "attribution": att, "version": ver, "updated": [updated] * n,
-    "group_id": [None] * n,
+    "group_id": [None] * n, "source_id": [clean_id(v) for v in _col(batch, cols, "source_id").to_pylist()]
+    if "source_id" in cols else [None] * n, "url": place_links(src.place_url, batch, cols),
   }
 
   # crosswalk: source columns, then the place_id prefix fills what is still unknown ----
@@ -350,7 +394,8 @@ def source_batches(src: Source):
   pf = pq.ParquetFile(src.path)
   low = {c.lower(): c for c in pf.schema_arrow.names}
   want = ["place_id", "name", "authority", "gazetteer", "place_type", "geom_type", "bbox", "geometry", "area_km2",
-          "license", "attribution", "version"] + list(XW_SOURCE_COLS)
+          "license", "attribution", "version", "source_id"] + list(XW_SOURCE_COLS)
+  want += [f.lower() for f in TEMPLATE_FIELD.findall(src.place_url or "")] + ([src.area_field.lower()] if src.area_field else [])
   cols = [low[w] for w in dict.fromkeys(want) if w in low]
   if "place_id" not in low:
     raise ValueError(f"{src.slug}: no place_id column")
@@ -486,6 +531,8 @@ One row per place ({sum(stats["counts"].values())} rows, row groups of {ROW_GROU
 | centroid_lon, centroid_lat | double | planar centroid of the stored geometry (bbox centre if absent). Same convention as the bbox: for a place stored split at the antimeridian it is the centroid of the UNWRAPPED parts, so `centroid_lon` may exceed 180 (e.g. 188) and lies inside the bbox |
 | area_km2 | double | the source's own area, else the geodesic (WGS84) area of a polygon; null for points and lines |
 | license, attribution, version, updated | utf8 | per row, from the collection |
+| source_id | utf8 | the place's id at its source (MRGID, ps_id, ...); fills a reference layer's `feature_url` |
+| url | utf8 | the place's own page at its source (e.g. its Marine Regions gazetteer page, or the managing authority's page for a Navigator site); null when the source has none |
 | group_id | utf8 | rows that are the same place in different collections (or listed twice in one) share it: same name after normalising, same geometry kind, bbox IoU >= 0.8 (points within 0.001 deg); `<collection>/<place_id>` of the group's first member; null for a place with no other copy. Every copy keeps its own row, licence and geometry; apps pick which to show (layers.json `search_rank`) |
 
 ## `crosswalk.parquet`
@@ -526,12 +573,17 @@ def main(argv=None) -> int:
   ap.add_argument("--base", default=BASE, help="published catalog base URL")
   ap.add_argument("--no-remote", action="store_true")
   ap.add_argument("--no-local", action="store_true")
+  ap.add_argument("--internal", default=os.environ.get("PLACES_INTERNAL", str(INTERNAL)),
+                  help="private copies of reference collections (<dir>/<slug>/places.parquet); skipped when absent")
+  ap.add_argument("--no-internal", action="store_true", help="leave the private reference copies out")
   a = ap.parse_args(argv)
   staging, out = Path(a.staging), Path(a.out)
   loc = [] if a.no_local or not staging.is_dir() else local_sources(staging)
+  # read even with --no-local (the sync's mode): reference collections exist nowhere else
+  intern = [] if a.no_internal else internal_sources(Path(a.internal).expanduser())
   with tempfile.TemporaryDirectory(prefix="places-index-") as tmp:
     rem = [] if a.no_remote else remote_sources(a.base, Path(tmp))
-    sources = merge_sources(rem, loc)
+    sources = with_config(merge_sources(rem, loc, intern), load_all(ROOT / "sources"))
     stats = build(sources, out)
   origins = {s.slug: s.origin for s in sources}
   (out / "collection.json").write_text(json.dumps(collection_json(stats, out), indent=2, ensure_ascii=False) + "\n")

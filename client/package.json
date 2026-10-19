@@ -1,6 +1,6 @@
 {
   "name": "@oceanmetrics/places",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "client for the Ocean Metrics places gazetteer: layers manifest, MapLibre layers from PMTiles, parquet search and lookups, credits",
   "license": "MIT",
   "type": "module",

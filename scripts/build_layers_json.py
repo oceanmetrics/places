@@ -6,7 +6,9 @@ standalone (stdlib only): merges two sources of truth, local staged builds win o
   (b) <base>/catalog.json -> each child collection.json, plus versions.json for the current version
 a collection is a map layer when it carries a PMTiles asset (`kind: "vector"`) or a `gazetteer:raster` tile source
 (`kind: "raster"`: a reference layer drawn from its publisher's own tile service, e.g. Marine Regions' WMTS, with no
-parquet or PMTiles of ours; `raster` = {tiles, tile_size, minzoom, maxzoom, link}). either source may be absent.
+parquet or PMTiles of ours; `raster` = {tiles, tile_size, minzoom, maxzoom, link, feature_url}: `feature_url` fetches one
+place's boundary from the publisher, with the index row's `{source_id}`). either source may be absent.
+every row has `source_link` ({href, title}: the source gazetteer or publisher page apps link back to).
 
 URLs: every layer's `pmtiles` is CANONICAL, on the storage host (`base`, https://storage.oceanmetrics.io/gazetteer/):
 each request there costs one 302 to the bucket. apps MAY rewrite a `pmtiles` URL onto `base_direct` (the bucket's own
@@ -149,7 +151,21 @@ def raster_source(coll: dict) -> dict | None:
     return None
   tiles = r["tiles"] if isinstance(r["tiles"], list) else [r["tiles"]]
   return {"tiles": tiles, "tile_size": r.get("tile_size", 256), "minzoom": r.get("minzoom", 0),
-          "maxzoom": r.get("maxzoom", 22), "link": r.get("link")}
+          "maxzoom": r.get("maxzoom", 22), "link": r.get("link"), "feature_url": r.get("feature_url")}
+
+
+def source_link(coll: dict) -> dict | None:
+  """the source gazetteer or publisher page to link back to: {href, title}. `gazetteer:source_link` (written since
+  2026-10-19), else the collection's 'Upstream publisher page' link titled by its first producer."""
+  sl = coll.get("gazetteer:source_link") or {}
+  if sl.get("href"):
+    return {"href": sl["href"], "title": sl.get("title") or sl["href"]}
+  href = next((l["href"] for l in coll.get("links") or [] if l.get("rel") == "via"
+               and l.get("title") == "Upstream publisher page" and l.get("href")), None)
+  if not href:
+    return None
+  title = next((p["name"] for p in providers_of(coll) if "producer" in p.get("roles", [])), None)
+  return {"href": href, "title": title or href}
 
 
 def is_map_layer(coll: dict) -> bool:
@@ -251,6 +267,7 @@ def layer_row(coll: dict, style: dict | None = None, version: str | None = None,
     "license"         : coll.get("license"),
     "license_url"     : license_url(coll),
     "citation"        : citation(coll, slug, ver, updated, base),
+    "source_link"     : source_link(coll),
     "status"          : status,
     "status_history"  : coll.get("gazetteer:status_history") or None,
     "status_label"    : status_label(status),

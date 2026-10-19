@@ -163,7 +163,10 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           if [ -z "$AWS_ACCESS_KEY_ID" ]; then unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; fi
-          slugs=$(for b in ${{ steps.build.outputs.built }}; do echo "--slug ${b%%:*}"; done)
+          # reference collections (mr_*: no public parquet) have no membership yet; their index rows come from the
+          # private copies publish_collections.sh keeps in ~/data/oceanmetrics/places-internal (build_index.py --internal)
+          isref() { python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("gazetteer:reference") else 1)' "catalog/staging/$1/collection.json"; }
+          slugs=$(for b in ${{ steps.build.outputs.built }}; do s=${b%%:*}; isref "$s" || echo "--slug $s"; done)
           lj="$RUNNER_TEMP/layers.json"
           uv run scripts/build_layers_json.py --no-local --out "$lj"
           if [ -n "$slugs" ]; then   # without --slug the script would rebuild every collection's membership

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0
+
+- Link back to the source of every place and layer, for credit:
+  - `IndexPlace.url` is the place's own page at its source. Examples: its Marine Regions gazetteer page, or the
+    managing authority's page for a ProtectedSeas Navigator site.
+  - `IndexPlace.source_id` is the place's id at its source (MRGID, Navigator `ps_id`).
+  - `Layer.source_link` (`{ href, title }`, new type `SourceLink`) is the source gazetteer or publisher to credit,
+    e.g. Marine Regions (VLIZ) or ProtectedSeas Navigator.
+  - All three are null when unknown.
+- `getPlace` on a raster (reference) layer fetches that one boundary from the publisher's `raster.feature_url`, filled
+  with the index row's `source_id`. There is no parquet of ours for such a layer.
+  - The feature's properties are the publisher's attributes plus the index row.
+  - `served_by` is the URL it came from.
+  - A publisher response split into several polygons becomes one MultiPolygon (new helper `mergeGeometries`).
+  - A relative `feature_url` resolves against `base`.
+- A `getPlace` pinned to a `slug` now also reads the manifest (cached) to tell whether the slug is a reference layer.
+- Data: the Marine Regions layers become reference layers (VLIZ asked us not to republish their products). The new
+  `protectedseas_navigator` layer is ordinary vector data (CC BY 4.0).
+
 ## 0.3.0
 
 - Raster (reference) layers: a layers.json row with `kind: "raster"` is drawn from its publisher's own tile service

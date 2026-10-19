@@ -10,7 +10,9 @@ from shapely.geometry import Polygon
 
 from conftest import ROOT, STAGING, square
 from gazetteer import fetch_wfs
-from gazetteer.config import load_all
+from pathlib import Path
+
+from gazetteer.config import load_all, load_layer_config
 from gazetteer.geom import clean_geometry, max_edge_span
 from gazetteer.pipeline import changed_sources
 from gazetteer.table import build_rows
@@ -271,3 +273,46 @@ def test_staged_goas_mrgids_are_the_configured_ones():
   t = pq.read_table(staged("mr_goas") / "places.parquet", columns=["place_id", "name_src"]).to_pylist()
   m = CFGS["mr_goas"]["sources"][0]["mrgid"]["map"]
   assert {r["name_src"]: r["place_id"] for r in t} == {k: f"MRGID:{v}" for k, v in m.items()}
+
+
+# reference collections (VLIZ: no republished products; map tiles, WFS and index are fine, 2026-10-16) ----
+def test_every_mr_config_is_a_reference_collection_on_the_gwc_tiles_with_links_back():
+  from gazetteer.config import load_all
+  for slug, cfg in load_all("sources").items():
+    if not slug.startswith("mr_"):
+      continue
+    ref = cfg["reference"]
+    assert "/gwc/service/wmts?" in ref["tiles"] and "{z}" in ref["tiles"], slug     # cached tiles, never plain WMS
+    assert ref["maxzoom"] <= 12 and ref["link"].startswith("https://doi.org/10.14284/"), slug
+    assert cfg["place_url"] == "https://www.marineregions.org/gazetteer.php?p=details&id={mrgid}", slug
+    # one global polygon per place is too heavy to fetch per view
+    assert (ref.get("feature_url") is None) == (slug in ("mr_goas", "mr_high_seas")), slug
+
+
+def test_reference_collection_stac_has_no_data_assets_and_names_its_tiles(tmp_path):
+  from gazetteer.config import validate_config
+  from gazetteer.stac import agents, reference_fields, source_link
+  cfg = load_layer_config(next(p for p in Path("sources/marineregions").glob("*.yml") if "mr_eez" in p.read_text()))
+  rf = reference_fields(cfg)
+  assert rf["gazetteer:reference"] is True and rf["gazetteer:raster"]["tiles"] == [cfg["reference"]["tiles"]]
+  assert "{source_id}" in rf["gazetteer:raster"]["feature_url"]
+  assert source_link(cfg) == {"href": "https://www.marineregions.org/", "title": "Marine Regions (VLIZ)"}
+  assert "no parquet or PMTiles here" in agents(cfg)
+  assert reference_fields({**cfg, "reference": None}) == {}
+  with pytest.raises(ValueError, match="reference.tiles needs"):
+    validate_config({**cfg, "reference": {"tiles": "https://x.example/tile.png"}})
+  with pytest.raises(ValueError, match="feature_url needs"):
+    validate_config({**cfg, "reference": {**cfg["reference"], "feature_url": "https://x.example/wfs"}})
+  with pytest.raises(ValueError, match="place_url"):
+    validate_config({**cfg, "place_url": "https://www.marineregions.org/"})
+
+
+@pytest.mark.parametrize("slug", ["mr_eez"])
+def test_staged_reference_collection_json_lists_metadata_only(slug):
+  cj = STAGING / slug / "collection.json"
+  if not cj.exists():
+    pytest.skip("not staged")
+  coll = json.loads(cj.read_text())
+  assert sorted(coll["assets"]) == ["documentation", "provenance", "styles/default"]
+  assert not [l for l in coll["links"] if l["rel"] == "pmtiles"] and "pmtiles:layers" not in coll
+  assert coll["gazetteer:raster"]["maxzoom"] == 12

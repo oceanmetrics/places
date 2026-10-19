@@ -20,6 +20,15 @@ export interface RasterSource {
   maxzoom  : number
   /** the layer's page at its publisher (e.g. marineregions.org): where its data live. */
   link     : string | null
+  /** one place's boundary as GeoJSON from the publisher, `{source_id}` from the index row (a relative URL resolves
+   *  against `base`); `getPlace` uses it. null: no per-place geometry (e.g. a single global polygon). */
+  feature_url?: string | null
+}
+
+/** a link back to the source gazetteer or publisher of a layer (layers.json `source_link`). */
+export interface SourceLink {
+  href : string
+  title: string
 }
 
 /** a dated status event of a whole layer (layers.json `status` and the items of `status_history`). */
@@ -79,6 +88,8 @@ export interface Layer {
   parquet?        : string | null
   /** sha256 (hex) of places.parquet at `version`: pin `version` + `parquet_sha256`. */
   parquet_sha256? : string | null
+  /** the source gazetteer or publisher page to credit and link back to (client 0.4.0; null when unknown). */
+  source_link?    : SourceLink | null
   /** URL of `<slug>/h3/membership.json`: the place x H3 membership (res 1-7, the share of each cell inside each
    *  place), set only while it was built from this `parquet_sha256`; null for points, lines and stale builds. */
   h3?             : string | null
@@ -118,6 +129,11 @@ export interface IndexPlace {
   updated   : string | null
   /** rows that are the same place in different collections share it (null: no other copy). see `search({ group })`. */
   group_id  : string | null
+  /** the place's id at its source (MRGID, Navigator ps_id, ...); null in indexes before client 0.4.0. */
+  source_id?: string | null
+  /** the place's own page at its source (its Marine Regions page, a Navigator site's managing-authority page); link
+   *  back to it. null when the source has none. */
+  url?      : string | null
   /** with `search({ group: true })`: the other copies of this place, in preference order. */
   also?     : IndexPlace[]
 }
@@ -141,7 +157,11 @@ export interface SearchOptions {
  * `collection` (a foreign member) is the slug of the collection the place was read from: place_id is not unique
  * across collections, so this is what links the feature back to its layers.json entry (licence, attribution, citation).
  */
-export type PlaceFeature = Feature<Geometry, Record<string, unknown>> & { id: string; bbox?: BBox; collection: string }
+export type PlaceFeature = Feature<Geometry, Record<string, unknown>> & {
+  id: string; bbox?: BBox; collection: string
+  /** set when the geometry came from the publisher's own service (a reference layer's `feature_url`): its URL. */
+  served_by?: string
+}
 
 export interface GetPlaceOptions {
   /** unwrap antimeridian-split parts into contiguous longitudes beyond 180 (see `unwrapAntimeridian`). */

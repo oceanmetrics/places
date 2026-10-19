@@ -8,6 +8,12 @@ Rules for anyone (human or agent) changing this repo. Each rule is guarded by a 
 - **Tier 2: restricted or unclear terms.** Redistributed only after written confirmation from the licensor;
   keep the confirmation (email/link) in the source's `sources/<authority>/<layer>.yml` notes.
 - **Tier 3: no redistribution right.** Crosswalk ids only (`index/crosswalk.parquet`); never geometry in the bucket.
+- **Reference collections: the publisher asks us not to republish (even under CC-BY).** A `reference:` block in the
+  YAML: public metadata, index rows and a layers.json `kind: "raster"` row on the publisher's own tiles; one boundary
+  at a time from its `feature_url`; the parquet/PMTiles stay on the build machine (`~/data/oceanmetrics/places-internal`)
+  for derived products. `publish_collections.sh` refuses to upload their data files (e.g. `mr_*`, VLIZ 2026-10-16).
+- **Link back to the source.** `source_page`/`source_home` and `source_title` give every layer a `source_link`; a
+  `place_url` template gives every index row its own page at the source (`url`). Apps show both next to the credit.
 
 ## Data rules
 

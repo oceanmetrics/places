@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getPlace, layerLabel, samePlace, type IndexPlace, type PlaceFeature } from '@oceanmetrics/places'
+  import { getPlace, layerLabel, samePlace, search, type IndexPlace, type PlaceFeature } from '@oceanmetrics/places'
   import { onMount } from 'svelte'
   import Credit from '../lib/Credit.svelte'
   import CopyButton from '../lib/CopyButton.svelte'
@@ -14,14 +14,17 @@
   let status = $state<'loading' | 'ok' | 'missing' | 'error'>('loading')
   let message = $state('')
   let copies = $state<IndexPlace[]>([])   // the same place in other layers (index group_id)
+  let row = $state<IndexPlace | null>(null) // the index row: link back to the source, and all a reference place without per-place geometry has
 
   onMount(async () => {
     await loadManifest()
     try {
-      const f = await getPlace(id, { unwrap: true })
-      if (f) {
+      const [f, hits] = await Promise.all([getPlace(id, { unwrap: true }), search(id, { limit: 20 }).catch(() => [])])
+      row = (f ? hits.find((h) => h.place_id === id && h.collection === f.collection) : hits.find((h) => h.place_id === id)) ?? null
+      const refOnly = !f && row && manifest.layers.some((l) => l.slug === row!.collection && l.kind === 'raster')
+      if (f || refOnly) {
         feature = f; status = 'ok'
-        samePlace(id, { slug: f.collection }).then((c) => { copies = c }).catch(() => { copies = [] })
+        samePlace(id, { slug: f?.collection ?? row!.collection }).then((c) => { copies = c }).catch(() => { copies = [] })
       } else status = 'missing'
     } catch (e) {
       status = 'error'
@@ -29,13 +32,17 @@
     }
   })
 
-  const attrs = $derived((feature?.properties ?? {}) as Record<string, unknown>)
-  const layer = $derived(feature || manifest.status === 'ok' ? layerForPlace(manifest.layers, id, attrs, feature?.collection) : undefined)
-  const url = $derived(layer ? parquetUrl(BASE, layer.collection) : '')
+  const attrs = $derived((feature?.properties ?? (row ? { ...row, bbox: undefined, centroid: undefined, also: undefined } : {})) as Record<string, unknown>)
+  const layer = $derived(feature || row || manifest.status === 'ok' ? layerForPlace(manifest.layers, id, attrs, feature?.collection ?? row?.collection) : undefined)
+  const isRef = $derived(layer?.kind === 'raster')
+  const url = $derived(layer && !isRef ? parquetUrl(BASE, layer.collection) : '')
+  const sourceUrl = $derived(String(row?.url ?? attrs.url ?? '') || '')
+  const servedBy = $derived(feature?.served_by ? new URL(feature.served_by).host : '')
+  const sel = $derived(isRef && layer ? [{ slug: layer.slug, colour: null, opacity: null, width: null }] : [])
   const name = $derived(String(attrs.name ?? id))
-  const rows = $derived(Object.entries(attrs).filter(([k]) => k !== 'name' && k !== 'place_id'))
+  const rows = $derived(Object.entries(attrs).filter(([k, v]) => k !== 'name' && k !== 'place_id' && v !== undefined))
   const sql = $derived(url ? geojsonSql(url, id) : '')
-  const geojsonHref = $derived(feature ? URL.createObjectURL(new Blob([JSON.stringify(feature)], { type: 'application/geo+json' })) : '')
+  const geojsonHref = $derived(feature && !isRef ? URL.createObjectURL(new Blob([JSON.stringify(feature)], { type: 'application/geo+json' })) : '')
   const fileName = $derived(id.replace(/[^\w.-]+/g, '_') + '.geojson')
 </script>
 
@@ -45,7 +52,7 @@
   <p class="muted">{id}{#if layer}{' '}· layer <a href={withBase(layerPath(layer.slug), BASE)}>{layerLabel(layer)}</a>{/if}</p>
 
   {#if status === 'loading'}
-    <p class="muted">Loading from the collection parquet…</p>
+    <p class="muted">Loading…</p>
   {:else if status === 'missing'}
     <p class="notice">No published collection contains the place <code>{id}</code>. The collection may not be published yet, or the id is wrong.</p>
   {:else if status === 'error'}
@@ -53,11 +60,17 @@
   {/if}
 
   {#if status === 'ok'}
+    {#if sourceUrl || layer?.source_link?.href}
+      <p class="source">
+        {#if sourceUrl}<a class="btn secondary small" href={sourceUrl} target="_blank" rel="noopener noreferrer">View at {layer?.source_link?.title ?? 'the source'} ↗</a>{/if}
+        {#if layer?.source_link?.href}<span class="muted">Source: <a href={layer.source_link.href} target="_blank" rel="noopener noreferrer">{layer.source_link.title}</a>{#if servedBy}{' · boundary served by '}<code>{servedBy}</code>{/if}{#if isRef && !feature}{" · shown from the source's map tiles"}{/if}</span>{/if}
+      </p>
+    {/if}
     <div class="mapbox">
       {#await import('../lib/PlacesMap.svelte')}
         <p class="muted">Loading the map…</p>
       {:then m}
-        <m.default highlight={feature} popups={false} />
+        <m.default highlight={feature} popups={false} selected={sel} layers={manifest.layers} fit={!feature && row ? row.bbox : null} />
       {/await}
     </div>
 
@@ -104,20 +117,26 @@
     </div>
 
     <h2>Download</h2>
-    <div class="row">
-      {#if url}<a class="btn secondary" href={url}>Collection GeoParquet</a>{/if}
-      <a class="btn secondary" href={geojsonHref} download={fileName}>GeoJSON (this place)</a>
-    </div>
-    {#if sql}
-      <h3>Or copy this DuckDB SQL to write GeoJSON from the parquet</h3>
-      <pre>{sql}</pre>
-      <CopyButton text={sql} label="Copy SQL" />
+    {#if isRef}
+      <p>The source asked that its data not be republished, so there is no copy here:
+        {#if layer?.raster?.link}<a href={layer.raster.link} target="_blank" rel="noopener noreferrer">get it from {layer.source_link?.title ?? 'the source'}</a>{:else}get it from the source{/if}.</p>
+    {:else}
+      <div class="row">
+        {#if url}<a class="btn secondary" href={url}>Collection GeoParquet</a>{/if}
+        <a class="btn secondary" href={geojsonHref} download={fileName}>GeoJSON (this place)</a>
+      </div>
+      {#if sql}
+        <h3>Or copy this DuckDB SQL to write GeoJSON from the parquet</h3>
+        <pre>{sql}</pre>
+        <CopyButton text={sql} label="Copy SQL" />
+      {/if}
     {/if}
   {/if}
 </main>
 
 <style>
   .copies { margin: 0 0 8px; padding-left: 1.2rem; }
+  .source { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 4px 0 0; }
   .mapbox { position: relative; height: 22rem; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 12px 0; }
   @media (max-width: 600px) { .mapbox { height: 16rem; } }
 </style>
