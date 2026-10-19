@@ -35,3 +35,6 @@ dist/
 
 # H3 membership builds (scripts/build_h3_membership.py), published to the bucket, not committed
 catalog/h3/
+
+# prototypes: local data (internal reference tiles, cached API pulls) never committed
+proto/**/data/

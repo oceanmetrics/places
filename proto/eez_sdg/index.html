@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EEZ SDG 14 prototype</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@3.2.1/dist/pmtiles.js"></script>
+<style>
+  :root { --bg: #f7f8f9; --panel: #ffffffee; --ink: #1d2730; --muted: #5b6b78; --line: #d5dde3; --accent: #0b6e99; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #10161b; --panel: #182128ee; --ink: #e4ebf0; --muted: #9aabb8; --line: #2c3a45; --accent: #5cb8e0; }
+  }
+  :root[data-theme="dark"] { --bg: #10161b; --panel: #182128ee; --ink: #e4ebf0; --muted: #9aabb8; --line: #2c3a45; --accent: #5cb8e0; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #map { position: absolute; inset: 0; }
+  .panel { position: absolute; top: 12px; left: 12px; width: min(340px, calc(100vw - 32px)); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; box-shadow: 0 2px 10px #0002; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+  label { display: block; margin: 3px 0; cursor: pointer; }
+  .legend { margin: 10px 0 4px; }
+  .ramp { height: 10px; border-radius: 3px; }
+  .ticks { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+  .nodata { display: inline-block; width: 12px; height: 10px; vertical-align: middle; border: 1px solid var(--line);
+    background: repeating-linear-gradient(45deg, #b8c2c9, #b8c2c9 2px, #e3e8eb 2px, #e3e8eb 5px); }
+  .desc { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .credit { position: absolute; left: 12px; bottom: 12px; width: min(520px, calc(100vw - 32px)); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 11.5px; color: var(--muted); }
+  .credit b { color: var(--ink); }
+  a { color: var(--accent); }
+  .maplibregl-popup-content { background: var(--panel); color: var(--ink); }
+  .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line); color: var(--muted); }
+  @media (max-width: 600px) { .credit { display: none; } }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <h1>SDG 14 by Exclusive Economic Zone</h1>
+  <p class="sub">Prototype · Ocean Metrics · <span class="tag">internal vector tiles</span></p>
+  <div id="series"></div>
+  <div class="legend">
+    <div class="ramp" id="ramp"></div>
+    <div class="ticks"><span id="lo"></span><span id="mid"></span><span id="hi"></span></div>
+    <div class="desc"><span class="nodata"></span> no value, or a joint regime / overlapping claim</div>
+  </div>
+  <div class="desc" id="sdesc"></div>
+  <label style="margin-top:8px"><input type="checkbox" id="official"> show the official Marine Regions map tiles (VLIZ)</label>
+</div>
+<div class="credit">
+  <b>EEZ boundaries:</b> Flanders Marine Institute (2023). Maritime Boundaries Geodatabase: Maritime Boundaries and
+  Exclusive Economic Zones (200NM), version 12. <a href="https://doi.org/10.14284/632">doi:10.14284/632</a> ·
+  <a href="https://www.marineregions.org/">MarineRegions.org</a> · CC BY 4.0. Each EEZ links to its Marine Regions page.
+  Boundaries have no legal value.<br>
+  <b>Indicators:</b> <a href="https://unstats.un.org/sdgs/dataportal">UN SDG Global Database</a>, latest year per
+  country; an EEZ takes its territory's value, else its sovereign's.
+</div>
+<script>
+const MR_PAGE = id => `https://www.marineregions.org/gazetteer.php?p=details&id=${id}`;
+const VLIZ_TILES = "https://geo.vliz.be/geoserver/MarineRegions/gwc/service/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=eez&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:{z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png";
+const RAMP = ["#fde725", "#5ec962", "#21918c", "#3b528b", "#440154"];   // viridis, low = light
+const NODATA = "#cfd6db";
+
+const protocol = new pmtiles.Protocol();
+maplibregl.addProtocol("pmtiles", protocol.tile);
+
+function lerp(a, b, t) { return Math.round(a + (b - a) * t); }
+function hex(c) { return [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)); }
+function colorAt(t) {
+  t = Math.max(0, Math.min(1, t)) * (RAMP.length - 1);
+  const i = Math.min(Math.floor(t), RAMP.length - 2), f = t - i, a = hex(RAMP[i]), b = hex(RAMP[i + 1]);
+  return `rgb(${lerp(a[0], b[0], f)},${lerp(a[1], b[1], f)},${lerp(a[2], b[2], f)})`;
+}
+function quantile(xs, q) { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(q * (s.length - 1))]; }
+function fmt(v) { return Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1); }
+
+async function main() {
+  const data = await (await fetch("data/values.json")).json();
+  const codes = Object.keys(data.series);
+  let current = codes[0];
+
+  const map = new maplibregl.Map({
+    container: "map", center: [0, 15], zoom: 1.4, renderWorldCopies: true,
+    attributionControl: { compact: true, customAttribution:
+      'EEZ: <a href="https://www.marineregions.org/">Marine Regions (VLIZ)</a> · SDG: UN Statistics Division' },
+    style: { version: 8, sources: {
+        ocean: { type: "raster", tileSize: 256, maxzoom: 10, attribution: "Esri, GEBCO, NOAA, Garmin",
+          tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}"] },
+        eez: { type: "vector", url: "pmtiles://" + new URL("data/eez.pmtiles", location.href).href },
+        vliz: { type: "raster", tileSize: 256, maxzoom: 12, tiles: [VLIZ_TILES],
+          attribution: '<a href="https://www.marineregions.org/">Marine Regions (VLIZ) map tiles</a>' } },
+      layers: [
+        { id: "ocean", type: "raster", source: "ocean", paint: { "raster-saturation": -0.6, "raster-opacity": 0.8 } },
+        { id: "eez-fill", type: "fill", source: "eez", "source-layer": "mr_eez", paint: { "fill-opacity": 0.8 } },
+        { id: "eez-line", type: "line", source: "eez", "source-layer": "mr_eez",
+          paint: { "line-color": "#ffffff", "line-width": 0.6, "line-opacity": 0.9 } },
+        { id: "eez-hover", type: "line", source: "eez", "source-layer": "mr_eez", filter: ["==", ["get", "source_id"], ""],
+          paint: { "line-color": "#111", "line-width": 2 } },
+        { id: "vliz", type: "raster", source: "vliz", layout: { visibility: "none" }, paint: { "raster-opacity": 0.85 } } ] } });
+  map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+  function domain(code) {
+    const vals = Object.values(data.eez).map(e => e[code]).filter(Boolean).map(v => v.value);
+    return data.series[code].domain || [quantile(vals, 0.05), quantile(vals, 0.95)];
+  }
+  function paint() {
+    const [lo, hi] = domain(current), expr = ["match", ["to-string", ["get", "source_id"]]];
+    for (const [id, e] of Object.entries(data.eez)) {
+      const v = e[current];
+      expr.push(id, v ? colorAt((v.value - lo) / (hi - lo)) : NODATA);
+    }
+    expr.push(NODATA);
+    map.setPaintProperty("eez-fill", "fill-color", expr);
+    const s = data.series[current];
+    document.getElementById("ramp").style.background = `linear-gradient(90deg, ${RAMP.join(",")})`;
+    document.getElementById("lo").textContent = fmt(lo);
+    document.getElementById("mid").textContent = s.units;
+    document.getElementById("hi").textContent = fmt(hi) + (s.domain ? "" : "+");
+    document.getElementById("sdesc").innerHTML =
+      `${s.description}. <a href="${s.link}">UN SDG ${s.indicator}</a>${s.domain ? "" : " (colour range: 5th–95th percentile)"}.`;
+  }
+
+  const box = document.getElementById("series");
+  for (const code of codes) {
+    const s = data.series[code];
+    box.insertAdjacentHTML("beforeend",
+      `<label><input type="radio" name="series" value="${code}" ${code === current ? "checked" : ""}> <b>${s.indicator}</b> ${s.short}</label>`);
+  }
+  box.addEventListener("change", ev => { current = ev.target.value; paint(); });
+  document.getElementById("official").addEventListener("change", ev =>
+    map.setLayoutProperty("vliz", "visibility", ev.target.checked ? "visible" : "none"));
+
+  function describe(id) {
+    const e = data.eez[id], v = e && e[current], s = data.series[current];
+    if (!e) return "";
+    const val = v ? `<b>${fmt(v.value)} ${s.units}</b> (${v.year}, ${v.basis} M49 ${v.m49})`
+                  : (e.pol_type === "200NM" ? "no value reported" : `${e.pol_type}: no single-state value`);
+    return `<b>${e.name}</b><br>${s.indicator} ${s.short}: ${val}`;
+  }
+  const hover = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
+  map.on("mousemove", "eez-fill", ev => {
+    const id = String(ev.features[0].properties.source_id);
+    map.getCanvas().style.cursor = "pointer";
+    map.setFilter("eez-hover", ["==", ["to-string", ["get", "source_id"]], id]);
+    hover.setLngLat(ev.lngLat).setHTML(describe(id)).addTo(map);
+  });
+  map.on("mouseleave", "eez-fill", () => {
+    map.getCanvas().style.cursor = "";
+    map.setFilter("eez-hover", ["==", ["get", "source_id"], ""]);
+    hover.remove();
+  });
+  map.on("click", "eez-fill", ev => {
+    const id = String(ev.features[0].properties.source_id);
+    hover.remove();
+    new maplibregl.Popup({ offset: 8 }).setLngLat(ev.lngLat).setHTML(
+      `${describe(id)}<br><a href="${MR_PAGE(id)}" target="_blank" rel="noopener">View at Marine Regions</a> · MRGID ${id}`).addTo(map);
+  });
+  map.on("load", paint);
+}
+main();
+</script>
+</body>
+</html>
