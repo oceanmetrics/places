@@ -79,12 +79,15 @@ def split_antimeridian(geom):
 
 def snap_to_antimeridian(geom, tol: float = 1e-4):
   """vertices within `tol` degrees of +/-180 move onto the meridian. some servers cut at the dateline in Web Mercator
-  and land about 1e-5 degrees short of +/-180 (BOEM's Alaska planning areas do), which leaves a visible gap in tiles."""
+  and land about 1e-5 degrees short of +/-180 (BOEM's Alaska planning areas do), which leaves a visible gap in tiles.
+  latitudes a hair past a pole (90.00000000000006 in Navigator's NEAFC and NASCO areas) move onto it."""
   def snap(c):
-    x = c[:, 0]
+    x, y = c[:, 0], c[:, 1]
     c = c.copy()
     c[np.abs(x - 180.0) <= tol, 0] = 180.0
     c[np.abs(x + 180.0) <= tol, 0] = -180.0
+    c[(y > 90.0) & (y <= 90.0 + tol), 1] = 90.0
+    c[(y < -90.0) & (y >= -90.0 - tol), 1] = -90.0
     return c
   return shapely.transform(geom, snap)
 

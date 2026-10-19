@@ -49,6 +49,14 @@ def test_vertices_a_hair_short_of_the_meridian_snap_onto_it():
   assert clean_geometry(square(179.0, 0, 0.5)).bounds == (179.0, 0.0, 179.5, 0.5)    # far from 180: untouched
 
 
+def test_latitudes_a_hair_past_the_pole_snap_onto_it():
+  # regression: Navigator's NEAFC / NASCO areas reach 90.00000000000006, which check_parquet rejects
+  g = Polygon([(-40, 36), (50, 36), (50, 90.00000000000006), (-40, 90.00000000000006), (-40, 36)])
+  assert clean_geometry(g).bounds == (-40.0, 36.0, 50.0, 90.0)
+  south = Polygon([(0, -90.00000000000006), (10, -90.00000000000006), (10, -80), (0, -80), (0, -90.00000000000006)])
+  assert clean_geometry(south).bounds[1] == -90.0
+
+
 def test_polygon_west_of_minus_180_is_split():
   g = Polygon([(-190, 0), (-170, 0), (-170, 5), (-190, 5), (-190, 0)])
   out = split_antimeridian(g)
