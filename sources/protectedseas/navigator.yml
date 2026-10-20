@@ -1,0 +1,16 @@
+# protectedseas_navigator: the published 30,111-site layer (1.0.0, 2026-10-19), kept only until the six groups that
+# replace it are published (catalog/staging/RUNBOOK_PUBLISH.md). this config keeps its index rows' links back
+# (`place_url`), supplied areas and keywords; do not rebuild or republish it. retire it with the groups' publish.
+extends: _navigator_base.yml
+slug: protectedseas_navigator
+title: ProtectedSeas Navigator marine protected and managed areas
+superseded_by: [protectedseas_mpa, protectedseas_fisheries, protectedseas_jurisdiction, protectedseas_vessel,
+                protectedseas_human_use, protectedseas_other]
+id_sort: false
+spatial_sort: true            # as published
+sources:
+  - kind: navigator_export
+    url: https://navigatormap.org/data-request
+    item_id: Navigator_API_AllSites_082726
+    export_label: Navigator Direct Data Export for API users, 2026-08-27
+    path: cache/protectedseas_navigator/export
