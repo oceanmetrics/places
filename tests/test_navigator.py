@@ -69,12 +69,9 @@ def navigator_groups():
   return {s: c for s, c in load_all("sources").items() if s.startswith("protectedseas_") and not c.get("superseded_by")}
 
 
-def test_the_published_single_layer_is_kept_only_as_superseded():
-  """its config stays until the groups are published, so an index rebuild keeps its links back, areas and keywords."""
-  cfg = load_all("sources")["protectedseas_navigator"]
-  assert sorted(cfg["superseded_by"]) == sorted(navigator_groups())
-  assert cfg["place_url"] == "{url}" and cfg["area_field"] == "total_area" and cfg["search_fields"] == ["country", "state"]
-  assert "include" not in cfg["sources"][0]
+def test_the_retired_single_layer_has_no_config():
+  """protectedseas_navigator was retired from the catalog when the six groups were published (2026-10-20)."""
+  assert "protectedseas_navigator" not in load_all("sources")
 
 
 def test_navigator_groups_key_on_ps_id_and_use_the_supplied_area():
