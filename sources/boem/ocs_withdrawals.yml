@@ -1,0 +1,46 @@
+# boem_ocs_withdrawals: OCS Withdrawal Areas (BOEM) (28), MarineCadastre scan 2026-10-20 #4
+slug: boem_ocs_withdrawals
+title: BOEM OCS withdrawal areas
+description: >-
+  Areas of the Outer Continental Shelf withdrawn, permanently or for a period, from oil and gas, renewable energy,
+  sand or mineral leasing (28 polygons): presidential withdrawals under section 12 of the OCS Lands Act (43 U.S.C.
+  1341), national marine sanctuaries and marine national monuments whose terms restrict leasing, and other areas
+  (national parks, wildlife refuges, preserves). `WITHDRAW_TYPE` is BOEM's code (PRW presidential withdrawal, SMW
+  sanctuary or monument, OTH other); `LEASE_TYPE_RESTRICTION` lists the restricted lease types by letter (as read
+  from the item description: O oil and gas, R renewable energy, S sand, M minerals); `WITHDRAW_PERIOD` is
+  'Indefinitely' or a date range; `DOCUMENT_1`, `DOCUMENT_2` and `MAP_URL` are HTML links as served. The id is the
+  area's `ACRONYM` (BOEM:WD:GRNMS). A withdrawal overlaps the sanctuary or monument of the same name but is a
+  distinct legal status. Not an official record of exact boundaries: for cartographic use only, not for area
+  calculations.
+authority: BOEM
+place_type: restricted_area
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.usa.gov/publicdomain/label/1.0/
+license_note: >-
+  U.S. federal government work (BOEM); the ArcGIS item licenseInfo is the U.S. public domain label
+  (https://www.usa.gov/publicdomain/label/1.0/). The item states the data are not an official record of exact
+  boundaries and are for cartographic purposes only.
+attribution: >-
+  Bureau of Ocean Energy Management (BOEM), Office of Strategic Resources, Geospatial Services Division. Public
+  domain; not an official boundary record. Processed by Ocean Metrics.
+providers:
+  - {name: Bureau of Ocean Energy Management (BOEM), roles: [producer, licensor], url: "https://www.boem.gov/oil-gas-energy/leasing/areas-under-restriction"}
+source_page: https://www.arcgis.com/home/item.html?id=4bc59b53f6cf44a1a4a5fe5174ffa6fa
+source_home: https://www.boem.gov/oil-gas-energy/leasing/areas-under-restriction
+source_title: BOEM areas under restriction
+place_id: {template: "BOEM:WD:{ACRONYM}", pattern: "^BOEM:WD:[A-Z]+$"}
+name: "{NAME} (OCS leasing withdrawal)"
+source_id: "{ACRONYM}"
+search_fields: [ACRONYM]
+status:
+  value: withdrawn
+  source: https://www.boem.gov/oil-gas-energy/leasing/areas-under-restriction
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://services7.arcgis.com/G5Ma95RzqJRPKsWL/arcgis/rest/services/OCS_Withdrawal_Areas/FeatureServer/6
+    item_id: 4bc59b53f6cf44a1a4a5fe5174ffa6fa
+    expected_count: 28
+    page_size: 100

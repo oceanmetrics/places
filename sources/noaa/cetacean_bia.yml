@@ -1,0 +1,50 @@
+# noaa_cetacean_bia: Biologically Important Areas for cetaceans (CetMap, 2015) (131), MarineCadastre scan 2026-10-20 #7
+slug: noaa_cetacean_bia
+title: Biologically Important Areas for cetaceans (2015)
+description: >-
+  Biologically Important Areas (BIAs) for 24 cetacean species, stocks or populations in seven U.S. regions (East
+  Coast, Gulf of Mexico, West Coast, Hawaii, Gulf of Alaska, Aleutian Islands and Bering Sea, Arctic), identified by
+  NOAA's Cetacean Density and Distribution Mapping Working Group (CetMap) (131 polygons): reproductive areas, feeding
+  areas, migratory corridors and areas of small and resident populations (`BIA_type`), each with species
+  (`cmn_name`, `sci_name`, `stock_pop`), season (`BIA_time`, `BIA_months`) and migration direction. BIAs are not
+  regulatory areas. The id is the source `BIA_ID` (NMFS:BIA:3). This is the 2015 BIA set (Van Parijs et al. 2015);
+  the BIA II update (2023 onward) is not included. Publications using these data must cite Van Parijs et al. (2015)
+  or the regional paper.
+authority: NMFS
+place_type: habitat
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA). The ArcGIS item licenseInfo states: "These data are available for public
+  use. At least one of the following citations must be included in any publication or report that uses this data.
+  The first citation covers the entire dataset and special issue publication, other citations are specific to each
+  regional dataset" (the first is Van Parijs, Curtice & Ferguson (Eds.) 2015, Aquatic Mammals 41(1)). The required
+  citation is in `attribution` and `citation`.
+attribution: >-
+  NOAA Cetacean Density and Distribution Mapping Working Group (CetMap). Van Parijs, S. M., Curtice, C., & Ferguson,
+  M. C. (Eds.). (2015). Biologically important areas for cetaceans within U.S. waters. Aquatic Mammals (Special
+  Issue), 41(1), 1-128. Public domain U.S. government data; citation required. Processed by Ocean Metrics.
+citation: >-
+  Van Parijs, S. M., Curtice, C., & Ferguson, M. C. (Eds.). (2015). Biologically important areas for cetaceans within
+  U.S. waters. Aquatic Mammals (Special Issue), 41(1), 1-128.
+providers:
+  - {name: NOAA Fisheries (CetMap working group), roles: [producer, licensor], url: "https://oceannoise.noaa.gov/biologically-important-areas"}
+source_page: https://www.arcgis.com/home/item.html?id=63f2274bb0b7461f97c8a9113a518366
+source_home: https://oceannoise.noaa.gov/biologically-important-areas
+source_title: NOAA Biologically Important Areas
+place_id: {template: "NMFS:BIA:{BIA_ID}", pattern: "^NMFS:BIA:\\d+$"}
+name: "{BIA_name} ({cmn_name}, {BIA_type})"
+source_id: "{BIA_ID}"
+search_fields: [cmn_name, sci_name]
+status:
+  value: identified
+  source: https://oceannoise.noaa.gov/biologically-important-areas
+  date: "2015"                 # identified in Van Parijs et al. (2015); the service has no per-area dates
+sources:
+  - kind: arcgis
+    url: https://services2.arcgis.com/C8EMgrsFcRFL6LrL/arcgis/rest/services/CetMap_BIA/FeatureServer/0
+    item_id: 63f2274bb0b7461f97c8a9113a518366
+    expected_count: 131
+    page_size: 100

@@ -1,0 +1,47 @@
+# noaa_efh: NOAA Fisheries Essential Fish Habitat (EFH Mapper) (782), MarineCadastre scan 2026-10-20 #1
+slug: noaa_efh
+title: NOAA Fisheries Essential Fish Habitat
+description: >-
+  Essential Fish Habitat (EFH) boundaries for federally managed species, as used in the NOAA Fisheries EFH Mapper
+  (782 polygons): one polygon per species or species group (`SITENAME_L`), life stage (`LIFESTAGE`) and Fishery
+  Management Council (`FMC`, `FMC_REPORT`), with the fishery management plan amendment that describes it
+  (`FMP_REPORT`) and the data caveat (`DATACAVEAT`). Polygons are large and overlap heavily (many species share the
+  same shelf). The layer has no id attribute, so the id is the source FID (like `noaa_hapc`, the companion layer of
+  Habitat Areas of Particular Concern); a reload of the service may renumber it. EFH is described in text by the
+  FMPs; these polygons are the EFH Mapper's depiction, not the legal definition.
+authority: NMFS
+place_type: habitat
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA Fisheries Office of Habitat Conservation). The ArcGIS item carries no licence
+  text (licenseInfo empty) and no use restriction; treated as public domain under 17 U.S.C. 105, like the sister HAPC
+  layer. Review before publishing.
+attribution: >-
+  NOAA Fisheries Office of Habitat Conservation, Habitat Protection Division, Essential Fish Habitat (EFH Mapper).
+  Public domain; not the legal definition of EFH. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Fisheries Office of Habitat Conservation, roles: [producer, licensor], url: "https://www.fisheries.noaa.gov/resource/map/essential-fish-habitat-mapper"}
+source_page: https://www.arcgis.com/home/item.html?id=b2404d6c6ab94621a3fda10c96f51588
+source_home: https://www.fisheries.noaa.gov/resource/map/essential-fish-habitat-mapper
+source_title: NOAA Fisheries EFH Mapper
+place_id: {template: "NMFS:EFH:{FID}", pattern: "^NMFS:EFH:\\d+$"}
+name: "{SITENAME_L} EFH - {LIFESTAGE}"
+source_id: "{FID}"
+status:
+  value: designated
+  source: https://www.arcgis.com/home/item.html?id=b2404d6c6ab94621a3fda10c96f51588
+  date: data_last_edit
+# large overlapping polygons: a small tile payload (the long caveat and link texts stay in the GeoParquet) and low-zoom
+# detail capped like the Navigator layers, so a low-zoom tile stays under MapLibre's vertex limit
+tile_properties: [place_id, name, place_type, status, source_id, SITENAME_L, LIFESTAGE, FMC, FMP_REPORT]
+tile_args:
+  - --low-detail=10
+sources:
+  - kind: arcgis
+    url: https://services2.arcgis.com/C8EMgrsFcRFL6LrL/arcgis/rest/services/EFH/FeatureServer/0
+    item_id: b2404d6c6ab94621a3fda10c96f51588
+    expected_count: 782
+    page_size: 100

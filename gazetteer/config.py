@@ -18,7 +18,9 @@ PLACE_TYPES |= {"eez", "territorial_sea", "contiguous_zone", "high_seas", "ecs",
 KINDS |= {"wfs"}                                                      # OGC WFS 2.0 GeoJSON (gazetteer/fetch_wfs.py)
 PLACE_TYPES |= {"mpa", "undersea_feature"}   # mpa_inventory, gebco_undersea
 PLACE_TYPES |= {"managed_area"}              # protectedseas_navigator: MPAs and other area-based management measures
+PLACE_TYPES |= {"internal_waters", "archipelagic_waters", "sea_area", "marine_region"}  # mr_* additions (2026-10-20)
 KINDS |= {"navigator_export"}                # ProtectedSeas Navigator Direct Data Export (gazetteer/navigator.py)
+PLACE_TYPES |= {"disposal_site", "military_area"}   # MarineCadastre scan 2026-10-20: EPA ocean disposal sites; Navy OPAREAs, SUA
 FILTER_KINDS = {"arcgis", "navigator_export"}   # source kinds that take `exclude` / `include` ({native field: [values]})
 STYLE_KEYS = {"fill_color", "fill_opacity", "line_color", "line_width"}   # config `style:` (polygon layers)
 

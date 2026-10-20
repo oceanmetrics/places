@@ -1,0 +1,80 @@
+# mr_eez_iho: Marine Regions (VLIZ) EEZ and IHO sea area intersect (572 features), CC BY 4.0
+slug: mr_eez_iho
+title: Marine Regions EEZ and IHO sea area intersect
+description: >-
+  The intersect of the Exclusive Economic Zones (version 12) and the IHO Sea Areas, version 5 (2024): the national
+  part of each sea (e.g. Belgian part of the North Sea), and the high-seas part of each sea; `eez_mrgid` and
+  `iho_mrgid` link each to its parent EEZ and IHO sea area. These are the regions OBIS and WoRMS use for marine
+  distributions. 572 features. Marine Regions states the data has no legal value whatsoever and is not meant to be
+  used for legal, economic (resource exploration) or navigational purposes; it expresses no opinion on the legal
+  status of any country, territory or area or its delimitation. Source: Marine Regions WFS layer
+  MarineRegions:eez_iho (geo.vliz.be). Cite as: Flanders Marine Institute (2024). The intersect of the Exclusive
+  Economic Zones and IHO sea areas, version 5. Available online at https://www.marineregions.org/.
+  https://doi.org/10.14284/699.
+authority: MRGID
+place_type: marine_region
+version: 1.0.0
+cadence: monthly
+license: CC-BY-4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+license_note: >-
+  Marine Regions licenses its products under CC BY 4.0 since Maritime Boundaries version 11 (2019):
+  https://www.marineregions.org/disclaimer.php
+attribution: >-
+  Flanders Marine Institute (2024). The intersect of the Exclusive Economic Zones and IHO sea areas, version 5.
+  Available online at https://www.marineregions.org/. https://doi.org/10.14284/699. Database: Flanders Marine
+  Institute (2026): MarineRegions.org. Available online at www.marineregions.org. Consulted on 2026-10-20. CC BY
+  4.0. Processed by Ocean Metrics.
+providers:
+  - {name: Flanders Marine Institute (VLIZ), roles: [producer, licensor], url: "https://www.marineregions.org/"}
+source_page: https://www.marineregions.org/downloads.php
+source_title: Marine Regions (VLIZ)
+source_home: https://www.marineregions.org/
+place_url: "https://www.marineregions.org/gazetteer.php?p=details&id={mrgid}"
+# reference collection: VLIZ asked us not to republish the products as-is and to refer to marineregions.org (Bart
+# Vanhoorne, 2026-10-16 12:40), then agreed to map display from their GeoWebCache tiles, single-feature WFS on demand,
+# a public index and derived tables ("All fine", 2026-10-16 22:49; always use the cached tiles, not plain WMS). the
+# parquet and PMTiles stay internal (catalog/staging and the build machine's places-internal store)
+reference:
+  tiles: "https://geo.vliz.be/geoserver/MarineRegions/gwc/service/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=eez_iho&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:{z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png"
+  maxzoom: 12
+  link: "https://doi.org/10.14284/699"
+  feature_url: "https://geo.vliz.be/geoserver/MarineRegions/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=MarineRegions:eez_iho&outputFormat=application/json&srsName=EPSG:4326&CQL_FILTER=mrgid={source_id}"
+  # identify on click (one small JSON per click, PROPERTYNAME so no geometry comes back; plain WMS, not GWC, which
+  # ignores PROPERTYNAME): 2026-10-20
+  info_url: "https://geo.vliz.be/geoserver/MarineRegions/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo&LAYERS=MarineRegions:eez_iho&QUERY_LAYERS=MarineRegions:eez_iho&STYLES=&SRS=EPSG:4326&BBOX={bbox}&WIDTH=101&HEIGHT=101&X=50&Y=50&INFO_FORMAT=application/json&FEATURE_COUNT=5&PROPERTYNAME=mrgid,marregion"
+  info_id: mrgid
+place_id:
+  template: "MRGID:{mrgid}{mr_part}"
+  pattern: '^MRGID:\d+(:[a-z0-9-]+)?$'
+name: "{marregion}"
+source_id: "{mrgid}"
+status:
+  value: current
+  source: https://www.marineregions.org/downloads.php
+  date: data_last_edit
+column_docs:
+  mrgid: Marine Regions Geographic IDentifier of the record (integer); resolves at the mrgid_uri
+  mrgid_uri: canonical Marine Regions URI of the record (http://marineregions.org/mrgid/{mrgid}); content-negotiated
+  mr_product: Marine Regions data product (Maritime Boundaries Geodatabase layer) the feature comes from
+  mr_product_version: version of that product
+  mr_product_doi: DOI of that product version (https://doi.org/{doi}); cite it
+  mr_license: licence of the product (CC-BY-4.0)
+  mr_modified: release date of the product version (the WFS serves no per-feature edit date)
+  eez_mrgid: MRGID of the parent Exclusive Economic Zone (mr_eez); null for a high-seas part
+  iho_mrgid: MRGID of the parent IHO sea area (mr_iho_sea_areas)
+  mr_part: "':'-suffix that keeps place_id unique when two features share an MRGID; empty for the first or only feature"
+sources:
+  - kind: wfs
+    url: https://geo.vliz.be/geoserver/MarineRegions/wfs
+    type_name: MarineRegions:eez_iho
+    expected_count: 572
+    page_size: 25
+    mr:
+      product: "The intersect of the Exclusive Economic Zones and IHO sea areas"
+      version: "5"
+      doi: "10.14284/699"
+      license: CC-BY-4.0
+      released: "2024-01-01"   # DataCite gives only the year (2024)
+# the search also matches these (names say "Belgian ...", people type "Belgium")
+search_fields: [territory1, sovereign1, iso_ter1, iho_sea, territory2, territory3]

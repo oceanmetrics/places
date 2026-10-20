@@ -1,0 +1,41 @@
+# noaa_pilot_boarding_areas: Pilot boarding areas (NOAA OCM) (168), MarineCadastre scan 2026-10-20 #9
+slug: noaa_pilot_boarding_areas
+title: Pilot boarding areas
+description: >-
+  Offshore locations where a pilot boards a vessel to take it through local waters (168 polygons; compulsory
+  pilotage, see 46 CFR 15.812): a circle around a charted position or a defined area, with the station name and a
+  position `description` (e.g. "2.0 nm 092 deg true from Gannet Rocks Light"). The layer has no id attribute, so the
+  id is the station name (MC:pilot:adak-island); a station with several boarding areas (Saint Thomas Island has four)
+  gets ':part', ':part-2', ... in objectid order.
+authority: MC
+place_type: navigation_measure
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA); the AGOL item carries NOAA's 17 U.S.C. 403 notice (material 'not subject
+  to copyright protection within the United States'; foreign copyrights may apply). Credit NOAA, do not imply
+  endorsement.
+attribution: >-
+  National Oceanic and Atmospheric Administration (NOAA), Office for Coastal Management (OCM), via
+  MarineCadastre.gov. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [producer, licensor, processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=a2d400490e604c6e8a9293e661a5845b
+place_id:
+  template: "MC:pilot:{stationname|slug}"
+  pattern: "^MC:pilot:[a-z0-9-]+(:part(-\\d+)?)?$"
+  dedupe: {order: objectid}
+name: "{stationname} pilot boarding area"
+source_id: "{stationname}"
+status:
+  value: in_force
+  source: https://www.arcgis.com/home/item.html?id=a2d400490e604c6e8a9293e661a5845b
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/PilotBoardingAreas/FeatureServer/0
+    item_id: a2d400490e604c6e8a9293e661a5845b
+    expected_count: 168
+    page_size: 200

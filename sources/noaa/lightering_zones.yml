@@ -1,0 +1,41 @@
+# noaa_lightering_zones: Lightering zones (federal and state; NOAA OCM) (122), MarineCadastre scan 2026-10-20 #10
+slug: noaa_lightering_zones
+title: Lightering zones
+description: >-
+  Federal and state lightering zones in U.S. waters (122 polygons): areas where the ship-to-ship transfer of oil or
+  hazardous material in bulk is designated (e.g. the 33 CFR 156 subpart C zones Southtex, Gulfmex 2), prohibited,
+  restricted, or has traditionally taken place (`areatype`), with the source of each in `comment`. The layer has no
+  id attribute, so the id is the site name (MC:lightering:southtex); the second Penobscot Bay polygon gets ':part'
+  (objectid order). Compiled by NOAA OCM, so the authority prefix is MC, not USCG.
+authority: MC
+place_type: navigation_measure
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA); the AGOL item carries NOAA's 17 U.S.C. 403 notice (material 'not subject
+  to copyright protection within the United States'; foreign copyrights may apply). Credit NOAA, do not imply
+  endorsement.
+attribution: >-
+  National Oceanic and Atmospheric Administration (NOAA), Office for Coastal Management (OCM), from U.S. Coast Guard
+  and state sources, via MarineCadastre.gov. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [producer, licensor, processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=4fff5036bdfc43b8abba239c064190d0
+place_id:
+  template: "MC:lightering:{sitename|slug}"
+  pattern: "^MC:lightering:[a-z0-9-]+(:part(-\\d+)?)?$"
+  dedupe: {order: objectid}
+name: "{sitename} lightering zone ({areatype})"
+source_id: "{sitename}"
+status:
+  value: active
+  source: https://www.arcgis.com/home/item.html?id=4fff5036bdfc43b8abba239c064190d0
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/LighteringZones/FeatureServer/0
+    item_id: 4fff5036bdfc43b8abba239c064190d0
+    expected_count: 122
+    page_size: 200

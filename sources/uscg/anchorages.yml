@@ -1,0 +1,43 @@
+# uscg_anchorages: Anchorages (USCG, 33 CFR 110) (679), MarineCadastre scan 2026-10-20 #3
+slug: uscg_anchorages
+title: Anchorages (USCG)
+description: >-
+  Anchorage grounds and special anchorage areas in U.S. waters (679 polygons) from 33 CFR part 110 (and the 33 CFR
+  166.200 fairway anchorages off Texas), with name, type (`anchoragetype`: special, unrestricted, general,
+  explosives, naval ...), location and effective date. The id is the CFR section plus the anchorage name
+  (USCG:ANCH:110-182-a-1:anchorage-a): one section often lists several anchorages. Four anchorages without a CFR
+  section use their location instead (USCG:ANCH:duck-island-ny:anchorage-area); a repeat of the same section and
+  name (two polygons of one fairway anchorage) gets ':part' in objectid order.
+authority: USCG
+place_type: navigation_measure
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (USCG, curated by NOAA OCM); the AGOL item carries NOAA's 17 U.S.C. 403 notice
+  (material 'not subject to copyright protection within the United States'; foreign copyrights may apply). Credit
+  the source, do not imply endorsement.
+attribution: >-
+  U.S. Coast Guard (USCG), via MarineCadastre.gov (NOAA Office for Coastal Management). Public domain. Processed by
+  Ocean Metrics.
+providers:
+  - {name: U.S. Coast Guard (USCG), roles: [producer, licensor], url: "https://www.navcen.uscg.gov"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=f5bf15c0ca354ff69f52faf62dc92aab
+place_id:
+  template: "USCG:ANCH:{codefederalregulations|else:location|slug}:{anchoragename|slug}"
+  pattern: "^USCG:ANCH:[a-z0-9-]+:[a-z0-9-]+(:part(-\\d+)?)?$"
+  dedupe: {order: objectid}
+name: "{anchoragename} - {location}"
+source_id: "{codefederalregulations|prefix:33 CFR |else:location} {anchoragename}"
+status:
+  value: in_force
+  source: https://www.ecfr.gov/current/title-33/chapter-I/subchapter-I/part-110
+  date: field:effectivedate
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/Anchorages/FeatureServer/0
+    item_id: f5bf15c0ca354ff69f52faf62dc92aab
+    expected_count: 679
+    page_size: 200

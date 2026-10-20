@@ -1,0 +1,38 @@
+# noaa_narw_sma: North Atlantic right whale Seasonal Management Areas (NMFS, 50 CFR 224.105) (10), MarineCadastre scan 2026-10-20 #6
+slug: noaa_narw_sma
+title: North Atlantic right whale Seasonal Management Areas
+description: >-
+  Seasonal Management Areas (SMAs) where vessels of 65 ft or longer must slow to 10 knots or less in season, to
+  reduce ship strikes of endangered North Atlantic right whales (10 polygons; 50 CFR 224.105, 73 FR 60173, 2008),
+  with the `restrictedperiod` (e.g. November 15 to April 30). The id is the area's `location`
+  (NMFS:SMA:cape-cod-bay): four Mid-Atlantic port entrances share the CFR paragraph 224.105(a)(2)(ii).
+authority: NMFS
+place_type: managed_area
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (NOAA); the AGOL item carries NOAA's 17 U.S.C. 403 notice (material 'not subject
+  to copyright protection within the United States'; foreign copyrights may apply). Credit NOAA, do not imply
+  endorsement.
+attribution: >-
+  National Oceanic and Atmospheric Administration (NOAA Fisheries regulation 50 CFR 224.105), via MarineCadastre.gov
+  (NOAA Office for Coastal Management). Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: NOAA Fisheries Office of Protected Resources, roles: [producer, licensor], url: "https://www.fisheries.noaa.gov/national/endangered-species-conservation/reducing-vessel-strikes-north-atlantic-right-whales"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=cd20d79c656f45f6b0fdbf06505d577a
+place_id: {template: "NMFS:SMA:{location|slug}", pattern: "^NMFS:SMA:[a-z0-9-]+$"}
+name: "{location} Seasonal Management Area ({restrictedperiod})"
+source_id: "{location}"
+status:
+  value: in_force
+  source: https://www.ecfr.gov/current/title-50/chapter-II/subchapter-C/part-224/section-224.105
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/NorthAtlanticRightWhaleSeasonalManagementAreas/FeatureServer/0
+    item_id: cd20d79c656f45f6b0fdbf06505d577a
+    expected_count: 10
+    page_size: 100

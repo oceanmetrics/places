@@ -1,0 +1,49 @@
+# boem_marine_minerals_leases: OCS Marine Minerals (sand, gravel, shell) lease areas (78), MarineCadastre scan 2026-10-20 #8
+slug: boem_marine_minerals_leases
+title: BOEM OCS marine minerals lease areas
+description: >-
+  Outer Continental Shelf areas where a government agency holds, or has asked for, a negotiated non-competitive lease
+  or memorandum of agreement with BOEM's Marine Minerals Program to dredge sand, gravel or shell for shore
+  protection, beach restoration or coastal restoration (OCS Lands Act section 8(k)) (78 polygons; Atlantic and Gulf).
+  `LeaseStatus` (Active, Complete, Expired, Proposed) becomes `status` (lower-cased) and is copied verbatim to
+  `status_upstream`; `ProjectID`, `BorrowArea`, volumes and dates follow. Lease numbers are served hyphenated
+  (OCS-A-0505) and published in BOEM's formal form (BOEM:OCS-A 0505, the same serial series as the wind leases in
+  `boem_wind_leases`, with no overlap); older agreements keep their state numbers (BOEM:OCS-FL-2000). The proposed
+  lease served with the placeholder OCS-A-XXXX gets BOEM:OCS-A-XXXX until BOEM numbers it. OCS-G-23707 is served
+  twice (Holly Beach 2002, LA and Collier County 2006, FL): the earlier effective date keeps the bare id, the other
+  gets ':part'.
+authority: BOEM
+place_type: lease
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.usa.gov/publicdomain/label/1.0/
+license_note: >-
+  U.S. federal government work (BOEM Marine Minerals Program); the ArcGIS item licenseInfo is the U.S. public domain
+  label (https://www.usa.gov/publicdomain/label/1.0).
+attribution: >-
+  Bureau of Ocean Energy Management (BOEM), Marine Minerals Program. Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: Bureau of Ocean Energy Management (BOEM), roles: [producer, licensor], url: "https://www.boem.gov/marine-minerals"}
+source_page: https://www.arcgis.com/home/item.html?id=31849f4f0c9148a480fca5d1dffb092a
+source_home: https://www.boem.gov/marine-minerals
+source_title: BOEM Marine Minerals Program
+place_id:
+  template: "BOEM:{LeaseNo|lease_number}"
+  pattern: '^BOEM:OCS-([A-Z] \d{4,5}|[A-Z]{2}-\d{4}|A-XXXX)(:part(-\d+)?)?$'
+  dedupe: {order: EffectiveDate}
+name: "{LeaseNo|lease_number} marine minerals lease - {ProjectID}"
+source_id: "{LeaseNo}"
+search_fields: [ProjectID, BorrowArea]
+status:
+  upstream: LeaseStatus
+  value: field:LeaseStatus
+  default: unknown
+  source: https://www.arcgis.com/home/item.html?id=31849f4f0c9148a480fca5d1dffb092a
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://services7.arcgis.com/G5Ma95RzqJRPKsWL/arcgis/rest/services/OCS_Marine_Minerals_Lease_Areas/FeatureServer/0
+    item_id: 31849f4f0c9148a480fca5d1dffb092a
+    expected_count: 78
+    page_size: 100

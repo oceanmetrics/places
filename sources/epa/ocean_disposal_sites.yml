@@ -1,0 +1,41 @@
+# epa_ocean_disposal_sites: EPA-designated MPRSA ocean disposal sites (96), MarineCadastre scan 2026-10-20 #2
+slug: epa_ocean_disposal_sites
+title: EPA-designated ocean disposal sites (MPRSA)
+description: >-
+  Ocean sites designated by the U.S. Environmental Protection Agency under the Marine Protection, Research, and
+  Sanctuaries Act (MPRSA) and listed in 40 CFR 228.15 (96 polygons): mostly ocean dredged material disposal sites,
+  plus placement and fish waste sites (`SiteType`), with official name (`OfficialNa`), EPA region, radius and depths
+  (-99 = not given). The id is EPA's site code `DumpSiteCo` (EPA:US193). One recently designated site, Isle of
+  Shoals North (IOSN), is served with the placeholder code USXXX: its id EPA:USXXX will change when EPA assigns a
+  code. Coordinates were transformed to WGS 84 by EPA. For information only: not suitable for legal purposes.
+authority: EPA
+place_type: disposal_site
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (EPA Marine Protection Permitting Program), public domain under 17 U.S.C. 105. The
+  ArcGIS item licenseInfo states: "This map is for informational purposes only and has not been prepared for, nor is
+  it suitable for, legal or related matters." No redistribution restriction.
+attribution: >-
+  U.S. Environmental Protection Agency (EPA), Marine Protection Permitting Program, EPA-Designated MPRSA Ocean Sites.
+  Public domain; informational only, not for legal use. Processed by Ocean Metrics.
+providers:
+  - {name: U.S. Environmental Protection Agency (EPA), roles: [producer, licensor], url: "https://www.epa.gov/marine-protection-permitting/mprsa-ocean-sites"}
+source_page: https://www.arcgis.com/home/item.html?id=a183aea47781468382b4b612c672bba8
+source_home: https://www.epa.gov/marine-protection-permitting/mprsa-ocean-sites
+source_title: EPA MPRSA ocean sites
+place_id: {template: "EPA:{DumpSiteCo}", pattern: "^EPA:US(\\d{3}|XXX)$"}
+name: "{OfficialNa}"
+source_id: "{DumpSiteCo}"
+status:
+  value: designated
+  source: https://www.ecfr.gov/current/title-40/chapter-I/subchapter-H/part-228/section-228.15
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://services.arcgis.com/cJ9YHowT8TU7DUyn/arcgis/rest/services/ODMDSpolygons_wgs84_20201102_v2/FeatureServer/0
+    item_id: a183aea47781468382b4b612c672bba8
+    expected_count: 96
+    page_size: 100

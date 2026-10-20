@@ -108,6 +108,22 @@ After the held slugs are later published, rerun this step with them included.
 - Log the milestone (notes repo), tag the repo (`gazetteer-1.0.0`), delete `cache/` raw pages on the mini (FWS final alone is ~800 MB).
 - Refresh later with `uv run build.py detect` (weekly `sync.yml`); each content change bumps the collection patch version.
 
+## 6. Retiring a published collection
+
+When a collection is replaced (e.g. `protectedseas_navigator` by its six category groups, 2026-10-20), take it out of
+the catalog, not the bucket:
+
+```sh
+aws s3 sync s3://oceanmetrics.io-public/gazetteer/ catalog/pub/ --exclude '*.parquet' --exclude '*.pmtiles' --exclude '*.tif' --exclude '*.nc'
+uv run python -m gazetteer.retire catalog/pub <slug>          # drops its child link (catalog.json) and versions.json entry
+rashid check catalog/pub --data-scope local --all             # the gate: no new error at the root (compare with a run before)
+aws s3 cp catalog/pub/catalog.json s3://oceanmetrics.io-public/gazetteer/catalog.json
+aws s3 cp catalog/pub/versions.json s3://oceanmetrics.io-public/gazetteer/versions.json
+```
+
+Then remove its YAML and run a sync with `refresh=true`, so the index and `layers.json` drop it. The `<slug>/` files
+stay, so old links keep working; delete them later only on purpose (and say so in the log).
+
 ## Follow-ups (not done)
 
 - `gazetteer/lines.py` and `gazetteer/mixed.py` partially duplicate the geometry-cleaning / antimeridian logic for non-polygon types; fold into one module later.

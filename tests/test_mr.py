@@ -20,21 +20,27 @@ from gazetteer.validate import check_parquet, check_pmtiles
 
 CFGS = {k: v for k, v in load_all(ROOT / "sources").items() if k.startswith("mr_")}
 COUNTS = {"mr_eez": 285, "mr_territorial_seas": 230, "mr_contiguous_zones": 220, "mr_high_seas": 1, "mr_ecs": 147,
-          "mr_goas": 10, "mr_world_heritage_marine": 60}
+          "mr_goas": 10, "mr_world_heritage_marine": 60,
+          "mr_internal_waters": 113, "mr_archipelagic_waters": 23, "mr_eez_iho": 572}
 DOIS = {"mr_eez": "10.14284/632", "mr_territorial_seas": "10.14284/633", "mr_contiguous_zones": "10.14284/630",
         "mr_high_seas": "10.14284/696", "mr_ecs": "10.14284/697", "mr_goas": "10.14284/542",
-        "mr_world_heritage_marine": "10.14284/592"}
+        "mr_world_heritage_marine": "10.14284/592",
+        "mr_internal_waters": "10.14284/631", "mr_archipelagic_waters": "10.14284/629", "mr_eez_iho": "10.14284/699"}
 PLACE_TYPES = {"mr_eez": "eez", "mr_territorial_seas": "territorial_sea", "mr_contiguous_zones": "contiguous_zone",
-               "mr_high_seas": "high_seas", "mr_ecs": "ecs", "mr_goas": "ocean_sea", "mr_world_heritage_marine": "world_heritage"}
+               "mr_high_seas": "high_seas", "mr_ecs": "ecs", "mr_goas": "ocean_sea", "mr_world_heritage_marine": "world_heritage",
+               "mr_internal_waters": "internal_waters", "mr_archipelagic_waters": "archipelagic_waters",
+               "mr_eez_iho": "marine_region"}
 MRGID_ID = re.compile(r"^MRGID:\d+(:[a-z0-9-]+)?$")
 
 
 # config rules ---------------------------------------------------------------------------------------------------------
 
-def test_seven_cc_by_collections_and_none_of_the_gated_products():
+def test_ten_cc_by_collections_and_none_of_the_gated_products():
+  """IHO Sea Areas v3 is CC BY-NC-SA (DataCite; Bart Vanhoorne, VLIZ): display through their WMS only, never a
+  collection (2026-10-20: the downloads scan called it CC BY; the EEZ-IHO intersect v5 is CC BY 4.0)."""
   assert set(CFGS) == set(COUNTS)
-  gated = {"iho", "lme", "meow", "longhurst", "contourite"}
-  assert not any(g in slug for slug in CFGS for g in gated)
+  gated = {"MarineRegions:iho", "MarineRegions:lme", "MarineRegions:longhurst", "Ecoregions:ecoregions", "MarineRegions:contourites"}
+  assert not {c["sources"][0]["type_name"] for c in CFGS.values()} & gated
 
 
 @pytest.mark.parametrize("slug", sorted(COUNTS))
@@ -316,3 +322,16 @@ def test_staged_reference_collection_json_lists_metadata_only(slug):
   assert sorted(coll["assets"]) == ["documentation", "provenance", "styles/default"]
   assert not [l for l in coll["links"] if l["rel"] == "pmtiles"] and "pmtiles:layers" not in coll
   assert coll["gazetteer:raster"]["maxzoom"] == 12
+
+
+def test_the_three_2026_10_20_additions_identify_and_search_like_the_others():
+  """internal waters, archipelagic waters (Maritime Boundaries v4) and the EEZ-IHO intersect v5 (named by `marregion`,
+  with both parent MRGIDs): reference collections with click-to-identify and country keywords."""
+  for slug in ("mr_internal_waters", "mr_archipelagic_waters", "mr_eez_iho"):
+    c = CFGS[slug]
+    ref = c["reference"]
+    tn = c["sources"][0]["type_name"]
+    assert f"LAYER={tn.split(':')[1]}&" in ref["tiles"] and f"typeName={tn}&" in ref["feature_url"], slug
+    assert f"QUERY_LAYERS={tn}&" in ref["info_url"] and ref["info_id"] == "mrgid", slug
+    assert "territory1" in c["search_fields"], slug
+  assert CFGS["mr_eez_iho"]["name"] == "{marregion}" and "iho_sea" in CFGS["mr_eez_iho"]["search_fields"]

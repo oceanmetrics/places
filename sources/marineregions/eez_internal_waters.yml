@@ -1,0 +1,77 @@
+# mr_internal_waters: Marine Regions (VLIZ) Internal Waters (113 features), CC BY 4.0
+slug: mr_internal_waters
+title: Marine Regions Internal Waters
+description: >-
+  Internal Waters of the world, version 4 (2023-10-25), from the VLIZ Maritime Boundaries Geodatabase: the waters on
+  the landward side of the baseline of the territorial sea (bays, estuaries, ports); `mrgid_eez` links each to its
+  Exclusive Economic Zone. 113 features. Marine Regions states the data has no legal value whatsoever and is not
+  meant to be used for legal, economic (resource exploration) or navigational purposes; it expresses no opinion on
+  the legal status of any country, territory or area or its delimitation. Source: Marine Regions WFS layer
+  MarineRegions:eez_internal_waters (geo.vliz.be). Cite as: Flanders Marine Institute (2023). Maritime Boundaries
+  Geodatabase: Internal Waters, version 4. Available online at https://www.marineregions.org/.
+  https://doi.org/10.14284/631.
+authority: MRGID
+place_type: internal_waters
+version: 1.0.0
+cadence: monthly
+license: CC-BY-4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+license_note: >-
+  Marine Regions licenses its products under CC BY 4.0 since Maritime Boundaries version 11 (2019):
+  https://www.marineregions.org/disclaimer.php
+attribution: >-
+  Flanders Marine Institute (2023). Maritime Boundaries Geodatabase: Internal Waters, version 4. Available online at
+  https://www.marineregions.org/. https://doi.org/10.14284/631. Database: Flanders Marine Institute (2026):
+  MarineRegions.org. Available online at www.marineregions.org. Consulted on 2026-10-20. CC BY 4.0. Processed by
+  Ocean Metrics.
+providers:
+  - {name: Flanders Marine Institute (VLIZ), roles: [producer, licensor], url: "https://www.marineregions.org/"}
+source_page: https://www.marineregions.org/downloads.php
+source_title: Marine Regions (VLIZ)
+source_home: https://www.marineregions.org/
+place_url: "https://www.marineregions.org/gazetteer.php?p=details&id={mrgid}"
+# reference collection: VLIZ asked us not to republish the products as-is and to refer to marineregions.org (Bart
+# Vanhoorne, 2026-10-16 12:40), then agreed to map display from their GeoWebCache tiles, single-feature WFS on demand,
+# a public index and derived tables ("All fine", 2026-10-16 22:49; always use the cached tiles, not plain WMS). the
+# parquet and PMTiles stay internal (catalog/staging and the build machine's places-internal store)
+reference:
+  tiles: "https://geo.vliz.be/geoserver/MarineRegions/gwc/service/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=eez_internal_waters&STYLE=&TILEMATRIXSET=EPSG:900913&TILEMATRIX=EPSG:900913:{z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png"
+  maxzoom: 12
+  link: "https://doi.org/10.14284/631"
+  feature_url: "https://geo.vliz.be/geoserver/MarineRegions/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=MarineRegions:eez_internal_waters&outputFormat=application/json&srsName=EPSG:4326&CQL_FILTER=mrgid={source_id}"
+  # identify on click (one small JSON per click, PROPERTYNAME so no geometry comes back; plain WMS, not GWC, which
+  # ignores PROPERTYNAME): 2026-10-20
+  info_url: "https://geo.vliz.be/geoserver/MarineRegions/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo&LAYERS=MarineRegions:eez_internal_waters&QUERY_LAYERS=MarineRegions:eez_internal_waters&STYLES=&SRS=EPSG:4326&BBOX={bbox}&WIDTH=101&HEIGHT=101&X=50&Y=50&INFO_FORMAT=application/json&FEATURE_COUNT=5&PROPERTYNAME=mrgid,geoname"
+  info_id: mrgid
+place_id:
+  template: "MRGID:{mrgid}{mr_part}"
+  pattern: '^MRGID:\d+(:[a-z0-9-]+)?$'
+name: "{geoname}"
+source_id: "{mrgid}"
+status:
+  value: current
+  source: https://www.marineregions.org/downloads.php
+  date: data_last_edit
+column_docs:
+  mrgid: Marine Regions Geographic IDentifier of the record (integer); resolves at the mrgid_uri
+  mrgid_uri: canonical Marine Regions URI of the record (http://marineregions.org/mrgid/{mrgid}); content-negotiated
+  mr_product: Marine Regions data product (Maritime Boundaries Geodatabase layer) the feature comes from
+  mr_product_version: version of that product
+  mr_product_doi: DOI of that product version (https://doi.org/{doi}); cite it
+  mr_license: licence of the product (CC-BY-4.0)
+  mr_modified: release date of the product version (the WFS serves no per-feature edit date)
+  mr_part: "':'-suffix that keeps place_id unique when two features share an MRGID; empty for the first or only feature"
+sources:
+  - kind: wfs
+    url: https://geo.vliz.be/geoserver/MarineRegions/wfs
+    type_name: MarineRegions:eez_internal_waters
+    expected_count: 113
+    page_size: 25
+    mr:
+      product: "Maritime Boundaries Geodatabase: Internal Waters"
+      version: "4"
+      doi: "10.14284/631"
+      license: CC-BY-4.0
+      released: "2023-10-25"
+# the search also matches these (names say "Belgian ...", people type "Belgium")
+search_fields: [territory1, sovereign1, iso_ter1]

@@ -9,6 +9,9 @@ LEASE = {"rule": "lease", "pattern": r"^BOEM:OCS-[A-Z] \d{4,5}(:[a-z0-9-]+)?$"}
 @pytest.mark.parametrize("raw,expected", [
   ("OCS-P 0561", "OCS-P 0561"), ("P00202", "OCS-P 0202"), ("P00240", "OCS-P 0240"), ("OCS-A 0501", "OCS-A 0501"),
   ("OCS-G 37334 Provisional", "OCS-G 37334"), (" OCS-A  0482 ", "OCS-A 0482"), ("", ""), (None, ""),
+  # marine minerals leases are served hyphenated; state agreements and the placeholder are kept as served
+  ("OCS-G-23707", "OCS-G 23707"), ("OCS-A-0505", "OCS-A 0505"), ("OCS-A-00467", "OCS-A 0467"),
+  ("OCS-FL-2000", "OCS-FL-2000"), ("OCS-A-XXXX", "OCS-A-XXXX"),
 ])
 def test_lease_number_normalisation(raw, expected):
   assert normalize_lease_number(raw) == expected

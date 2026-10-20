@@ -1,0 +1,43 @@
+# navy_operating_areas: Military operating areas (U.S. Navy, OPAREAs and range complexes) (35), MarineCadastre scan 2026-10-20 #11
+slug: navy_operating_areas
+title: Military operating areas (U.S. Navy)
+description: >-
+  U.S. Navy operating areas (OPAREAs), range complexes and training and testing areas at sea (35 polygons;
+  `oparearangecomplextype` oparea, rangeComplex or tt), where national defense training and system tests are
+  routinely conducted and coordinated through the Local Notice to Mariners: e.g. VACAPES, Narragansett Bay, SOCAL
+  Range Complex, Mariana Islands Training and Testing. A subset of the Navy Common Operational Picture shared with
+  MarineCadastre.gov for ocean planning. The id is the unique short `featurename` (NAVY:OPAREA:vacapes-oparea);
+  the name is its long form `featuredescription`; `operationalstatus` (In Service, Temporary) is copied to
+  `status_upstream`.
+authority: NAVY
+place_type: military_area
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (U.S. Navy Fleet Forces, curated by NOAA OCM); the AGOL item carries NOAA's 17 U.S.C.
+  403 notice (material 'not subject to copyright protection within the United States'; foreign copyrights may
+  apply). Credit the source, do not imply endorsement.
+attribution: >-
+  U.S. Navy Fleet Forces (Navy Common Operational Picture), via MarineCadastre.gov (NOAA Office for Coastal
+  Management). Public domain. Processed by Ocean Metrics.
+providers:
+  - {name: U.S. Navy Fleet Forces Command, roles: [producer, licensor], url: "https://www.usff.navy.mil"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=fa97d0a108a94c88b9d67ce013d18540
+place_id: {template: "NAVY:OPAREA:{featurename|slug}", pattern: "^NAVY:OPAREA:[a-z0-9-]+$"}
+name: "{featuredescription}"        # the long form (VIRGINIA CAPES OPERATING AREA (VCOA)); featurename is the short one
+source_id: "{featurename}"
+search_fields: [featurename]
+status:
+  upstream: operationalstatus
+  value: active
+  source: https://www.arcgis.com/home/item.html?id=fa97d0a108a94c88b9d67ce013d18540
+  date: data_last_edit
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/MilitaryOperatingAreas/FeatureServer/0
+    item_id: fa97d0a108a94c88b9d67ce013d18540
+    expected_count: 35
+    page_size: 100

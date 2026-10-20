@@ -1,0 +1,53 @@
+# navy_special_use_airspace: Military special use airspace (U.S. Navy / FAA, DAFIF) (769), MarineCadastre scan 2026-10-20 #12
+slug: navy_special_use_airspace
+title: Military special use airspace (U.S. Navy)
+description: >-
+  Special use airspace (SUA) in and around the Navy's coastal and offshore operating areas (769 polygons): warning
+  areas, restricted areas, military operations areas (MOAs), alert, prohibited and danger areas, air traffic control
+  assigned airspace (ATCAA), altitude reservations, air grids, corridors and the air defense identification zones,
+  with floor and ceiling altitudes (feet, `floorreferencelevel` / `ceilingreferencelevel`), controlling and
+  scheduling agency and the Navy `coparea`. SUA includes the surface and subsurface training areas beneath it. From
+  the NGA Digital Aeronautical Flight Information File (DAFIF), as a subset of the Navy Common Operational Picture for
+  ocean planning. Every type is kept: no type is wholly on land, though some restricted areas and MOAs in the set
+  (e.g. Avon Park and Pinecastle, FL; El Centro, CA) lie inland. The layer has no airspace designator attribute, so
+  the id is the type and name (NAVY:SUA:warning:key-west-fl); the repeats of a name (Key West, FL has 15 warning
+  areas) get ':part', ':part-2', ... in objectid order. `airspacestatus` is copied to `status_upstream`. Not for
+  navigation or flight planning.
+authority: NAVY
+place_type: military_area
+version: 1.0.0
+cadence: monthly
+license: CC-PDDC
+license_url: https://www.copyright.gov/title17/92chap1.html#105
+license_note: >-
+  U.S. federal government work (U.S. Navy Fleet Forces, from NGA DAFIF, curated by NOAA OCM); the AGOL item carries
+  NOAA's 17 U.S.C. 403 notice (material 'not subject to copyright protection within the United States'; foreign
+  copyrights may apply). Credit the source, do not imply endorsement.
+attribution: >-
+  U.S. Navy Fleet Forces (Navy Common Operational Picture; NGA Digital Aeronautical Flight Information File), via
+  MarineCadastre.gov (NOAA Office for Coastal Management). Public domain; not for navigation. Processed by Ocean
+  Metrics.
+providers:
+  - {name: U.S. Navy Fleet Forces Command, roles: [producer, licensor], url: "https://www.usff.navy.mil"}
+  - {name: NOAA Office for Coastal Management (MarineCadastre.gov), roles: [processor], url: "https://hub.marinecadastre.gov"}
+source_page: https://www.arcgis.com/home/item.html?id=c02de89cbc814a3789989e1b1235a577
+place_id:
+  template: "NAVY:SUA:{specialuseairspacetype|slug}:{featurename|slug}"
+  pattern: "^NAVY:SUA:[a-z0-9-]+:[a-z0-9-]+(:part(-\\d+)?)?$"
+  dedupe: {order: objectid}
+name: "{featurename} ({featuredescription})"
+source_id: "{specialuseairspacetype} {featurename}"
+search_fields: [coparea]
+status:
+  upstream: airspacestatus
+  value: active
+  source: https://www.arcgis.com/home/item.html?id=c02de89cbc814a3789989e1b1235a577
+  date: data_last_edit
+tile_properties: [place_id, name, place_type, status, source_id, featuredescription, specialuseairspacetype,
+                  flooraltitude, ceilingaltitude, coparea]
+sources:
+  - kind: arcgis
+    url: https://coast.noaa.gov/arcgis/rest/services/Hosted/MilitarySpecialUseAirspace/FeatureServer/0
+    item_id: c02de89cbc814a3789989e1b1235a577
+    expected_count: 769
+    page_size: 200

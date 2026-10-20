@@ -13,14 +13,16 @@ _FIELD = re.compile(r"\{([^{}|]+)((?:\|[^{}|]+)*)\}")
 
 
 def normalize_lease_number(value: str | None) -> str:
-  """BOEM lease number -> formal form: 'P00202' -> 'OCS-P 0202', 'OCS-A 0501' unchanged, 'OCS-G 37334 Provisional' -> 'OCS-G 37334'."""
+  """BOEM lease number -> formal form: 'P00202' -> 'OCS-P 0202', 'OCS-A 0501' unchanged, 'OCS-G 37334 Provisional' -> 'OCS-G 37334',
+  'OCS-A-00467' -> 'OCS-A 0467'; other forms ('OCS-FL-2000', the placeholder 'OCS-A-XXXX') are kept as served."""
   v = (value or "").strip()
   if not v:
     return ""
   m = re.fullmatch(r"([A-Z])0*(\d+)", v)          # legacy Pacific style, e.g. P00202
   if m:
     return f"OCS-{m.group(1)} {int(m.group(2)):04d}"
-  m = re.match(r"OCS-([A-Z])\s+0*(\d+)\b", v)      # formal style: renormalise the padding, drop qualifiers ("... Provisional")
+  m = re.match(r"OCS-([A-Z])(?:\s+|-)0*(\d+)\b", v)   # formal style, or hyphenated (marine minerals 'OCS-G-23707'):
+  #                                                   renormalise the padding, drop qualifiers ("... Provisional")
   if m:
     return f"OCS-{m.group(1)} {int(m.group(2)):04d}"
   return v
