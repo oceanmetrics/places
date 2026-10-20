@@ -67,7 +67,8 @@ def test_reference_collection_is_a_raster_row_with_no_files_of_ours():
   row = bl.layer_row(REF)
   assert row["kind"] == "raster"
   assert row["raster"] == {"tiles": [REF["gazetteer:raster"]["tiles"]], "tile_size": 256, "minzoom": 0, "maxzoom": 12,
-                           "link": "https://www.marineregions.org/eez.php", "feature_url": None}
+                           "link": "https://www.marineregions.org/eez.php", "feature_url": None,
+                           "info_url": None, "info_id": None}
   assert row["pmtiles"] is None and row["source_layer"] is None and row["parquet"] is None and row["h3"] is None
   assert row["paint"] == {"raster": {"raster-opacity": 0.8}}
   assert row["n"] == 285 and row["license"] == "CC-BY-4.0"
@@ -292,3 +293,10 @@ def test_reads_go_to_the_s3_origin_not_the_cdn():
   """regression: the CDN caches versions.json for a day, so a build right after a publish read the old versions."""
   assert bl.origin(bl.BASE + "versions.json") == bl.BASE_DIRECT + "versions.json"
   assert bl.origin("file:///tmp/layers.json") == "file:///tmp/layers.json"
+
+
+def test_raster_row_carries_the_identify_template():
+  """click-to-identify on a reference layer (Marine Regions, 2026-10-20): GetFeatureInfo template + response field."""
+  url = "https://geo.vliz.be/geoserver/MarineRegions/wms?REQUEST=GetFeatureInfo&BBOX={bbox}&PROPERTYNAME=mrgid,geoname"
+  r = bl.raster_source({"gazetteer:raster": {"tiles": ["https://t/{z}/{x}/{y}.png"], "info_url": url, "info_id": "mrgid"}})
+  assert (r["info_url"], r["info_id"]) == (url, "mrgid")

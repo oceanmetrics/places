@@ -147,6 +147,8 @@ def build_rows(cfg: dict, results: list[SourceResult], version: str | None = Non
     raise ValueError("place_id is not unique across the collection's sources")
   if cfg.get("spatial_sort"):     # cluster neighbours so a reader can skip row groups (row groups are tiny, see auto_row_group_size)
     rows = [rows[i] for i in morton_order([r["_geom"] for r in rows])]
+  elif cfg.get("id_sort"):        # narrow place_id ranges per row group: getPlace reads one group (spatial order made a
+    rows = sorted(rows, key=lambda r: r["place_id"])   # Navigator place page fetch ~1 GB, 2026-10-20)
   return rows, fields, dropped
 
 

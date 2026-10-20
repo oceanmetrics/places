@@ -119,3 +119,74 @@ def test_detect_all_reports_an_arcgis_error_body_and_checks_the_others():
   assert res[1]["changed"] is False and res[1]["error"] is True
   assert res[1]["reason"].startswith("probe failed: RuntimeError: ArcGIS error")
   assert "error" not in res[0] and "error" not in res[2]
+
+
+# extends / include / tile_args / style / id_sort ----
+
+def _base_yaml(d, name="_base.yml", **extra):
+  import yaml
+  cfg = {"slug": "base_never_built", "title": "T", "description": "D", "authority": "PSGID", "place_type": "managed_area",
+         "version": "1.0.0", "license": "CC-BY-4.0", "attribution": "A", "name": "{n}", "source_id": "{id}",
+         "place_id": {"template": "PSGID:{id}", "pattern": "^PSGID:.+$"},
+         "providers": [{"name": "P", "roles": ["producer"]}],
+         "status": {"value": "current", "source": "https://x", "date": "data_last_edit"},
+         "sources": [{"kind": "navigator_export", "url": "https://x"}], **extra}
+  (d / name).write_text(yaml.safe_dump(cfg))
+
+
+def test_extends_merges_the_base_and_load_all_skips_bases(tmp_path):
+  import yaml
+  from gazetteer.config import load_all
+  d = tmp_path / "src" / "ps"
+  d.mkdir(parents=True)
+  _base_yaml(d)
+  (d / "group.yml").write_text(yaml.safe_dump({"extends": "_base.yml", "slug": "ps_group", "title": "Group",
+      "sources": [{"kind": "navigator_export", "url": "https://x", "include": {"category_name": ["A"]}}]}))
+  cfgs = load_all(tmp_path / "src")
+  assert list(cfgs) == ["ps_group"]                                       # the base is not a layer
+  c = cfgs["ps_group"]
+  assert (c["title"], c["license"], c["attribution"]) == ("Group", "CC-BY-4.0", "A")
+  assert c["sources"][0]["include"] == {"category_name": ["A"]} and "extends" not in c
+
+
+def test_extends_needs_an_underscore_base(tmp_path):
+  import yaml
+  from gazetteer.config import load_layer_config
+  _base_yaml(tmp_path, "base.yml")
+  (tmp_path / "g.yml").write_text(yaml.safe_dump({"extends": "base.yml", "slug": "g"}))
+  with pytest.raises(ValueError, match="must start with '_'"):
+    load_layer_config(tmp_path / "g.yml")
+
+
+def test_include_and_exclude_rules_by_source_kind(cfg):
+  lease_cfg = cfg
+  from gazetteer.config import validate_config
+  cfg = {**lease_cfg, "sources": [{**lease_cfg["sources"][0], "include": {"F": ["x"]}}]}
+  with pytest.raises(ValueError, match="include is not supported for arcgis"):
+    validate_config(cfg)
+  cfg = {**lease_cfg, "sources": [{**lease_cfg["sources"][0], "kind": "shapefile_zip", "exclude": {"F": ["x"]}}]}
+  with pytest.raises(ValueError, match="exclude is only supported for arcgis and navigator_export"):
+    validate_config(cfg)
+  cfg = {**lease_cfg, "sources": [{**lease_cfg["sources"][0], "kind": "navigator_export", "include": {"F": []}}]}
+  with pytest.raises(ValueError, match="include must map a native field"):
+    validate_config(cfg)
+
+
+def test_tile_args_style_and_row_order_are_checked(cfg):
+  lease_cfg = cfg
+  from gazetteer.config import validate_config
+  for bad, msg in [({"tile_args": ["-z5"]}, "tile_args"), ({"tile_args": "--x"}, "tile_args"),
+                   ({"style": {"fill_colour": "#fff"}}, "style takes only"),
+                   ({"spatial_sort": True, "id_sort": True}, "exclusive")]:
+    with pytest.raises(ValueError, match=msg):
+      validate_config({**lease_cfg, **bad})
+  validate_config({**lease_cfg, "tile_args": ["--low-detail=10"], "style": {"fill_color": "#2b7bb9", "fill_opacity": 0.1}})
+
+
+def test_reference_info_url_needs_bbox_and_info_id(cfg):
+  base = {**cfg, "reference": {"tiles": "https://t/{z}/{x}/{y}.png"}}
+  with pytest.raises(ValueError, match="info_url needs \\{bbox\\}"):
+    validate_config({**base, "reference": {**base["reference"], "info_url": "https://w?x=1", "info_id": "mrgid"}})
+  with pytest.raises(ValueError, match="needs reference.info_id"):
+    validate_config({**base, "reference": {**base["reference"], "info_url": "https://w?BBOX={bbox}"}})
+  validate_config({**base, "reference": {**base["reference"], "info_url": "https://w?BBOX={bbox}", "info_id": "mrgid"}})

@@ -95,3 +95,9 @@ def test_keep_all_draws_every_point_at_low_zoom_regression(tmp_path):
 
   assert at_z3(True) == 60
   assert at_z3(False) < 60
+
+
+def test_tile_args_go_before_the_input():
+  cmd = tippecanoe_cmd("in.ndjson", "out", "s", "n", "d", "a", extra=["--low-detail=10"])
+  assert cmd[-2:] == ["--low-detail=10", "in.ndjson"]
+  assert "--low-detail=10" not in tippecanoe_cmd("in.ndjson", "out", "s", "n", "d", "a")

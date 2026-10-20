@@ -37,19 +37,23 @@ def table_to_ndjson(parquet: Path, out: Path, keep: list[str] | None = None) -> 
 
 
 def tippecanoe_cmd(src: Path, dest: Path, slug: str, name: str, description: str, attribution: str,
-                   maxzoom: int | None = None, keep_all: bool = False) -> list[str]:
+                   maxzoom: int | None = None, keep_all: bool = False, extra: list[str] | None = None) -> list[str]:
   """the tippecanoe invocation: guessed max zoom (or -z maxzoom, for sparse points / lines where the guess is too
   coarse), layer = slug, -n / -N name and description, --attribution.
 
   keep_all (config `tile_keep_all: true`) is for small point layers: no feature is dropped at any zoom (-r1 turns off the
-  low-zoom thinning that otherwise leaves ~1 point per tile, so single points only appeared at the top zoom)."""
+  low-zoom thinning that otherwise leaves ~1 point per tile, so single points only appeared at the top zoom).
+
+  extra (config `tile_args`) goes before the input, e.g. `--low-detail=10` for large overlapping polygons whose
+  low-zoom tiles otherwise pass MapLibre's 65,535-vertex segment limit (ProtectedSeas Navigator, 2026-10-20)."""
   thin = ["-r1"] if keep_all else ["--drop-densest-as-needed", "--extend-zooms-if-still-dropping"]
   return ["tippecanoe", "-o", str(dest), f"-z{maxzoom}" if maxzoom else "-zg", "-l", slug, "-n", name, "-N", description,
-          "--attribution", attribution, *thin, "--read-parallel", "--force", "--quiet", str(src)]
+          "--attribution", attribution, *thin, "--read-parallel", "--force", "--quiet", *(extra or []), str(src)]
 
 
 def build_pmtiles(parquet: Path, dest: Path, slug: str, name: str, description: str, attribution: str,
-                  keep: list[str] | None = None, maxzoom: int | None = None, keep_all: bool = False) -> int:
+                  keep: list[str] | None = None, maxzoom: int | None = None, keep_all: bool = False,
+                  extra: list[str] | None = None) -> int:
   """GeoParquet -> PMTiles; returns the feature count. raises if tippecanoe is missing or fails."""
   if not shutil.which("tippecanoe"):
     raise RuntimeError("tippecanoe not found on PATH (brew install tippecanoe, or build felt/tippecanoe)")
@@ -58,7 +62,7 @@ def build_pmtiles(parquet: Path, dest: Path, slug: str, name: str, description: 
     n = table_to_ndjson(parquet, nd, keep)
     dest.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(tippecanoe_cmd(nd, dest, slug, name, " ".join(description.split()), " ".join(attribution.split()), maxzoom,
-                                  keep_all),
+                                  keep_all, extra),
                    check=True)
   return n
 

@@ -293,3 +293,20 @@ def test_staged_gebco_has_all_three_geometry_types_and_the_verbatim_citation():
   assert {r["place_id"].rsplit(":", 1)[1] for r in t if r["place_id"].count(":") == 2} <= {"line", "point"}
   prov = json.loads((d / "provenance.json").read_text())
   assert GEBCO_CITATION in re.sub(r"<[^>]+>", "", prov["sources"][0]["source_license"])     # the item licenseInfo, kept as served (HTML)
+
+
+def test_id_sort_orders_rows_by_place_id():
+  """regression: Navigator in spatial order spread every place_id range over all row groups, so the place page fetched
+  ~1 GB and crashed the tab (2026-10-20); id order lets getPlace read one group."""
+  feats = [({"FID": i, "Site_ID": sid, "Site_Name": "x"}, square(i, 0)) for i, sid in enumerate(["CA9", "CA10", "CA2", "AB1"])]
+  rows, *_ = build_rows({**MPA_PLAIN, "id_sort": True}, [result(feats, MPA_FIELDS)])
+  ids = [r["place_id"] for r in rows]
+  assert ids == sorted(ids) and [r["Site_ID"] for r in rows] == ["AB1", "CA10", "CA2", "CA9"]
+
+
+def test_style_overrides_the_polygon_paint():
+  fill, line = style_json("protectedseas_fisheries", 12, "MultiPolygon",
+                          {"fill_color": "#2b7bb9", "fill_opacity": 0.12, "line_color": "#1b5584"})["layers"]
+  assert fill["paint"] == {"fill-color": "#2b7bb9", "fill-opacity": 0.12}
+  assert line["paint"] == {"line-color": "#1b5584", "line-width": 1}
+  assert style_json("x", 5)["layers"][0]["paint"] == {"fill-color": "#e08a1e", "fill-opacity": 0.45}

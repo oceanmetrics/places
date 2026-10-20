@@ -10,6 +10,8 @@ import type {
 } from './types'
 
 export const DEFAULT_BASE = 'https://storage.oceanmetrics.io/gazetteer/'
+/** more row groups than this left by the place_id statistics: also prune by the place's bbox (read from the index). */
+const BBOX_PRUNE_ABOVE = 4
 const FOOTER_GUESS = 16 * 1024
 const SUFFIX = /\s*Processed by Ocean Metrics\.?\s*$/i
 
@@ -181,6 +183,7 @@ export function createClient(initial: ClientConfig = {}) {
           updated: r.updated == null ? null : (plain(r.updated) as string),
           group_id: r.group_id == null ? null : String(r.group_id),
           source_id: r.source_id == null ? null : String(r.source_id), url: r.url == null ? null : String(r.url),
+          keywords: r.keywords == null ? null : String(r.keywords),
         })))
       indexP.catch(() => { indexP = null })
     }
@@ -188,8 +191,9 @@ export function createClient(initial: ClientConfig = {}) {
   }
 
   /**
-   * search places_index.parquet by name or place_id. Every whitespace-separated word of `q` must occur
-   * (case and accent insensitive); results rank exact name, name prefix, word prefix, then substring, larger areas first.
+   * search places_index.parquet by name, place_id or keywords (e.g. country, territory). Every whitespace-separated word
+   * of `q` must occur (case and accent insensitive); results rank exact name, name prefix, word prefix, substring, then a
+   * keyword-only match, larger areas first.
    * a place_id is unique within a collection, not across them (`BOEM:OCS-P 0562` is in two collections): every
    * (collection, place_id) is its own hit; pass the hit's `collection` to `getPlace` as `slug`.
    */
@@ -205,9 +209,10 @@ export function createClient(initial: ClientConfig = {}) {
       if (bbox && p.bbox && !bboxIntersects(bbox, p.bbox)) continue
       let score = 0
       if (words.length) {
-        const name = norm(p.name), id = norm(p.place_id), hay = `${name} ${id}`
-        if (!words.every((w) => hay.includes(w))) continue
-        score = id === query ? 0 : name === query ? 0 : name.startsWith(query) ? 1
+        const name = norm(p.name), id = norm(p.place_id), hay = `${name} ${id}`, kw = norm(p.keywords ?? '')
+        const inName = words.every((w) => hay.includes(w))
+        if (!inName && !(kw && words.every((w) => hay.includes(w) || kw.includes(w)))) continue
+        score = !inName ? 4 : id === query ? 0 : name === query ? 0 : name.startsWith(query) ? 1
           : name.split(/[\s\-_/,()]+/).some((w) => w.startsWith(words[0])) ? 2 : 3
       }
       scored.push([score, p])
@@ -262,15 +267,25 @@ export function createClient(initial: ClientConfig = {}) {
     const ref = await referencePlace(id, opts)
     if (ref !== undefined) return ref
     for (const slug of opts.slug ? [opts.slug] : await candidateSlugs(id)) {
-      let rows: Record<string, any>[]
+      let r: any
       try {
-        rows = await parquetReadObjects({ ...(await open(parquetUrl(slug))), filter: { place_id: { $eq: id } }, compressors, utf8: false })
+        const f = await open(parquetUrl(slug))
+        let groups = candidateGroups(f.metadata, id)
+        // many groups can hold the id (a spatially sorted layer): narrow them by the place's bbox from the index
+        if (groups.length > BBOX_PRUNE_ABOVE) {
+          const row = (await loadIndex()).find((x) => x.place_id === id && x.collection === slug)
+          if (row?.bbox) groups = candidateGroups(f.metadata, id, row.bbox)
+        }
+        for (const g of groups) {
+          const rows = await parquetReadObjects({ ...f, rowStart: g.rowStart, rowEnd: g.rowEnd, filter: { place_id: { $eq: id } }, compressors, utf8: false })
+          r = rows.find((x: any) => x.place_id === id)
+          if (r) break
+        }
       } catch (e) {
         // a layer listed in the manifest without a parquet (404) cannot hold the id: try the next one
         if (/\b404\b/.test(String((e as Error)?.message))) continue
         throw e
       }
-      const r: any = rows.find((x: any) => x.place_id === id)
       if (!r) continue
       if (!opts.slug) found.set(id, slug)       // a pinned lookup says nothing about where an unpinned one should look
       const { geometry: raw, bbox: rawBox, ...rest } = r
@@ -313,6 +328,32 @@ export function createClient(initial: ClientConfig = {}) {
   }
 
   /**
+   * the places of a raster (reference) layer under a point: the publisher's GetFeatureInfo (`raster.info_url`, JSON,
+   * no geometry) for `bbox` (west, south, east, north around the point, which sits at its centre pixel), mapped to
+   * index rows by `raster.info_id` = the row's source_id, else its name, else the layer's only row. [] when the layer
+   * is not identifiable or nothing is there. e.g. clicking a Marine Regions EEZ, drawn from VLIZ's PNG tiles, names it
+   * (it was not clickable at all, 2026-10-20); `getPlace` then fetches its boundary from `feature_url`.
+   */
+  async function identify(slug: string, bbox: BBox): Promise<IndexPlace[]> {
+    const layer = await getLayer(slug)
+    const tpl = layer.raster?.info_url, key = layer.raster?.info_id
+    if (!tpl || !key) return []
+    const url = new URL(tpl.replace('{bbox}', bbox.map((v) => String(+v.toFixed(7))).join(',')), base()).toString()
+    const r = await doFetch()(url)
+    if (!r.ok) throw new Error(`${slug}: ${r.status} ${r.statusText} (${url})`)
+    const fc = await r.json()
+    const vals = [...new Set(((fc?.features ?? []) as any[]).map((f) => f?.properties?.[key]).filter((v) => v != null).map(String))]
+    if (!vals.length) return []
+    const rows = (await loadIndex()).filter((p) => p.collection === slug)
+    const out: IndexPlace[] = []
+    for (const v of vals) {
+      const hit = rows.find((p) => p.source_id === v) ?? rows.find((p) => p.name === v) ?? (rows.length === 1 ? rows[0] : undefined)
+      if (hit && !out.includes(hit)) out.push(hit)
+    }
+    return out
+  }
+
+  /**
    * the deduped credit line for what is on screen. Pass place ids ("BOEM:OCS-P 0561", read from the index), search hits
    * or `{ collection, place_id }` pairs, and/or layer slugs ("boem_wind_leases", read from layers.json). A bare id that
    * occurs in several collections credits all of them (pass a hit or a pair to pin one). Unknown ids and slugs are skipped.
@@ -346,7 +387,7 @@ export function createClient(initial: ClientConfig = {}) {
     return creditLine(parts)
   }
 
-  return { configure, listLayers, getLayer, addLayer, removeLayer, search, samePlace, getPlace, creditsFor }
+  return { configure, listLayers, getLayer, addLayer, removeLayer, search, samePlace, getPlace, identify, creditsFor }
 }
 
 // the default client ----
@@ -359,4 +400,44 @@ export const removeLayer = def.removeLayer
 export const search = def.search
 export const samePlace = def.samePlace
 export const getPlace = def.getPlace
+export const identify = def.identify
 export const creditsFor = def.creditsFor
+
+// row groups ----
+const asText = (v: unknown): string | undefined =>
+  v == null ? undefined : v instanceof Uint8Array ? new TextDecoder().decode(v) : String(v)
+const asNum = (v: unknown): number | undefined => (v == null ? undefined : Number(v))
+
+/**
+ * the row groups of a places.parquet that can hold `id`, smallest first: its place_id lies within the group's min/max
+ * statistics and, when `box` (the index bbox) is given, the group's per-row `bbox` statistics can contain the box.
+ * a group without statistics is always a candidate. a spatially sorted layer spreads every place_id range over most
+ * groups (ProtectedSeas Navigator: ~1 GB for one place, the tab crashed, 2026-10-20), so the box does the narrowing;
+ * an unwrapped box (east beyond 180, antimeridian) is tested on latitude only.
+ */
+export function candidateGroups(metadata: FileMetaData, id: string, box?: BBox | null): Array<{ rowStart: number; rowEnd: number; bytes: number }> {
+  const out: Array<{ rowStart: number; rowEnd: number; bytes: number }> = []
+  const eps = 1e-9
+  let start = 0
+  for (const rg of metadata.row_groups) {
+    const n = Number(rg.num_rows), stat = (path: string) => rg.columns.find((c) => c.meta_data?.path_in_schema.join('.') === path)?.meta_data?.statistics
+    let ok = true
+    const ids = stat('place_id'), lo = asText(ids?.min_value ?? ids?.min), hi = asText(ids?.max_value ?? ids?.max)
+    if (lo !== undefined && hi !== undefined && (id < lo || id > hi)) ok = false
+    if (ok && box) {
+      const [w, s, e, nn] = box
+      const min = (k: string) => { const st = stat(`bbox.${k}`); return asNum(st?.min_value ?? st?.min) }
+      const max = (k: string) => { const st = stat(`bbox.${k}`); return asNum(st?.max_value ?? st?.max) }
+      const ymin = min('ymin'), ymax = max('ymax'), xmin = min('xmin'), xmax = max('xmax')
+      if (ymin !== undefined && ymin > s + eps) ok = false
+      if (ymax !== undefined && ymax < nn - eps) ok = false
+      if (e <= 180) {
+        if (xmin !== undefined && xmin > w + eps) ok = false
+        if (xmax !== undefined && xmax < e - eps) ok = false
+      }
+    }
+    if (ok) out.push({ rowStart: start, rowEnd: start + n, bytes: Number(rg.total_byte_size) })
+    start += n
+  }
+  return out.sort((a, b) => a.bytes - b.bytes || a.rowStart - b.rowStart)
+}

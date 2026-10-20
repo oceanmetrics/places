@@ -19,6 +19,9 @@ KINDS |= {"wfs"}                                                      # OGC WFS 
 PLACE_TYPES |= {"mpa", "undersea_feature"}   # mpa_inventory, gebco_undersea
 PLACE_TYPES |= {"managed_area"}              # protectedseas_navigator: MPAs and other area-based management measures
 KINDS |= {"navigator_export"}                # ProtectedSeas Navigator Direct Data Export (gazetteer/navigator.py)
+FILTER_KINDS = {"arcgis", "navigator_export"}   # source kinds that take `exclude` / `include` ({native field: [values]})
+STYLE_KEYS = {"fill_color", "fill_opacity", "line_color", "line_width"}   # config `style:` (polygon layers)
+
 REQUIRED = ["slug", "title", "description", "authority", "place_type", "version", "license", "attribution",
             "providers", "status", "sources"]
 
@@ -27,10 +30,26 @@ def load_layer_config(path: str | Path) -> dict:
   """read and validate one layer config; the filename is not significant, `slug` is."""
   path = Path(path)
   cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+  if cfg.get("extends"):
+    cfg = extend_config(cfg, path)
   validate_config(cfg, path.name)
   cfg["_path"] = str(path)
   cfg["_sources_dir"] = str(path.parent.parent)
   return cfg
+
+
+def extend_config(cfg: dict, path: Path) -> dict:
+  """`extends: _base.yml` (a file next to `path`): the base's keys, then this config's on top (top-level keys replace,
+  `sources` included). bases start with `_`, so `load_all` never builds one on its own. e.g. the ProtectedSeas Navigator
+  groups share `sources/protectedseas/_navigator_base.yml` (licence, attribution, ids) and differ in slug, title, style
+  and their source's `include`."""
+  base_path = path.parent / cfg["extends"]
+  if not base_path.name.startswith("_"):
+    raise ValueError(f"{path.name}: extends {base_path.name}, but a base config's file name must start with '_'")
+  base = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+  if base.get("extends"):
+    raise ValueError(f"{base_path.name}: a base config cannot extend another")
+  return {**base, **{k: v for k, v in cfg.items() if k != "extends"}, "_extends": str(base_path)}
 
 
 def validate_config(cfg: dict, label: str = "config") -> None:
@@ -56,17 +75,32 @@ def validate_config(cfg: dict, label: str = "config") -> None:
   except ValueError as e:
     errs.append(str(e))
   errs += reference_problems(cfg)
+  if cfg.get("spatial_sort") and cfg.get("id_sort"):
+    errs.append("spatial_sort and id_sort are exclusive (one row order)")
+  sf = cfg.get("search_fields")
+  if sf is not None and not (isinstance(sf, list) and sf and all(isinstance(f, str) and f for f in sf)):
+    errs.append("search_fields must be a non-empty list of native column names")
+  targs = cfg.get("tile_args")
+  if targs is not None and not (isinstance(targs, list) and all(isinstance(a, str) and a.startswith("--") for a in targs)):
+    errs.append("tile_args must be a list of tippecanoe long options (e.g. --simplification=4)")
+  style = cfg.get("style")
+  if style is not None and not (isinstance(style, dict) and style and set(style) <= STYLE_KEYS):
+    errs.append(f"style takes only {sorted(STYLE_KEYS)}")
   for i, src in enumerate(cfg.get("sources") or []):
     if src.get("kind") not in KINDS:
       errs.append(f"sources[{i}].kind must be one of {sorted(KINDS)}")
     if not src.get("url"):
       errs.append(f"sources[{i}].url missing")
-    exc = src.get("exclude")
-    if exc is not None:
-      if src.get("kind") != "arcgis":
-        errs.append(f"sources[{i}].exclude is only supported for arcgis sources")
-      if not (isinstance(exc, dict) and exc and all(isinstance(v, list) and v for v in exc.values())):
-        errs.append(f"sources[{i}].exclude must map a native field to a non-empty list of values")
+    for key in ("exclude", "include"):
+      rule = src.get(key)
+      if rule is None:
+        continue
+      if src.get("kind") not in FILTER_KINDS:
+        errs.append(f"sources[{i}].{key} is only supported for {' and '.join(sorted(FILTER_KINDS))} sources")
+      if key == "include" and src.get("kind") == "arcgis":
+        errs.append(f"sources[{i}].include is not supported for arcgis sources (use exclude)")
+      if not (isinstance(rule, dict) and rule and all(isinstance(v, list) and v for v in rule.values())):
+        errs.append(f"sources[{i}].{key} must map a native field to a non-empty list of values")
     for key in ("place_id", "name", "source_id"):
       if not (src.get(key) or cfg.get(key)):
         errs.append(f"sources[{i}]: no {key} (set it on the source or the collection)")
@@ -101,6 +135,11 @@ def reference_problems(cfg: dict) -> list[str]:
     errs.append("reference.tiles needs {z}, {x} and {y}")
   if ref.get("feature_url") and "{source_id}" not in ref["feature_url"]:
     errs.append("reference.feature_url needs {source_id}")
+  if ref.get("info_url"):                      # identify on click: the publisher's WMS GetFeatureInfo, no geometry
+    if "{bbox}" not in ref["info_url"]:
+      errs.append("reference.info_url needs {bbox} (west,south,east,north around the clicked point)")
+    if not ref.get("info_id"):
+      errs.append("reference.info_url needs reference.info_id (the response field holding the place's source_id or name)")
   for k in ("minzoom", "maxzoom", "tile_size"):
     if k in ref and not isinstance(ref[k], int):
       errs.append(f"reference.{k} must be an integer")
@@ -113,9 +152,10 @@ def source_setting(cfg: dict, src: dict, key: str):
 
 
 def load_all(sources_dir: str | Path) -> dict[str, dict]:
-  """every layer config under sources_dir/*/*.yml, keyed by slug (duplicate slugs are an error)."""
+  """every layer config under sources_dir/*/*.yml, keyed by slug (duplicate slugs are an error); `_*.yml` files are
+  bases for `extends`, not layers."""
   out: dict[str, dict] = {}
-  for p in sorted(Path(sources_dir).glob("*/*.yml")):
+  for p in sorted(q for q in Path(sources_dir).glob("*/*.yml") if not q.name.startswith("_")):
     cfg = load_layer_config(p)
     if cfg["slug"] in out:
       raise ValueError(f"duplicate slug {cfg['slug']} in {p}")

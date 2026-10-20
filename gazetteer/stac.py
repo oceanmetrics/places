@@ -53,8 +53,11 @@ def size_label(n: int) -> str:
   return f"{n / 1e6:.1f} MB" if n >= 1e6 else f"{n / 1e3:.0f} kB"
 
 
-def style_json(slug: str, max_zoom: int, geometry_type: str = "MultiPolygon") -> dict:
+def style_json(slug: str, max_zoom: int, geometry_type: str = "MultiPolygon", style: dict | None = None) -> dict:
+  """the collection's default MapLibre style. `style` (config, polygon layers only) overrides the fill / outline paint:
+  fill_color, fill_opacity, line_color, line_width (e.g. one colour per ProtectedSeas Navigator group)."""
   src = {"data": {"type": "vector", "url": "pmtiles://../places.pmtiles", "minzoom": 0, "maxzoom": max_zoom}}
+  st = style or {}
   if geometry_type == "Mixed":   # points, lines and polygons share one tile layer: one style layer per geometry kind
     return {"version": 8, "name": "Default", "sources": src, "layers": [
       {"id": f"{slug}-fill", "type": "fill", "source": "data", "source-layer": slug, "filter": ["==", ["geometry-type"], "Polygon"],
@@ -79,9 +82,9 @@ def style_json(slug: str, max_zoom: int, geometry_type: str = "MultiPolygon") ->
           "sources": src,
           "layers": [
             {"id": f"{slug}-fill", "type": "fill", "source": "data", "source-layer": slug,
-             "paint": {"fill-color": "#e08a1e", "fill-opacity": 0.45}},
+             "paint": {"fill-color": st.get("fill_color", "#e08a1e"), "fill-opacity": st.get("fill_opacity", 0.45)}},
             {"id": f"{slug}-line", "type": "line", "source": "data", "source-layer": slug,
-             "paint": {"line-color": "#a85f00", "line-width": 1}}]}
+             "paint": {"line-color": st.get("line_color", "#a85f00"), "line-width": st.get("line_width", 1)}}]}
 
 
 def build_collection(cfg: dict, table: pa.Table, geo: dict, provenance: dict, dir: Path, header: dict, now: str,
@@ -171,7 +174,7 @@ def reference_fields(cfg: dict) -> dict:
     return {}
   raster = {"tiles": [ref["tiles"]], "tile_size": ref.get("tile_size", 256), "minzoom": ref.get("minzoom", 0),
             "maxzoom": ref.get("maxzoom", 22), "link": ref.get("link") or cfg.get("source_page"),
-            "feature_url": ref.get("feature_url")}
+            "feature_url": ref.get("feature_url"), "info_url": ref.get("info_url"), "info_id": ref.get("info_id")}
   return {"gazetteer:reference": True, "gazetteer:raster": raster}
 
 

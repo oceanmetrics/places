@@ -92,7 +92,7 @@ def test_index_rows_exact(staging, tmp_path):
     "bbox": {"xmin": -120.0, "ymin": 30.0, "xmax": -118.0, "ymax": 32.0},
     "centroid_lon": -119.0, "centroid_lat": 31.0, "area_km2": 10.5, "license": "CC-PDDC",
     "attribution": "NOAA MPA Center", "version": "1.0.0", "updated": "2026-10-01T00:00:00Z", "group_id": None,
-        "source_id": None, "url": None}
+        "source_id": None, "url": None, "keywords": None}
   # no area column value: the geodesic area of the polygon (a 4 x 4 degree square at 33-37 N)
   assert 161_000 < by["MPA:BBB2"]["area_km2"] < 163_000      # about 444 km x 365 km
   # no row columns for these: collection metadata fills them; squash() collapses the doubled space
@@ -327,3 +327,16 @@ def test_internal_reference_copy_is_indexed_below_a_local_build(tmp_path):
   srcs = bi.merge_sources([], bi.local_sources(st), bi.internal_sources(internal))
   assert [(s.slug, s.origin) for s in srcs] == [("mr_eez", "local"), ("mr_goas", "internal")]
   assert bi.internal_sources(tmp_path / "absent") == []
+
+
+def test_keywords_add_search_fields_not_already_in_the_name():
+  """regression: Marine Regions names say "Belgian Exclusive Economic Zone", so a search for "Belgium" (territory1)
+  found nothing (2026-10-20); `search_fields` values go to the index `keywords` column."""
+  b = pa.record_batch({"Territory1": ["Belgium", "Belgium", None], "Sovereign1": ["Belgium", "Belgium", "France"],
+                       "ISO_TER1": ["BEL", "BEL", None]})
+  cols = {n.lower(): n for n in b.schema.names}
+  names = ["Belgian Exclusive Economic Zone", "Belgium 12 NM", "Clipperton"]
+  assert bi.keywords(["territory1", "sovereign1", "iso_ter1", "missing"], b, cols, names) == \
+    ["Belgium · BEL", "BEL", "France"]
+  assert bi.keywords(None, b, cols, names) == [None, None, None]
+  assert "keywords" in bi.INDEX_SCHEMA.names

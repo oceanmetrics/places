@@ -39,6 +39,10 @@ reference:
   maxzoom: 12
   link: "https://doi.org/10.14284/696"
   # no feature_url: one global polygon per place (oceans, the high seas) is too heavy to fetch per view
+  # identify on click (one small JSON per click, PROPERTYNAME so no geometry comes back; plain WMS, not GWC, which
+  # ignores PROPERTYNAME): 2026-10-20
+  info_url: "https://geo.vliz.be/geoserver/MarineRegions/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo&LAYERS=MarineRegions:high_seas&QUERY_LAYERS=MarineRegions:high_seas&STYLES=&SRS=EPSG:4326&BBOX={bbox}&WIDTH=101&HEIGHT=101&X=50&Y=50&INFO_FORMAT=application/json&FEATURE_COUNT=5&PROPERTYNAME=mrgid"
+  info_id: mrgid
 place_id:
   template: "MRGID:{mrgid}{mr_part}"
   pattern: '^MRGID:\d+(:[a-z0-9-]+)?$'

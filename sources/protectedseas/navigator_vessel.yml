@@ -1,0 +1,29 @@
+# protectedseas_vessel: ProtectedSeas Navigator vessel restricted and reporting areas, one group of Navigator categories (shared keys in _navigator_base.yml)
+extends: _navigator_base.yml
+slug: protectedseas_vessel
+title: ProtectedSeas Navigator vessel restricted and reporting areas
+description: 'Vessel restricted areas (speed, entry, anchoring, discharge) and vessel reporting areas (Navigator `category_name`:
+  Vessel Restricted Area, Vessel Reporting Area). ProtectedSeas Navigator is a global database of verified marine protected
+  and managed area regulations and boundaries (MPAs, fisheries management areas, vessel restricted areas, water quality
+  and other area-based measures), with each site''s Level of Fishing Protection (`lfp`, 1 least to 5 most; 0 a proposed
+  site) and activity-by-activity regulation coding. Built from the Navigator Direct Data Export for API users (2026-08-27);
+  inland-only sites (lakes, rivers, land) are left out. Boundaries over 10,000 vertices were simplified by ProtectedSeas
+  to within 2.4 m or 9.6 m (`display_simplified`); the area fields (`total_area`, `total_marine_area`, km2) come from the
+  full-resolution boundaries, so use them rather than areas recomputed from the geometry. The data summarise laws and regulations
+  for information only: they are not a legal document, may be incomplete or out of date, and do not replace the official
+  regulations (see https://navigatormap.org/methodology/).'
+place_type: restricted_area
+style:
+  fill_color: '#c0392b'
+  line_color: '#8e2a20'
+  fill_opacity: 0.35
+sources:
+- kind: navigator_export
+  url: https://navigatormap.org/data-request
+  item_id: Navigator_API_AllSites_082726
+  export_label: Navigator Direct Data Export for API users, 2026-08-27
+  path: cache/protectedseas_navigator/export
+  include:
+    category_name:
+    - Vessel Restricted Area
+    - Vessel Reporting Area

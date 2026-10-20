@@ -65,7 +65,7 @@ def build_layer(cfg: dict, staging: Path, cache: Path, version: str | None = Non
   geo = write_geoparquet(table, out / "places.parquet", prov, cfg.get("row_group_size"))
   tiles.build_pmtiles(out / "places.parquet", out / "places.pmtiles", slug, cfg["title"],
                       cfg["description"], cfg["attribution"], cfg.get("tile_properties"), cfg.get("tile_maxzoom"),
-                      bool(cfg.get("tile_keep_all")))
+                      bool(cfg.get("tile_keep_all")), cfg.get("tile_args"))
   header, _ = tiles.read_pmtiles(out / "places.pmtiles")
   write_metadata(cfg, out, table, geo, prov, header, now, version)
   problems = check_parquet(out / "places.parquet", cfg) + check_pmtiles(out / "places.pmtiles", slug)
@@ -79,7 +79,7 @@ def build_layer(cfg: dict, staging: Path, cache: Path, version: str | None = Non
 def write_metadata(cfg: dict, out: Path, table, geo: dict, prov: dict, header: dict, now: str, version: str) -> dict:
   """style, provenance.json, AGENTS.md, README.md and collection.json for the files already in `out`."""
   (out / "styles").mkdir(exist_ok=True)
-  (out / "styles" / "default.json").write_text(json.dumps(stac.style_json(cfg["slug"], header["max_zoom"], "Mixed" if cfg.get("mixed_geometry") else cfg.get("geometry_type", "MultiPolygon")), indent=2) + "\n")
+  (out / "styles" / "default.json").write_text(json.dumps(stac.style_json(cfg["slug"], header["max_zoom"], "Mixed" if cfg.get("mixed_geometry") else cfg.get("geometry_type", "MultiPolygon"), cfg.get("style")), indent=2) + "\n")
   (out / "provenance.json").write_text(json.dumps(prov, indent=2, default=str) + "\n")
   (out / "AGENTS.md").write_text(stac.agents(cfg))
   # the README lists the asset sizes, so write a placeholder first, build the collection, then fill it in

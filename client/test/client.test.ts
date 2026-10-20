@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { statSync } from 'node:fs'
-import { createClient, creditLine, layerLabel } from '../src/index'
+import { candidateGroups, createClient, creditLine, layerLabel } from '../src/index'
 import { serveFixtures, FIXTURES } from './server'
 
 let srv: Awaited<ReturnType<typeof serveFixtures>>
@@ -60,6 +60,14 @@ describe('listLayers', () => {
 })
 
 describe('search', () => {
+  it('matches keywords, ranked after name matches (regression: "Belgium" missed the "Belgian" Marine Regions EEZ, 2026-10-20)', async () => {
+    const hits = await c.search('fixtureland')
+    expect(hits.map((h) => h.place_id)).toEqual(['FXR:1'])
+    expect(hits[0].keywords).toBe('Fixtureland · FXL')
+    expect((await c.search('fixture zone fxl')).map((h) => h.place_id)).toEqual(['FXR:1'])   // name words + a keyword
+    const zone = await c.search('zone')
+    expect(zone.map((h) => h.place_id)).toContain('FXR:2')                                    // name matches still all there
+  })
   it('matches words in the name, case and accent insensitive', async () => {
     expect((await c.search('BRAVO')).map((p) => p.place_id)).toEqual(['FX:B-2'])
     expect((await c.search('lease alpha')).map((p) => p.place_id)).toEqual(['FX:A-1'])
@@ -71,7 +79,7 @@ describe('search', () => {
       collection: 'fx_leases', bbox: [-124, 33, -123, 34],
       centroid: [-123.5, 33.5], area_km2: expect.any(Number), license: 'CC-PDDC',
       attribution: 'Fixture Agency, via MarineCadastre. Processed by Ocean Metrics.', version: '1.0.3',
-      updated: '2026-10-01T12:00:00Z', group_id: null, source_id: 'A-1', url: 'https://fixture.example/leases/A-1',
+      updated: '2026-10-01T12:00:00Z', group_id: null, source_id: 'A-1', url: 'https://fixture.example/leases/A-1', keywords: null,
     })
   })
   it('reads the centroid from the live centroid_lon / centroid_lat columns (regression: it was always null)', async () => {
@@ -147,6 +155,20 @@ describe('search', () => {
     await c.search('alpha'); await c.search('bravo')
     expect(srv.requests.filter((r) => r.includes('places_index.parquet')).length).toBe(before)   // cached
     expect(srv.requests.some((r) => r.startsWith('GET index/places_index.parquet bytes='))).toBe(true)
+  })
+})
+
+describe('identify', () => {
+  it('names the reference-layer place under a point from the publisher GetFeatureInfo (regression: Marine Regions EEZs were not clickable, 2026-10-20)', async () => {
+    const fresh = createClient({ base: srv.base })
+    const before = srv.requests.length
+    const hits = await fresh.identify('fx_ref', [-36, -36, -34, -34])
+    expect(hits.map((h) => [h.place_id, h.collection])).toEqual([['FXR:1', 'fx_ref']])
+    expect(srv.requests.slice(before).map((r) => r.split(' ')[1])).toContain('fx_ref/info/-36,-36,-34,-34.json')
+  })
+  it('nothing there, or a layer without info_url, gives []', async () => {
+    expect(await c.identify('fx_ref', [0, 0, 1, 1])).toEqual([])
+    expect(await c.identify('fx_leases', [-36, -36, -34, -34])).toEqual([])
   })
 })
 
@@ -263,5 +285,30 @@ describe('creditLine', () => {
   it('merges, dedupes and normalises whitespace', () => {
     expect(creditLine(['A  b. Processed by Ocean Metrics.', 'A b. Processed by Ocean Metrics.', 'C'])).toBe('A b; C. Processed by Ocean Metrics.')
     expect(creditLine([])).toBe('')
+  })
+})
+
+describe('candidateGroups', () => {
+  // three row groups, as a spatially sorted layer writes them: every place_id range is wide, the bboxes are not
+  const col = (path: string, min: unknown, max: unknown) => ({ meta_data: { path_in_schema: path.split('.'), statistics: { min_value: min, max_value: max } } })
+  const rg = (n: number, bytes: number, ids: [string, string], b: [number, number, number, number]) => ({
+    num_rows: n, total_byte_size: bytes,
+    columns: [col('place_id', ...ids), col('bbox.xmin', b[0], b[2]), col('bbox.ymin', b[1], b[3]), col('bbox.xmax', b[0], b[2]), col('bbox.ymax', b[1], b[3])],
+  })
+  const md = { row_groups: [
+    rg(10, 900, ['PSGID:A', 'PSGID:Z'], [0, 50, 10, 60]),        // europe
+    rg(10, 100, ['PSGID:A', 'PSGID:Z'], [-130, 20, -110, 40]),   // california
+    rg(5, 5000, ['PSGID:A', 'PSGID:Z'], [-180, -80, 180, 85]),   // globe-spanning places
+  ] } as any
+  it('keeps groups whose place_id range holds the id, smallest first (regression: Navigator place page read ~1 GB, 2026-10-20)', () => {
+    expect(candidateGroups(md, 'PSGID:AIBEL1').map((g) => g.rowStart)).toEqual([10, 0, 20])
+    expect(candidateGroups(md, 'OTHER:1')).toEqual([])
+  })
+  it('the index bbox leaves only groups that can contain the place', () => {
+    expect(candidateGroups(md, 'PSGID:AIBEL1', [2.2, 51.1, 3.4, 51.9])).toEqual([
+      { rowStart: 0, rowEnd: 10, bytes: 900 }, { rowStart: 20, rowEnd: 25, bytes: 5000 }])
+  })
+  it('an unwrapped (antimeridian) box is tested on latitude only', () => {
+    expect(candidateGroups(md, 'PSGID:X', [170, 30, 190, 35]).map((g) => g.rowStart)).toEqual([10, 20])
   })
 })

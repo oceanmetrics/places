@@ -52,7 +52,7 @@ INDEX_SCHEMA = pa.schema([
   ("geom_type", pa.string()), ("collection", pa.string()), ("bbox", BBOX_T),
   ("centroid_lon", pa.float64()), ("centroid_lat", pa.float64()), ("area_km2", pa.float64()),
   ("license", pa.string()), ("attribution", pa.string()), ("version", pa.string()), ("updated", pa.string()),
-  ("group_id", pa.string()), ("source_id", pa.string()), ("url", pa.string()),
+  ("group_id", pa.string()), ("source_id", pa.string()), ("url", pa.string()), ("keywords", pa.string()),
 ])
 XW_COLS = ["mrgid", "psgid", "wdpa_id", "mpainv_site_id", "mpatlas_id", "wikidata_qid", "gers_id"]
 XW_SCHEMA = pa.schema([("place_id", pa.string())] + [(c, pa.string()) for c in XW_COLS])
@@ -163,6 +163,7 @@ class Source:
   version: str | None = None
   place_url: str | None = None   # the config's `place_url` template: each place's page at its source
   area_field: str | None = None  # the config's `area_field`: the source's own area (km2) wins over a geodesic one
+  search_fields: list[str] | None = None   # the config's `search_fields`: native columns the search also matches
 
 
 TEMPLATE_FIELD = re.compile(r"\{([^{}|]+)")
@@ -172,8 +173,25 @@ def with_config(sources: list[Source], cfgs: dict[str, dict]) -> list[Source]:
   """copy each source's link-back template and area field from its YAML (collections without one keep None)."""
   for s in sources:
     cfg = cfgs.get(s.slug) or {}
-    s.place_url, s.area_field = cfg.get("place_url"), cfg.get("area_field")
+    s.place_url, s.area_field, s.search_fields = cfg.get("place_url"), cfg.get("area_field"), cfg.get("search_fields")
   return sources
+
+
+def keywords(fields: list[str] | None, batch: pa.RecordBatch, cols: dict[str, str], names: list) -> list[str | None]:
+  """the search keywords per row: the distinct `fields` values not already in the name, joined by ' · '; null if none.
+  e.g. Marine Regions names say "Belgian Exclusive Economic Zone", so "Belgium" (territory1) found nothing (2026-10-20)."""
+  n = batch.num_rows
+  vals = [batch.column(cols[f.lower()]).to_pylist() for f in (fields or []) if f.lower() in cols]
+  out = []
+  for i in range(n):
+    name = (names[i] or "").lower()
+    seen = []
+    for v in (col[i] for col in vals):
+      v = squash(v) if isinstance(v, str) else None
+      if v and not re.search(rf"(?<!\w){re.escape(v.lower())}(?!\w)", name) and v not in seen:   # whole words: BEL is not in "Belgian"
+        seen.append(v)
+    out.append(" · ".join(seen) or None)
+  return out
 
 
 def place_links(template: str | None, batch: pa.RecordBatch, cols: dict[str, str]) -> list[str | None]:
@@ -373,6 +391,7 @@ def batch_rows(batch: pa.RecordBatch, src: Source) -> tuple[dict, list[dict]]:
     "group_id": [None] * n, "source_id": [clean_id(v) for v in _col(batch, cols, "source_id").to_pylist()]
     if "source_id" in cols else [None] * n, "url": place_links(src.place_url, batch, cols),
   }
+  index["keywords"] = keywords(src.search_fields, batch, cols, index["name"])
 
   # crosswalk: source columns, then the place_id prefix fills what is still unknown ----
   src_cols = {XW_SOURCE_COLS[k]: cols[k] for k in XW_SOURCE_COLS if k in cols}
@@ -396,6 +415,7 @@ def source_batches(src: Source):
   want = ["place_id", "name", "authority", "gazetteer", "place_type", "geom_type", "bbox", "geometry", "area_km2",
           "license", "attribution", "version", "source_id"] + list(XW_SOURCE_COLS)
   want += [f.lower() for f in TEMPLATE_FIELD.findall(src.place_url or "")] + ([src.area_field.lower()] if src.area_field else [])
+  want += [f.lower() for f in src.search_fields or []]
   cols = [low[w] for w in dict.fromkeys(want) if w in low]
   if "place_id" not in low:
     raise ValueError(f"{src.slug}: no place_id column")

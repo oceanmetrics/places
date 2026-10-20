@@ -6,7 +6,8 @@ standalone (stdlib only): merges two sources of truth, local staged builds win o
   (b) <base>/catalog.json -> each child collection.json, plus versions.json for the current version
 a collection is a map layer when it carries a PMTiles asset (`kind: "vector"`) or a `gazetteer:raster` tile source
 (`kind: "raster"`: a reference layer drawn from its publisher's own tile service, e.g. Marine Regions' WMTS, with no
-parquet or PMTiles of ours; `raster` = {tiles, tile_size, minzoom, maxzoom, link, feature_url}: `feature_url` fetches one
+parquet or PMTiles of ours; `raster` = {tiles, tile_size, minzoom, maxzoom, link, feature_url, info_url, info_id}: `info_url` (a WMS GetFeatureInfo
+template taking `{bbox}`) names the place under a click, `info_id` is its response field; `feature_url` fetches one
 place's boundary from the publisher, with the index row's `{source_id}`). either source may be absent.
 every row has `source_link` ({href, title}: the source gazetteer or publisher page apps link back to).
 
@@ -151,7 +152,8 @@ def raster_source(coll: dict) -> dict | None:
     return None
   tiles = r["tiles"] if isinstance(r["tiles"], list) else [r["tiles"]]
   return {"tiles": tiles, "tile_size": r.get("tile_size", 256), "minzoom": r.get("minzoom", 0),
-          "maxzoom": r.get("maxzoom", 22), "link": r.get("link"), "feature_url": r.get("feature_url")}
+          "maxzoom": r.get("maxzoom", 22), "link": r.get("link"), "feature_url": r.get("feature_url"),
+          "info_url": r.get("info_url"), "info_id": r.get("info_id")}
 
 
 def source_link(coll: dict) -> dict | None:

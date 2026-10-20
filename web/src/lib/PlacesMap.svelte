@@ -2,7 +2,7 @@
   import maplibregl from 'maplibre-gl'
   import 'maplibre-gl/dist/maplibre-gl.css'
   import * as pmtiles from 'pmtiles'
-  import { addLayer, creditsFor, layerLabel, registerPmtiles, removeLayer, layerId, DRAW_KINDS, type BBox, type Layer, type PlaceFeature } from '@oceanmetrics/places'
+  import { addLayer, creditsFor, identify, layerLabel, registerPmtiles, removeLayer, layerId, DRAW_KINDS, type BBox, type Layer, type PlaceFeature } from '@oceanmetrics/places'
   import { onMount } from 'svelte'
   import { applyTheme, BASEMAP_CREDIT, LABELS_BELOW, style } from './basemap'
   import { buildSearch, parseView, type LayerSel, type Projection } from './grammar'
@@ -151,7 +151,7 @@
   })
 
   // popup ----
-  function popupContent(f: maplibregl.MapGeoJSONFeature): HTMLElement {
+  function popupContent(f: Pick<maplibregl.MapGeoJSONFeature, 'properties' | 'source'>): HTMLElement {
     const p = f.properties ?? {}
     const slug = String(f.source).replace(/^places:/, '')
     const layer = layers.find((l) => l.slug === slug)
@@ -182,6 +182,14 @@
     la.href = withBase(layerPath(slug), BASE)
     la.textContent = 'Layer page'
     links.append(la)
+    if (p.url && /^https?:\/\//.test(String(p.url))) {      // the place's own page at its source (e.g. Marine Regions)
+      const sa = document.createElement('a')
+      sa.href = String(p.url)
+      sa.target = '_blank'
+      sa.rel = 'noopener'
+      sa.textContent = layer?.source_link?.title ? `At ${layer.source_link.title}` : 'At source'
+      links.append(' · ', sa)
+    }
     root.append(links)
     if (layer?.attribution_html || layer?.attribution) {
       const at = document.createElement('div')
@@ -190,6 +198,16 @@
       root.append(at)
     }
     return root
+  }
+
+  // the GetFeatureInfo box: 101 x 101 screen pixels round the click (the point at the centre pixel, so a buffer for
+  // lines matches the screen); off the globe's edge, a small box in degrees ----
+  function clickBox(m: maplibregl.Map, pt: maplibregl.Point, ll: maplibregl.LngLat): BBox {
+    const a = m.unproject([pt.x - 50, pt.y + 50]), b = m.unproject([pt.x + 50, pt.y - 50])
+    const ok = [a.lng, a.lat, b.lng, b.lat].every(Number.isFinite) && a.lng < b.lng && a.lat < b.lat
+    if (ok) return [a.lng, a.lat, b.lng, b.lat]
+    const d = 0.01
+    return [ll.lng - d, ll.lat - d, ll.lng + d, ll.lat + d]
   }
 
   onMount(() => {
@@ -227,12 +245,28 @@
 
     const interactive = () => m.getStyle().layers.filter((l) => l.id.startsWith('places:') && l.type !== 'raster').map((l) => l.id)
     if (popups) {
-      m.on('click', (e) => {
+      m.on('click', async (e) => {
         const ids = interactive()
         const f = ids.length ? m.queryRenderedFeatures(e.point, { layers: ids })[0] : undefined
-        if (!f) { onpick?.(null); return }
-        new maplibregl.Popup({ maxWidth: '320px' }).setLngLat(e.lngLat).setDOMContent(popupContent(f)).addTo(m)
-        if (f.properties?.place_id) onpick?.(String(f.properties.place_id))
+        if (f) {
+          new maplibregl.Popup({ maxWidth: '320px' }).setLngLat(e.lngLat).setDOMContent(popupContent(f)).addTo(m)
+          if (f.properties?.place_id) onpick?.(String(f.properties.place_id))
+          return
+        }
+        // a reference layer is the publisher's PNG tiles: ask its GetFeatureInfo what is under the point (first on top)
+        const refs = selected.map((s) => layers.find((l) => l.slug === s.slug)).filter((l): l is Layer => !!l && on.has(l.slug) && l.kind === 'raster' && !!l.raster?.info_url)
+        if (!refs.length) { onpick?.(null); return }
+        for (const l of refs) {
+          let hits: Awaited<ReturnType<typeof identify>> = []
+          try { hits = await identify(l.slug, clickBox(m, e.point, e.lngLat)) } catch { continue }
+          if (!hits.length) continue
+          const h = hits[0]
+          new maplibregl.Popup({ maxWidth: '320px' }).setLngLat(e.lngLat)
+            .setDOMContent(popupContent({ properties: { name: h.name, place_id: h.place_id, url: h.url }, source: `places:${l.slug}` })).addTo(m)
+          onpick?.(h.place_id)
+          return
+        }
+        onpick?.(null)
       })
       m.on('mousemove', (e) => {
         const ids = interactive()

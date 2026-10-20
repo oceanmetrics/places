@@ -23,6 +23,11 @@ export interface RasterSource {
   /** one place's boundary as GeoJSON from the publisher, `{source_id}` from the index row (a relative URL resolves
    *  against `base`); `getPlace` uses it. null: no per-place geometry (e.g. a single global polygon). */
   feature_url?: string | null
+  /** identify on click: the publisher's WMS GetFeatureInfo (JSON, no geometry) for `{bbox}` = west,south,east,north
+   *  around the point, the point at the centre pixel; `identify` uses it. null: not identifiable. */
+  info_url?: string | null
+  /** the response property naming the place: matched to the index row's source_id, else its name. */
+  info_id?: string | null
 }
 
 /** a link back to the source gazetteer or publisher of a layer (layers.json `source_link`). */
@@ -134,6 +139,9 @@ export interface IndexPlace {
   /** the place's own page at its source (its Marine Regions page, a Navigator site's managing-authority page); link
    *  back to it. null when the source has none. */
   url?      : string | null
+  /** extra words the search matches (a Marine Regions EEZ's territory "Belgium", while its name says "Belgian"; a
+   *  Navigator site's country); null when none, absent in indexes before client 0.5.0. */
+  keywords? : string | null
   /** with `search({ group: true })`: the other copies of this place, in preference order. */
   also?     : IndexPlace[]
 }

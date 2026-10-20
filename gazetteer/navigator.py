@@ -23,7 +23,7 @@ import pyarrow as pa
 import pyarrow.csv as pacsv
 import shapely
 
-from .fetch import SourceResult, now_iso
+from .fetch import SourceResult, exclude_features, include_features, now_iso
 
 MARINE_LOCATION_TYPES = {0, 2}
 
@@ -112,6 +112,8 @@ def fetch_navigator_export(src: dict, cache_dir: Path) -> SourceResult:
       no_boundary += 1
       continue
     feats.append({"properties": {k: plain(v) for k, v in row.items()}, "geometry": g})
+  feats, left_out = include_features(feats, src.get("include"))     # one collection per group of categories
+  feats, excluded = exclude_features(feats, src.get("exclude"))
   last = max((r for r in attrs.column("last_update").to_pylist() if r), default=None)
   return SourceResult(
     features=feats, fields=fields, source_url=src["url"], item_id=src.get("item_id", ""),
@@ -119,7 +121,7 @@ def fetch_navigator_export(src: dict, cache_dir: Path) -> SourceResult:
     data_last_edit=f"{last.isoformat()}T00:00:00Z" if last else None, retrieved=now_iso(), record_count=len(feats),
     checksum=export_checksum(d),
     extra={"export": src.get("export_label", d.name), "sites_in_export": attrs.num_rows, "dropped_inland": inland,
-           "dropped_no_boundary": no_boundary})
+           "dropped_no_boundary": no_boundary, "not_included": left_out or None, "excluded": excluded or None})
 
 
 def probe_navigator_export(src: dict, cache_dir: Path, published: dict | None) -> dict:

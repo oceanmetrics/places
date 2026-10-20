@@ -186,3 +186,10 @@ def test_a_403_without_a_redirect_is_not_retried():
   with pytest.raises(requests.HTTPError):
     head_info("https://x/a.zip", s)
   assert s.n == 1
+
+
+def test_include_features_keeps_only_listed_values():
+  feats = [{"properties": {"C": "MPA", "L": 5}}, {"properties": {"C": "Other", "L": 5}}, {"properties": {"C": "MPA", "L": 1}}]
+  assert fetch.include_features(feats, {"C": ["MPA"]}) == ([feats[0], feats[2]], 1)
+  assert fetch.include_features(feats, {"C": ["MPA"], "L": [5]}) == ([feats[0]], 2)        # every field must match
+  assert fetch.include_features(feats, None) == (feats, 0)

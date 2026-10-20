@@ -59,7 +59,37 @@ def test_probe_without_an_export_reports_the_published_checksum(tmp_path):
   assert probe_navigator_export({"path": str(tmp_path / "none")}, tmp_path, pub) == {"checksum": "abc"}
 
 
-def test_navigator_config_keys_on_ps_id_and_uses_the_supplied_area():
-  cfg = load_all("sources")["protectedseas_navigator"]
-  assert cfg["place_id"]["template"] == "PSGID:{ps_id}" and cfg["area_field"] == "total_area"
-  assert cfg["license"] == "CC-BY-4.0" and "Zetterlind" in cfg["attribution"] and "navigatormap.org/data-request" in cfg["attribution"]
+NAVIGATOR_CATEGORIES = {"Marine Protected Area", "Fisheries Management Area", "Other", "Water Quality/Human Health Area",
+                        "Vessel Restricted Area", "Recreational Area", "Marine Spatial Planning Area",
+                        "Jurisdictional Authority Area", "Other Effective Area-Based Conservation Area", "To Be Determined",
+                        "Vessel Reporting Area", "Voluntary Conservation Measure Area", "Local Marine Managed Area"}
+
+
+def navigator_groups():
+  return {s: c for s, c in load_all("sources").items() if s.startswith("protectedseas_")}
+
+
+def test_navigator_groups_key_on_ps_id_and_use_the_supplied_area():
+  groups = navigator_groups()
+  assert sorted(groups) == ["protectedseas_fisheries", "protectedseas_human_use", "protectedseas_jurisdiction",
+                            "protectedseas_mpa", "protectedseas_other", "protectedseas_vessel"]
+  for cfg in groups.values():
+    assert cfg["place_id"]["template"] == "PSGID:{ps_id}" and cfg["area_field"] == "total_area"
+    assert cfg["license"] == "CC-BY-4.0" and "Zetterlind" in cfg["attribution"] and "navigatormap.org/data-request" in cfg["attribution"]
+    assert cfg["id_sort"] and not cfg.get("spatial_sort")
+    assert cfg["sources"][0]["path"] == "cache/protectedseas_navigator/export"
+
+
+def test_navigator_groups_partition_the_13_categories():
+  """every Navigator category is in exactly one group, so every site is in exactly one collection (the 30,111-site
+  single collection crashed the place page and over-filled low-zoom tiles, 2026-10-20)."""
+  cats = [c for cfg in navigator_groups().values() for c in cfg["sources"][0]["include"]["category_name"]]
+  assert len(cats) == len(set(cats)) and set(cats) == NAVIGATOR_CATEGORIES
+
+
+def test_include_keeps_only_listed_category_values(export, tmp_path):
+  r = fetch_navigator_export({"url": "u", "path": str(export), "include": {"lfp": [5]}}, tmp_path)
+  assert [f["properties"]["ps_id"] for f in r.features] == ["CA1"]        # CA3 is lfp 3
+  assert r.extra["not_included"] == 1 and r.extra["excluded"] is None
+  r = fetch_navigator_export({"url": "u", "path": str(export), "exclude": {"lfp": [5]}}, tmp_path)
+  assert [f["properties"]["ps_id"] for f in r.features] == ["CA3"] and r.extra["excluded"] == ["lfp=5: 1 feature(s)"]

@@ -39,6 +39,10 @@ reference:
   maxzoom: 12
   link: "https://doi.org/10.14284/633"
   feature_url: "https://geo.vliz.be/geoserver/MarineRegions/wfs?service=WFS&version=1.0.0&request=GetFeature&typeName=MarineRegions:eez_12nm&outputFormat=application/json&srsName=EPSG:4326&CQL_FILTER=mrgid={source_id}"
+  # identify on click (one small JSON per click, PROPERTYNAME so no geometry comes back; plain WMS, not GWC, which
+  # ignores PROPERTYNAME): 2026-10-20
+  info_url: "https://geo.vliz.be/geoserver/MarineRegions/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo&LAYERS=MarineRegions:eez_12nm&QUERY_LAYERS=MarineRegions:eez_12nm&STYLES=&SRS=EPSG:4326&BBOX={bbox}&WIDTH=101&HEIGHT=101&X=50&Y=50&INFO_FORMAT=application/json&FEATURE_COUNT=5&PROPERTYNAME=mrgid,geoname"
+  info_id: mrgid
 place_id:
   template: "MRGID:{mrgid}{mr_part}"
   pattern: '^MRGID:\d+(:[a-z0-9-]+)?$'
@@ -69,3 +73,5 @@ sources:
       doi: "10.14284/633"
       license: CC-BY-4.0
       released: "2023-10-25"
+# the search also matches these (names say "Belgian ...", people type "Belgium")
+search_fields: [territory1, sovereign1, iso_ter1]

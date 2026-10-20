@@ -207,7 +207,9 @@
     "minzoom": 0,
     "maxzoom": 12,
     "link": "https://fixture.example/zones",
-    "feature_url": "fx_ref/wfs/{source_id}.json"
+    "feature_url": "fx_ref/wfs/{source_id}.json",
+    "info_url": "fx_ref/info/{bbox}.json",
+    "info_id": "mrgid"
    },
    "pmtiles": null,
    "source_layer": null,

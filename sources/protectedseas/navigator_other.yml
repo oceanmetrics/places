@@ -1,0 +1,31 @@
+# protectedseas_other: ProtectedSeas Navigator other managed areas, one group of Navigator categories (shared keys in _navigator_base.yml)
+# --low-detail=10: large overlapping polygons made low-zoom tiles pass MapLibre's 65,535-vertex limit (2026-10-20)
+extends: _navigator_base.yml
+slug: protectedseas_other
+title: ProtectedSeas Navigator other managed areas
+description: 'Other area-based management measures, and sites ProtectedSeas has not yet categorised (To Be Determined) (Navigator
+  `category_name`: Other, To Be Determined). ProtectedSeas Navigator is a global database of verified marine protected and
+  managed area regulations and boundaries (MPAs, fisheries management areas, vessel restricted areas, water quality and
+  other area-based measures), with each site''s Level of Fishing Protection (`lfp`, 1 least to 5 most; 0 a proposed site)
+  and activity-by-activity regulation coding. Built from the Navigator Direct Data Export for API users (2026-08-27); inland-only
+  sites (lakes, rivers, land) are left out. Boundaries over 10,000 vertices were simplified by ProtectedSeas to within 2.4
+  m or 9.6 m (`display_simplified`); the area fields (`total_area`, `total_marine_area`, km2) come from the full-resolution
+  boundaries, so use them rather than areas recomputed from the geometry. The data summarise laws and regulations for information
+  only: they are not a legal document, may be incomplete or out of date, and do not replace the official regulations (see
+  https://navigatormap.org/methodology/).'
+style:
+  fill_color: '#7f8c8d'
+  line_color: '#56615f'
+  fill_opacity: 0.25
+tile_args:
+- --low-detail=10
+sources:
+- kind: navigator_export
+  url: https://navigatormap.org/data-request
+  item_id: Navigator_API_AllSites_082726
+  export_label: Navigator Direct Data Export for API users, 2026-08-27
+  path: cache/protectedseas_navigator/export
+  include:
+    category_name:
+    - Other
+    - To Be Determined

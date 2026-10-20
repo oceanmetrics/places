@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0
+
+- `identify(slug, bbox)` names the places of a raster (reference) layer under a point. It asks the publisher's WMS
+  GetFeatureInfo (`raster.info_url`, JSON, no geometry) for `bbox` around the point, then maps the response's
+  `raster.info_id` to index rows (source_id, else name, else the layer's only row). Marine Regions places, drawn from
+  VLIZ's PNG tiles, were not clickable before. New `RasterSource.info_url` and `info_id`.
+- `search` also matches `IndexPlace.keywords` (new index column, null when none): extra words such as a Marine Regions
+  EEZ's territory ("Belgium", while its name says "Belgian ...") or a Navigator site's country and state. A
+  keyword-only match ranks after every name match.
+- `getPlace` reads fewer row groups. It now picks them from the place_id statistics itself, smallest first. When more
+  than 4 could hold the id (a spatially sorted layer), it also prunes by the place's bbox from the index. New helper
+  `candidateGroups(metadata, id, bbox?)`. The 30,111-site Navigator layer made the place page fetch about 1 GB.
+- Data: `protectedseas_navigator` is split into six layers by Navigator category: `protectedseas_mpa`,
+  `protectedseas_fisheries`, `protectedseas_jurisdiction`, `protectedseas_vessel`, `protectedseas_human_use` and
+  `protectedseas_other`.
+
 ## 0.4.0
 
 - Link back to the source of every place and layer, for credit:

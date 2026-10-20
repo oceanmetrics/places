@@ -176,6 +176,17 @@ def exclude_features(feats: list[dict], rules: dict | None) -> tuple[list[dict],
   return kept, [f"{f}={v}: {n} feature(s)" for (f, v), n in sorted(counts.items())]
 
 
+def include_features(feats: list[dict], rules: dict | None) -> tuple[list[dict], int]:
+  """keep only features whose native field value is listed in `rules` ({field: [value, ...]}, exact string match; a
+  feature must match every field). returns (kept features, how many were left out). e.g. one ProtectedSeas Navigator
+  collection per group of `category_name` values."""
+  if not rules:
+    return feats, 0
+  ok = {f: {str(v) for v in vals} for f, vals in rules.items()}
+  kept = [ft for ft in feats if all(str(ft["properties"].get(f)) in ok[f] for f in ok)]
+  return kept, len(feats) - len(kept)
+
+
 # shapefile in a zip ------------------------------------------------------------------------------------------------
 
 def get_fresh(url: str, s: requests.Session, **kw) -> requests.Response:
