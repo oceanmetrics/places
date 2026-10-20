@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 
 
 REPO = Path(__file__).resolve().parent.parent
+NO_TILES = {"min_zoom": 0, "max_zoom": 0, "center": [0, 0, 0]}   # the PMTiles header of a collection that has none (`display`)
 
 
 def fetch_source(src: dict, cache: Path, delay: float = 0.5, s=None) -> SourceResult:
@@ -34,6 +35,9 @@ def fetch_source(src: dict, cache: Path, delay: float = 0.5, s=None) -> SourceRe
   if src["kind"] == "navigator_export":
     from .navigator import fetch_navigator_export   # ProtectedSeas Navigator Direct Data Export (local files)
     return fetch_navigator_export(src, cache)
+  if src["kind"] == "derive":
+    from .derive import fetch_derive   # computed from other collections' built parquet (PLACES_INTERNAL / PLACES_STAGING)
+    return fetch_derive(src)
   raise ValueError(f"unknown source kind {src['kind']}")
 
 
@@ -63,17 +67,20 @@ def build_layer(cfg: dict, staging: Path, cache: Path, version: str | None = Non
   table = to_table(rows, fields)
   prov = provenance_record(cfg, results, len(rows), dropped, version, now)
   geo = write_geoparquet(table, out / "places.parquet", prov, cfg.get("row_group_size"))
-  tiles.build_pmtiles(out / "places.parquet", out / "places.pmtiles", slug, cfg["title"],
-                      cfg["description"], cfg["attribution"], cfg.get("tile_properties"), cfg.get("tile_maxzoom"),
-                      bool(cfg.get("tile_keep_all")), cfg.get("tile_args"))
-  header, _ = tiles.read_pmtiles(out / "places.pmtiles")
+  if cfg.get("display"):
+    header = NO_TILES       # drawn by another collection's PMTiles (config `display`): none of our own
+  else:
+    tiles.build_pmtiles(out / "places.parquet", out / "places.pmtiles", slug, cfg["title"],
+                        cfg["description"], cfg["attribution"], cfg.get("tile_properties"), cfg.get("tile_maxzoom"),
+                        bool(cfg.get("tile_keep_all")), cfg.get("tile_args"))
+    header, _ = tiles.read_pmtiles(out / "places.pmtiles")
   write_metadata(cfg, out, table, geo, prov, header, now, version)
-  problems = check_parquet(out / "places.parquet", cfg) + check_pmtiles(out / "places.pmtiles", slug)
+  problems = check_parquet(out / "places.parquet", cfg) + ([] if cfg.get("display") else check_pmtiles(out / "places.pmtiles", slug))
   if problems:
     raise RuntimeError(f"{slug}: " + "; ".join(problems))
   return {"slug": slug, "features": table.num_rows, "parquet_bytes": (out / "places.parquet").stat().st_size,
-          "pmtiles_bytes": (out / "places.pmtiles").stat().st_size, "license": cfg["license"],
-          "dropped": dropped, "max_zoom": header["max_zoom"]}
+          "pmtiles_bytes": (out / "places.pmtiles").stat().st_size if (out / "places.pmtiles").exists() else 0,
+          "license": cfg["license"], "dropped": dropped, "max_zoom": header["max_zoom"]}
 
 
 def write_metadata(cfg: dict, out: Path, table, geo: dict, prov: dict, header: dict, now: str, version: str) -> dict:
@@ -101,7 +108,7 @@ def restac_layer(cfg: dict, staging: Path, version: str | None = None) -> dict:
   pf = pq.ParquetFile(out / "places.parquet")
   geo = json.loads(pf.schema_arrow.metadata[b"geo"])
   prov = json.loads((out / "provenance.json").read_text())
-  header, _ = tiles.read_pmtiles(out / "places.pmtiles")
+  header = NO_TILES if cfg.get("display") else tiles.read_pmtiles(out / "places.pmtiles")[0]
   old = json.loads((out / "collection.json").read_text())
   if version:
     prov["version"] = version
@@ -168,6 +175,9 @@ def detect(cfg: dict, base_url: str, s=None) -> dict:
     elif src["kind"] == "wfs":
       from .fetch_wfs import probe_wfs      # layer title (product version) + feature count
       probes.append(probe_wfs(s, src))
+    elif src["kind"] == "derive":
+      from .derive import probe_derive      # the inputs' checksum (unchanged when they are not on this machine)
+      probes.append(probe_derive(src, published))
     elif src["kind"] == "navigator_export":
       from .navigator import probe_navigator_export   # the local export's checksum (none on the runner: unchanged)
       probes.append(probe_navigator_export(src, REPO / "cache" / cfg["slug"], published))

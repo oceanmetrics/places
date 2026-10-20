@@ -67,7 +67,8 @@ def main(argv: list[str] | None = None) -> int:
       print(slug, f"not built (no {d}); run `uv run build.py build --slug {slug}`")
       bad += bool(a.slug)
       continue
-    problems = check_parquet(d / "places.parquet", cfgs[slug]) + check_pmtiles(d / "places.pmtiles", slug)
+    tiles_problems = [] if cfgs[slug].get("display") else check_pmtiles(d / "places.pmtiles", slug)   # `display`: no PMTiles of its own
+    problems = check_parquet(d / "places.parquet", cfgs[slug]) + tiles_problems
     print(slug, "OK" if not problems else problems)
     bad += bool(problems)
   return 1 if bad else 0

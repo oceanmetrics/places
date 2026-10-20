@@ -8,8 +8,11 @@ a collection is a map layer when it carries a PMTiles asset (`kind: "vector"`) o
 (`kind: "raster"`: a reference layer drawn from its publisher's own tile service, e.g. Marine Regions' WMTS, with no
 parquet or PMTiles of ours; `raster` = {tiles, tile_size, minzoom, maxzoom, link, feature_url, info_url, info_id}: `info_url` (a WMS GetFeatureInfo
 template taking `{bbox}`) names the place under a click, `info_id` is its response field; `feature_url` fetches one
-place's boundary from the publisher, with the index row's `{source_id}`). either source may be absent.
-every row has `source_link` ({href, title}: the source gazetteer or publisher page apps link back to).
+place's boundary from the publisher, with the index row's `{source_id}`) or a `gazetteer:display` block (`kind: "derived"`:
+pieces computed from a reference collection, with no tiles of their own; `display` = {via, id_from}: draw the PMTiles of
+the collection `via` and show each place in that layer's feature whose place_id is the place's `source_id`, which holds the
+`id_from` column's value, e.g. `fao_high_seas` place FAOHS:21 has source_id FAO:21 and is drawn by `fao_major_areas`).
+either source may be absent. every row has `source_link` ({href, title}: the source gazetteer or publisher page apps link back to).
 
 URLs: every layer's `pmtiles` is CANONICAL, on the storage host (`base`, https://storage.oceanmetrics.io/gazetteer/):
 each request there costs one 302 to the bucket. apps MAY rewrite a `pmtiles` URL onto `base_direct` (the bucket's own
@@ -170,8 +173,14 @@ def source_link(coll: dict) -> dict | None:
   return {"href": href, "title": title or href}
 
 
+def display_source(coll: dict) -> dict | None:
+  """a derived reference collection's `gazetteer:display` ({via, id_from}): drawn by another collection's tiles."""
+  d = coll.get("gazetteer:display")
+  return {"via": d["via"], "id_from": d["id_from"]} if isinstance(d, dict) and d.get("via") and d.get("id_from") else None
+
+
 def is_map_layer(coll: dict) -> bool:
-  return has_pmtiles(coll) or raster_source(coll) is not None
+  return has_pmtiles(coll) or raster_source(coll) is not None or display_source(coll) is not None
 
 
 def has_pmtiles(coll: dict) -> bool:
@@ -248,14 +257,16 @@ def layer_row(coll: dict, style: dict | None = None, version: str | None = None,
   updated = coll.get("updated")
   status = coll.get("gazetteer:status") or None
   raster = raster_source(coll)
+  display = None if raster else display_source(coll)
   return {
     "slug"            : slug,
     "title"           : legacy_title(slug, coll.get("title")) or slug,
     "collection"      : slug,
-    "kind"            : "raster" if raster else "vector",
+    "kind"            : "raster" if raster else "derived" if display else "vector",
     "raster"          : raster,
-    "pmtiles"         : None if raster else pmtiles_url(slug, base),
-    "source_layer"    : None if raster else layers[0] if layers else slug,
+    "display"         : display,
+    "pmtiles"         : None if raster or display else pmtiles_url(slug, base),
+    "source_layer"    : None if raster or display else layers[0] if layers else slug,
     "geom_type"       : geom_type if isinstance(geom_type, str) else geom_type[0] if len(geom_type) == 1 else "Mixed",
     "n"               : n,
     "updated"         : updated,

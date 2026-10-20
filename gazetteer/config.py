@@ -21,6 +21,8 @@ PLACE_TYPES |= {"managed_area"}              # protectedseas_navigator: MPAs and
 PLACE_TYPES |= {"internal_waters", "archipelagic_waters", "sea_area", "marine_region"}  # mr_* additions (2026-10-20)
 KINDS |= {"navigator_export"}                # ProtectedSeas Navigator Direct Data Export (gazetteer/navigator.py)
 PLACE_TYPES |= {"disposal_site", "military_area"}   # MarineCadastre scan 2026-10-20: EPA ocean disposal sites; Navy OPAREAs, SUA
+PLACE_TYPES |= {"statistical_area", "high_seas_area"}   # fao_major_areas; fao_high_seas (the high seas cut by FAO area), 2026-10-20
+KINDS |= {"derive"}                          # computed from other collections' built parquet (gazetteer/derive.py)
 FILTER_KINDS = {"arcgis", "navigator_export"}   # source kinds that take `exclude` / `include` ({native field: [values]})
 STYLE_KEYS = {"fill_color", "fill_opacity", "line_color", "line_width"}   # config `style:` (polygon layers)
 
@@ -93,6 +95,8 @@ def validate_config(cfg: dict, label: str = "config") -> None:
       errs.append(f"sources[{i}].kind must be one of {sorted(KINDS)}")
     if not src.get("url"):
       errs.append(f"sources[{i}].url missing")
+    if src.get("kind") == "derive":
+      errs += [f"sources[{i}]: {p}" for p in derive_problems(src)]
     for key in ("exclude", "include"):
       rule = src.get(key)
       if rule is None:
@@ -120,17 +124,52 @@ def validate_config(cfg: dict, label: str = "config") -> None:
     raise ValueError(f"{label}: " + "; ".join(errs))
 
 
+def derive_problems(src: dict) -> list[str]:
+  """checks of a `kind: derive` source (gazetteer/derive.py): op, two inputs with an id column each, thresholds."""
+  errs = []
+  if src.get("op") != "intersect":
+    errs.append("op must be 'intersect'")
+  ins = src.get("inputs")
+  if not (isinstance(ins, list) and len(ins) == 2 and all(isinstance(x, dict) and x.get("slug") and x.get("id_column") for x in ins)):
+    errs.append("inputs must be two {slug, id_column[, carry]} entries")
+  else:
+    if ins[0]["id_column"] == ins[1]["id_column"]:
+      errs.append("the inputs' id_column must differ")
+    errs += [f"inputs[{k}].carry must be a list of column names" for k, x in enumerate(ins)
+             if x.get("carry") is not None and not (isinstance(x["carry"], list) and all(isinstance(c, str) for c in x["carry"]))]
+  for key in ("min_area_km2", "min_part_km2"):
+    if key in src and not (isinstance(src[key], (int, float)) and not isinstance(src[key], bool) and src[key] >= 0):
+      errs.append(f"{key} must be a number >= 0")
+  return errs
+
+
+def display_problems(cfg: dict) -> list[str]:
+  """checks of `display: {via, id_from}`: a collection with no geometry of its own to publish (a derived piece of a
+  reference collection) is drawn by another collection's PMTiles (`via`), each piece in the one whose place_id equals
+  the piece's `id_from` column. e.g. fao_high_seas: {via: fao_major_areas, id_from: fao_id}."""
+  d = cfg.get("display")
+  if d is None:
+    return []
+  if not (isinstance(d, dict) and set(d) == {"via", "id_from"} and all(isinstance(v, str) and v for v in d.values())):
+    return ["display must be {via: <collection slug>, id_from: <column holding that collection's place_id>}"]
+  if d["via"] == cfg.get("slug"):
+    return ["display.via cannot be the collection itself"]
+  return []
+
+
 def reference_problems(cfg: dict) -> list[str]:
   """checks of the optional link-back keys: `place_url` (a template of the place's page at its source, rendered per
-  index row) and `reference` (a collection whose data we do not republish: drawn from the publisher's own XYZ tiles,
-  `tiles`, one boundary at a time from `feature_url`, which takes the row's `{source_id}`)."""
-  errs = []
+  index row), `display` (see display_problems) and `reference` (a collection whose data we do not republish: drawn from
+  the publisher's own XYZ tiles, `tiles`, one boundary at a time from `feature_url`, which takes the row's `{source_id}`)."""
+  errs = display_problems(cfg)
   pu = cfg.get("place_url")
   if pu is not None and not (isinstance(pu, str) and "{" in pu and (pu.startswith("http") or pu.startswith("{"))):
     errs.append("place_url must be a template with at least one {FIELD}: an http(s) URL, or a field holding one")
   ref = cfg.get("reference")
   if ref is None:
     return errs
+  if cfg.get("display"):
+    errs.append("a collection has `reference` (the publisher's tiles) or `display` (drawn by another collection), not both")
   if not isinstance(ref, dict) or not ref.get("tiles"):
     return errs + ["reference.tiles missing (an XYZ tile URL template)"]
   if not all(k in ref["tiles"] for k in ("{z}", "{x}", "{y}")):

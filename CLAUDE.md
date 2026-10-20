@@ -62,8 +62,11 @@ run time (e.g. serve `client/test/fixtures/` locally with CORS + Range).
 filename, names the collection. `pipeline.build_layer` then runs per slug:
 
 1. **fetch** (`pipeline.fetch_source` dispatches on `sources[].kind`): `arcgis` and `shapefile_zip` in `fetch.py`,
-   `wfs` in `fetch_wfs.py` (Marine Regions), `calcofi_positions` in `calcofi.py`. Each returns a `SourceResult`
-   (features, fields, url, `data_last_edit`, checksum) and raw pages are cached under `cache/<slug>/`.
+   `wfs` in `fetch_wfs.py` (Marine Regions, and any GeoServer WFS without an `mr` block: FAO's `fao_major_areas` takes
+   `cql_filter`, `sort_by` and `released`), `calcofi_positions` in `calcofi.py`, `derive` in `derive.py` (a collection
+   computed from other collections' built parquet, read from `PLACES_INTERNAL` then `PLACES_STAGING`; `op: intersect` of two
+   inputs, slivers under `min_area_km2` dropped and listed; `fao_high_seas`, see AGENTS.md `display`). Each returns a
+   `SourceResult` (features, fields, url, `data_last_edit`, checksum) and raw pages are cached under `cache/<slug>/`.
 2. **normalise** (`table.build_rows` -> `to_table`): renders `name` / `source_id` templates (`fmt.render`), builds
    `place_id`s (`ids.py`: rule `lease` or a `template`, duplicate suffixing, pattern check), resolves `status` from
    the config plus an optional dated event log (`status.py`, e.g. `sources/boem/wind_lease_status_events.csv`: the

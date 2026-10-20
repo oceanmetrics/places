@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- layers.json may hold a `kind: "derived"` row (new `Layer.display` = `{via, id_from}`): pieces computed from a reference
+  collection, with no PMTiles or parquet of their own (the first is `fao_high_seas`, the high seas cut by FAO major
+  fishing area). The map draws the PMTiles of layer `via` and shows each place in its feature whose place_id is the
+  place's index `source_id`. `getPlace` no longer looks for a parquet of a derived layer. Drawing a derived layer in the
+  web app is not done yet.
+
 ## 0.5.0
 
 - `identify(slug, bbox)` names the places of a raster (reference) layer under a point. It asks the publisher's WMS

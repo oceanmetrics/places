@@ -52,13 +52,17 @@ export interface Layer {
   title           : string
   collection      : string
   /** 'vector': our PMTiles; 'raster': a reference layer drawn from its publisher's tiles (`raster`), with no PMTiles or
-   *  parquet here. absent in manifests before client 0.3.0 (= 'vector'). */
-  kind?           : 'vector' | 'raster'
+   *  parquet here; 'derived': pieces computed from a reference layer (e.g. `fao_high_seas`), with no PMTiles or parquet
+   *  here, drawn by another layer's PMTiles (`display`). absent in manifests before client 0.3.0 (= 'vector'). */
+  kind?           : 'vector' | 'raster' | 'derived'
   /** the tile source of a raster layer; null for vector layers. */
   raster?         : RasterSource | null
-  /** absolute URL of the collection's PMTiles archive; null for a raster layer. */
+  /** a derived layer's drawing rule: draw the PMTiles of layer `via` and show each place in the feature whose place_id
+   *  equals the place's index `source_id` (= its `id_from` column). null for other layers. */
+  display?        : { via: string; id_from: string } | null
+  /** absolute URL of the collection's PMTiles archive; null for a raster or derived layer. */
   pmtiles         : string | null
-  /** the vector-tile layer name inside the archive (equals the slug); null for a raster layer. */
+  /** the vector-tile layer name inside the archive (equals the slug); null for a raster or derived layer. */
   source_layer    : string | null
   geom_type       : string
   /** number of features. */

@@ -1,0 +1,64 @@
+# fao_high_seas: the Marine Regions High Seas cut by FAO Major Fishing Areas (derived; internal, never published as files)
+slug: fao_high_seas
+title: High Seas by FAO Major Fishing Area
+description: >-
+  The high seas split by FAO Major Fishing Area: the Marine Regions High Seas polygon (all sea outside every state's
+  exclusive economic zone, territorial sea, internal and archipelagic waters, UNCLOS) intersected with the 19 FAO
+  Major Fishing Areas, one piece per FAO area that has high seas (18 of the 19: the Mediterranean and Black Sea,
+  area 37, has none). With the Marine Regions EEZs (`mr_eez`) the pieces tile the whole ocean, the "political"
+  layer indicators can fill. `place_id` FAOHS:<FAO code>; `high_seas_id` (MRGID:63203) and `fao_id` (FAO:<code>) name
+  the two parents, and `area_km2` is the piece's geodesic area. Pieces under 100 km2 (slivers where the two
+  boundaries almost agree) are dropped and listed in the provenance. Neither source claims legal value: Marine
+  Regions states its data have no legal value and are not meant for legal, economic (resource exploration) or
+  navigational purposes, and FAO's designations are for illustration only and imply no opinion on the legal status
+  of any country, territory or sea area or the delimitation of frontiers or boundaries. The pieces are a reference
+  collection: the high seas geometry is Marine Regions' (VLIZ asked us not to republish its products), so this
+  collection's geometry stays on the build machine and only metadata and index rows are public. The map draws each
+  piece in its FAO area (`fao_major_areas`, see `display`).
+authority: FAOHS
+place_type: high_seas_area
+version: 1.0.0
+cadence: monthly
+license: CC-BY-4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+license_note: >-
+  Both inputs are CC BY 4.0: Marine Regions High Seas v2 (VLIZ) and the FAO Major Fishing Areas (FAO, with the FAO
+  Statistical Database Terms of Use). The derived pieces carry both credits.
+attribution: >-
+  Flanders Marine Institute (2024). Maritime Boundaries Geodatabase: High Seas, version 2. Available online at
+  https://www.marineregions.org/. https://doi.org/10.14284/696. FAO. 2024. FAO Major Fishing Areas for Statistical
+  Purposes. In: FAO Fisheries and Aquaculture Division [online].
+  https://www.fao.org/fishery/geonetwork?uuid=ac02a460-da52-11dc-9d70-0017f293bd28. CC BY 4.0. Intersection by
+  Ocean Metrics.
+providers:
+  - {name: Flanders Marine Institute (VLIZ), roles: [producer, licensor], url: "https://www.marineregions.org/"}
+  - {name: Food and Agriculture Organization of the United Nations (FAO), roles: [producer, licensor], url: "https://www.fao.org/fishery/"}
+source_page: https://www.marineregions.org/downloads.php
+source_title: Marine Regions (VLIZ) and FAO
+source_home: https://www.marineregions.org/
+place_url: "https://www.fao.org/fishery/area/{F_CODE}/en"
+# the pieces keep Marine Regions' geometry, so they are a reference collection that is never published as files; the
+# map draws each piece as its FAO major area (fao_major_areas' PMTiles): layers.json row kind "derived" + `display`
+display: {via: fao_major_areas, id_from: fao_id}
+place_id: {template: "FAOHS:{F_CODE}", pattern: '^FAOHS:\d+$'}
+name: "High seas, {NAME_EN} (FAO {F_CODE})"
+source_id: "{fao_id}"
+status:
+  value: current
+  source: https://www.marineregions.org/downloads.php
+  date: data_last_edit
+column_docs:
+  high_seas_id: place_id of the parent high seas place in mr_high_seas (MRGID:63203)
+  fao_id: place_id of the parent FAO major area in fao_major_areas (FAO:<code>); the display id (`display.id_from`) and the index row's source_id
+  F_CODE: FAO area code of the piece (the place_id is FAOHS:<F_CODE>)
+  NAME_EN: English name of the FAO area (e.g. Atlantic, Northwest)
+  OCEAN: ocean the FAO area belongs to
+  area_km2: geodesic area of the piece (WGS84 ellipsoid), km2
+sources:
+  - kind: derive
+    url: https://doi.org/10.14284/696
+    op: intersect
+    inputs:
+      - {slug: mr_high_seas, id_column: high_seas_id}
+      - {slug: fao_major_areas, id_column: fao_id, carry: [F_CODE, NAME_EN, OCEAN]}
+    min_area_km2: 100

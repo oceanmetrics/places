@@ -6,6 +6,11 @@ version, e.g. "Exclusive Economic Zones (200 NM) (v12, world, 2023)") plus the f
 token the shapefile kind already uses. every feature also gets the Marine Regions provenance columns (`mrgid`,
 `mrgid_uri`, `mr_product`, `mr_product_version`, `mr_product_doi`, `mr_license`, `mr_modified`) and, when two features
 share an MRGID, a deterministic `mr_part` suffix so place_id stays unique.
+
+the same kind reads any other GeoServer WFS (FAO's `fifao:FAO_AREAS_ERASE`, 2026-10-20): a source without an `mr` block
+gets no Marine Regions columns, its attributes keep their native names and types, and it takes `wfs_url` (else `url`),
+`sort_by` (required then, the paging key), an optional `cql_filter` (e.g. `F_LEVEL='MAJOR'`) and `released` (the
+publisher's edition date, an ISO day, used as `data_last_edit` because the layer serves none).
 """
 from __future__ import annotations
 
@@ -34,13 +39,19 @@ def mrgid_uri(mrgid) -> str:
   return f"http://marineregions.org/mrgid/{int(mrgid)}"
 
 
+def endpoint(src: dict) -> str:
+  """the WFS endpoint: `wfs_url`, else the source's `url`, else the Marine Regions GeoServer."""
+  return src.get("wfs_url") or src.get("url") or WFS_URL
+
+
 def wfs_params(src: dict, **extra) -> dict:
-  return {"service": "WFS", "version": "2.0.0", "typeNames": src["type_name"], **extra}
+  cql = {"CQL_FILTER": src["cql_filter"]} if src.get("cql_filter") else {}
+  return {"service": "WFS", "version": "2.0.0", "typeNames": src["type_name"], **cql, **extra}
 
 
 def wfs_hits(s: requests.Session, src: dict) -> int:
   """number of features the layer holds now (resultType=hits)."""
-  r = fetch.get(s, src.get("wfs_url", WFS_URL), wfs_params(src, request="GetFeature", resultType="hits"))
+  r = fetch.get(s, endpoint(src), wfs_params(src, request="GetFeature", resultType="hits"))
   m = re.search(r'numberMatched="(\d+)"', r.text)
   if not m:
     raise RuntimeError(f"{src['type_name']}: no numberMatched in the WFS hits response")
@@ -49,7 +60,7 @@ def wfs_hits(s: requests.Session, src: dict) -> int:
 
 def layer_title(s: requests.Session, src: dict) -> str | None:
   """the layer's <Title> from GetCapabilities (it names the product version); None when it is not listed."""
-  r = fetch.get(s, src.get("wfs_url", WFS_URL), {"service": "WFS", "version": "2.0.0", "request": "GetCapabilities"})
+  r = fetch.get(s, endpoint(src), {"service": "WFS", "version": "2.0.0", "request": "GetCapabilities"})
   for block in re.findall(r"<FeatureType[ >].*?</FeatureType>", r.text, re.S):
     if re.search(rf"<Name>{re.escape(src['type_name'])}</Name>", block):
       m = re.search(r"<Title>(.*?)</Title>", block, re.S)
@@ -93,8 +104,17 @@ def resolve_mrgid(props: dict, spec: dict) -> int:
   return int(v)
 
 
+def native_fields(features: list[dict]) -> list[dict]:
+  """field defs (name, int | float | string) inferred from the features' attributes, in the first feature's order."""
+  return [{"name": k, "type": infer_type([f["properties"].get(k) for f in features])}
+          for k in (features[0]["properties"] if features else {})]
+
+
 def annotate(features: list[dict], src: dict) -> list[dict]:
-  """add mrgid + the mr_* provenance attributes to every feature's properties (in place); returns the field defs."""
+  """add mrgid + the mr_* provenance attributes to every feature's properties (in place); returns the field defs.
+  a source without an `mr` block is not a Marine Regions layer: its features are left as they are (native field defs)."""
+  if not src.get("mr"):
+    return native_fields(features)
   prod = src["mr"]
   spec = src.get("mrgid") or {"field": "mrgid"}
   ids = [resolve_mrgid(f["properties"], spec) for f in features]
@@ -117,7 +137,9 @@ def annotate(features: list[dict], src: dict) -> list[dict]:
 def fetch_wfs(src: dict, delay: float = 1.0, raw_dir: Path | None = None, s: requests.Session | None = None) -> SourceResult:
   """page through a WFS layer as GeoJSON (EPSG:4326, lon/lat) and annotate it; fails when the paged count is off."""
   s = s or fetch.session()
-  url = src.get("wfs_url", WFS_URL)
+  url = endpoint(src)
+  if not src.get("mr") and not src.get("sort_by"):
+    raise ValueError(f"{src['type_name']}: a WFS source without `mr` needs `sort_by` (the paging key)")
   total = wfs_hits(s, src)
   title = layer_title(s, src)
   page = int(src.get("page_size") or 25)
@@ -141,8 +163,9 @@ def fetch_wfs(src: dict, delay: float = 1.0, raw_dir: Path | None = None, s: req
   if expected and expected != total:
     log.warning("%s: expected %s features, the layer now has %s", src["type_name"], expected, total)
   fields = annotate(feats, src)
+  released = (src.get("mr") or src).get("released")
   return SourceResult(
     features=feats, fields=fields, source_url=url + f"?typeNames={src['type_name']}", item_id=src["type_name"],
-    component=src.get("component"), data_last_edit=f"{src['mr']['released']}T00:00:00Z", retrieved=now_iso(),
+    component=src.get("component"), data_last_edit=f"{released}T00:00:00Z" if released else None, retrieved=now_iso(),
     record_count=total, checksum=h.hexdigest(),
     extra={"http": {"etag": f"{title}|{total}", "last_modified": None, "content_length": None}, "wfs_layer_title": title})

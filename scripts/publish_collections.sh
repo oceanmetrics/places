@@ -99,7 +99,10 @@ PYEOF
     rsync -a --exclude 'places.parquet' --exclude 'places.pmtiles' --exclude '*.thumb.*' "$dir_staging/$s/" "$dir_pub/$s/"
     rm -f "$dir_pub/$s/places.parquet" "$dir_pub/$s/places.pmtiles"
     mkdir -p "$dir_internal/$s"
-    cp "$dir_staging/$s/places.parquet" "$dir_staging/$s/places.pmtiles" "$dir_staging/$s/collection.json" "$dir_internal/$s/"
+    # a `display` collection (derived from a reference one) has no PMTiles of its own
+    for f in places.parquet places.pmtiles collection.json; do
+      [[ -f "$dir_staging/$s/$f" ]] && cp "$dir_staging/$s/$f" "$dir_internal/$s/"
+    done
     echo "reference $s: metadata only to the catalog; data kept in $dir_internal/$s"
   else
     cp -R "$dir_staging/$s/." "$dir_pub/$s/"

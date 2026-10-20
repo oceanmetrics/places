@@ -1,0 +1,67 @@
+# fao_major_areas: FAO Major Fishing Areas for Statistical Purposes (19 areas), CC BY 4.0
+slug: fao_major_areas
+title: FAO Major Fishing Areas
+description: >-
+  The 19 FAO Major Fishing Areas for Statistical Purposes (marine areas 18 to 88: Atlantic, Indian, Pacific,
+  Arctic and the Antarctic and Southern Ocean sectors), edition 2026.1.0 (revised 2026-02-02): the areas in which
+  FAO and the regional fishery bodies report catch statistics. One polygon (multi-part) per area, keyed by the FAO
+  area code (`F_CODE`, e.g. 21 Atlantic, Northwest). The geometry is the coastline-erased layer (intermediate
+  resolution, aligned with UN countries and territories), so each area covers open water only. Together with the
+  Marine Regions EEZs, the areas split the high seas into pieces (collection `fao_high_seas`). The designations
+  employed and the presentation of material are for illustration only and do not imply the expression of any
+  opinion whatsoever on the part of FAO concerning the legal or constitutional status of any country, territory or
+  sea area or concerning the delimitation of frontiers or boundaries. Source: FAO GeoServer WFS layer
+  fifao:FAO_AREAS_ERASE filtered to F_LEVEL = 'MAJOR'. The coarser FAO levels (subareas, divisions, subdivisions,
+  subunits) are not in this collection.
+authority: FAO
+place_type: statistical_area
+version: 1.0.0
+cadence: monthly
+license: CC-BY-4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+license_note: >-
+  The FAO GeoNetwork record of the dataset (https://www.fao.org/fishery/geonetwork/srv/api/records/ac02a460-da52-11dc-9d70-0017f293bd28,
+  edition 2026.1.0, revised 2026-02-02) makes the work available under CC BY 4.0 and the FAO Statistical Database
+  Terms of Use (https://www.fao.org/contact-us/terms/db-terms-of-use/en/), with a mandatory citation (the
+  attribution line). The geometry follows this record. Not to be confused with the CWP fishing-area codelist
+  (https://data.apps.fao.org/catalog/dataset/cwp-fishing-area), a codelist without geometry that FAO's open-data
+  catalogue licenses CC BY-NC-SA 4.0 (checked 2026-10-20); we use the codes and names, not that record.
+attribution: >-
+  FAO. 2024. FAO Major Fishing Areas for Statistical Purposes. In: FAO Fisheries and Aquaculture Division [online].
+  Consulted on 2026-10-20. https://www.fao.org/fishery/geonetwork?uuid=ac02a460-da52-11dc-9d70-0017f293bd28
+  License: CC-BY 4.0. Processed by Ocean Metrics.
+providers:
+  - {name: Food and Agriculture Organization of the United Nations (FAO), roles: [producer, licensor], url: "https://www.fao.org/fishery/"}
+source_page: https://www.fao.org/fishery/geonetwork?uuid=ac02a460-da52-11dc-9d70-0017f293bd28
+source_title: FAO Fisheries and Aquaculture Division
+source_home: https://www.fao.org/fishery/
+place_url: "https://www.fao.org/fishery/area/{F_CODE}/en"
+place_id: {template: "FAO:{F_CODE}", pattern: '^FAO:\d+$'}
+name: "{NAME_EN}"
+source_id: "{F_CODE}"
+status:
+  value: current
+  source: https://www.fao.org/fishery/geonetwork?uuid=ac02a460-da52-11dc-9d70-0017f293bd28
+  date: data_last_edit
+search_fields: [F_NAME, OCEAN, NAME_FR, NAME_ES]
+column_docs:
+  ID: the feature id on FAO's GeoServer (fao:<F_CODE>)
+  F_CODE: FAO area code (18 to 88); the place_id is FAO:<F_CODE>
+  F_LEVEL: FAO area level; always MAJOR here
+  F_STATUS: endorsed (by the FAO regional fishery bodies) or pending
+  F_NAME: area name as FAO's database writes it
+  OCEAN: ocean the area belongs to (Arctic, Atlantic, Indian, Pacific)
+  SUBOCEAN: FAO's number of the ocean sector
+  F_AREA: the area code at the MAJOR level (same as F_CODE); the subarea, division, subdivision and subunit fields are empty
+  NAME_EN: English name, the place name (e.g. Atlantic, Northwest)
+  NAME_FR: French name
+  NAME_ES: Spanish name
+sources:
+  - kind: wfs
+    url: https://www.fao.org/fishery/geoserver/fifao/wfs
+    type_name: fifao:FAO_AREAS_ERASE
+    cql_filter: "F_LEVEL='MAJOR'"
+    sort_by: F_CODE
+    page_size: 20
+    expected_count: 19
+    released: "2026-02-02"

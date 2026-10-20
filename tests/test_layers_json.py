@@ -32,7 +32,7 @@ COLL = {
 def test_row_exact():
   row = bl.layer_row(COLL)
   assert row == {
-    "slug": "acme_leases", "title": "Acme leases", "collection": "acme_leases", "kind": "vector", "raster": None,
+    "slug": "acme_leases", "title": "Acme leases", "collection": "acme_leases", "kind": "vector", "raster": None, "display": None,
     "pmtiles": "https://storage.oceanmetrics.io/gazetteer/acme_leases/places.pmtiles",
     "source_layer": "acme_leases", "geom_type": "MultiPolygon", "n": 7,
     "updated": "2026-10-01T12:00:00Z", "version": "1.0.3",

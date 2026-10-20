@@ -118,8 +118,12 @@ def build_collection(cfg: dict, table: pa.Table, geo: dict, provenance: dict, di
     # a reference collection: no parquet or pmtiles of ours in public (the publisher asked us not to republish), so no
     # pmtiles link; the map draws the publisher's tiles (`xyz`, STAC web-map-links)
     links = [l for l in links if l["rel"] != "pmtiles"]
-    links.append({"rel": "xyz", "href": ref["gazetteer:raster"]["tiles"][0], "type": "image/png",
-                  "title": "Map tiles served by the publisher"})
+    if "gazetteer:raster" in ref:
+      links.append({"rel": "xyz", "href": ref["gazetteer:raster"]["tiles"][0], "type": "image/png",
+                    "title": "Map tiles served by the publisher"})
+    elif "gazetteer:display" in ref:
+      links.append({"rel": "related", "href": f"../{ref['gazetteer:display']['via']}/collection.json", "type": "application/json",
+                    "title": f"Drawn by the map tiles of {ref['gazetteer:display']['via']}"})
   def asset(name, href, typ, roles, title=None):
     p = dir / href
     a = {"href": f"./{href}", "type": typ}
@@ -166,10 +170,19 @@ def source_link(cfg: dict) -> dict:
   return {"href": cfg.get("source_home") or cfg.get("source_page"), "title": title}
 
 
+def is_reference(cfg: dict) -> bool:
+  """a collection whose data files are never published: config `reference` (the publisher's tiles draw it) or
+  `display` (another collection's tiles draw it, e.g. a derived piece of a reference collection)."""
+  return bool(cfg.get("reference") or cfg.get("display"))
+
+
 def reference_fields(cfg: dict) -> dict:
-  """{'gazetteer:reference', 'gazetteer:raster'} for a reference collection (config `reference`), else {}. the raster
-  block is what build_layers_json.py turns into a `kind: "raster"` row."""
+  """{'gazetteer:reference', 'gazetteer:raster'} for a reference collection (config `reference`), {'gazetteer:reference',
+  'gazetteer:display'} for a `display` one, else {}. the raster block is what build_layers_json.py turns into a
+  `kind: "raster"` row, the display block into a `kind: "derived"` row."""
   ref = cfg.get("reference")
+  if not ref and cfg.get("display"):
+    return {"gazetteer:reference": True, "gazetteer:display": {"via": cfg["display"]["via"], "id_from": cfg["display"]["id_from"]}}
   if not ref:
     return {}
   raster = {"tiles": [ref["tiles"]], "tile_size": ref.get("tile_size", 256), "minzoom": ref.get("minzoom", 0),
@@ -208,9 +221,14 @@ def readme(cfg: dict, table: pa.Table, provenance: dict, collection: dict, versi
   if st:
     events = "\n".join(f"- {e['date']}: {e['value']} ({e['source']}){' - ' + e['note'] if e.get('note') else ''}" for e in hist)
     overlay += f"\n## Layer status\n\n**{st['value'].replace('_', ' ')} {st['date']}** ({st['source']}).\n\n{events}\n"
-  ref = cfg.get("reference")
+  ref = is_reference(cfg)
   link = source_link(cfg)
-  if ref:
+  if ref and cfg.get("display"):
+    what = (f"`{slug}` v{version}, {table.num_rows} features: a **derived reference collection**. It is computed from a "
+            f"collection whose publisher asked that its products not be republished, so there is no parquet or PMTiles "
+            f"copy here; this folder holds metadata only")
+    quick = reference_quick_start(cfg)
+  elif ref:
     what = (f"`{slug}` v{version}, {table.num_rows} features: a **reference collection**. The publisher asked that its "
             f"products not be republished, so there is no parquet or PMTiles copy here; this folder holds metadata only")
     quick = reference_quick_start(cfg)
@@ -267,9 +285,32 @@ Native attributes keep the source layer's names; a native name equal to a gazett
 """
 
 
+def display_text(cfg: dict) -> str:
+  """how a `display` collection is drawn (README / AGENTS), for outside readers: no geometry here, draw `via`."""
+  d, slug = cfg["display"], cfg["slug"]
+  return f"""Search it in the gazetteer index (names, ids, extents, areas; no geometry):
+
+```sql
+SELECT place_id, source_id, name, area_km2
+FROM read_parquet('https://storage.oceanmetrics.io/gazetteer/index/places_index.parquet')
+WHERE collection = '{slug}'
+ORDER BY name;
+```
+
+**Drawing it.** `{slug}` has no map tiles of its own. In `layers.json` its row has `kind: "derived"` and
+`display: {{"via": "{d['via']}", "id_from": "{d['id_from']}"}}`: draw the PMTiles of the `{d['via']}` collection (layer
+`{d['via']}`) and show each `{slug}` place in the `{d['via']}` feature whose `place_id` equals the place's `{d['id_from']}`
+value. That value is the parquet column `{d['id_from']}` and also the index row's `source_id`, so a reader of the public
+index needs no parquet (e.g. place `FAOHS:21` has `source_id` `FAO:21`: draw feature `FAO:21`). The `{d['via']}` feature
+is the whole parent area, not the piece itself: highlight or label it, and say that the piece is only the part of it
+that this collection covers. Do not mirror or redistribute the pieces."""
+
+
 def reference_quick_start(cfg: dict) -> str:
+  if cfg.get("display") and not cfg.get("reference"):
+    return display_text(cfg)
   ref = cfg["reference"]
-  wfs = (f"\nOne place's boundary, from the publisher (replace `{{source_id}}` with the index row's `source_id`):\n\n"
+  wfs =(f"\nOne place's boundary, from the publisher (replace `{{source_id}}` with the index row's `source_id`):\n\n"
          f"```\n{ref['feature_url']}\n```\n") if ref.get("feature_url") else ""
   return f"""Search it in the gazetteer index (names, ids, extents, areas and links back; no geometry):
 
@@ -290,7 +331,9 @@ Map tiles, served by the publisher (XYZ, {ref.get('tile_size', 256)} px PNG; `la
 
 def agents(cfg: dict) -> str:
   slug = cfg["slug"]
-  if cfg.get("reference"):
+  if is_reference(cfg):
+    why = ("The collection is computed from a collection whose publisher asked that its products not be republished"
+           if cfg.get("display") else "The publisher asked that its products not be republished")
     return f"""# AGENTS.md - {cfg['title']}
 
 Guidance for AI agents and LLMs working with this collection.
@@ -303,7 +346,7 @@ Licence {cfg['license']}; credit: {' '.join(cfg['attribution'].split())}
 
 ## This is a reference collection
 
-The publisher asked that its products not be republished, so there is **no parquet or PMTiles here**. Do not mirror
+{why}, so there is **no parquet or PMTiles here**. Do not mirror
 or redistribute its boundaries; link to the publisher ({source_link(cfg)['href']}) and each place's own page (the
 index `url` column).
 

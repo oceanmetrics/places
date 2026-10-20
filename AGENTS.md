@@ -12,6 +12,11 @@ Rules for anyone (human or agent) changing this repo. Each rule is guarded by a 
   YAML: public metadata, index rows and a layers.json `kind: "raster"` row on the publisher's own tiles; one boundary
   at a time from its `feature_url`; the parquet/PMTiles stay on the build machine (`~/data/oceanmetrics/places-internal`)
   for derived products. `publish_collections.sh` refuses to upload their data files (e.g. `mr_*`, VLIZ 2026-10-16).
+  A collection computed from a reference one (`kind: derive`, e.g. `fao_high_seas` = `mr_high_seas` x `fao_major_areas`)
+  inherits the restriction: it has a `display: {via, id_from}` block instead of `reference:`, so it is marked
+  `gazetteer:reference` too, builds no PMTiles, and its layers.json row is `kind: "derived"` with `display`, drawn by
+  the `via` collection's PMTiles (the piece's `source_id` is the `via` place_id). Public: metadata, index rows, and
+  derived values tables (no geometry).
 - **Link back to the source.** `source_page`/`source_home` and `source_title` give every layer a `source_link`; a
   `place_url` template gives every index row its own page at the source (`url`). Apps show both next to the credit.
 
