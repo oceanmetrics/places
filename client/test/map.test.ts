@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { unwrapAntimeridian, wkbToGeometry, layerSpec, registerPmtiles, createClient, isRaster } from '../src/index'
+import { unwrapAntimeridian, wkbToGeometry, layerSpec, registerPmtiles, createClient, isRaster, tileBounds } from '../src/index'
 import type { Layer, MapLike } from '../src/index'
 import { FIXTURES } from './server'
 
@@ -35,11 +35,16 @@ describe('layerSpec', () => {
     const r = by('fx_ref')
     const s = layerSpec(r, { opacity: 0.5, colour: '#ff0000', width: 3 })
     expect(s.source).toEqual({ type: 'raster', tiles: r.raster!.tiles, tileSize: 256, minzoom: 0, maxzoom: 12,
-      attribution: r.attribution_html })
+      attribution: r.attribution_html, bounds: [-180, -80, 180, 80] })
     expect(s.layers).toEqual([{ id: 'places:fx_ref:raster', type: 'raster', source: 'places:fx_ref', paint: { 'raster-opacity': 0.5 } }])
     expect(isRaster(r)).toBe(true)
     expect(isRaster(by('fx_leases'))).toBe(false)
     expect(() => layerSpec({ ...r, raster: null })).toThrow(/no tiles/)
+  })
+  it('raster bounds come from the bbox (regression: VLIZ answers 400 TileOutOfRange outside a layer, 2026-10-20)', () => {
+    expect(tileBounds([95, -11, 141, 6])).toEqual([95, -11, 141, 6])
+    expect(tileBounds([170, -60, 190, 89])).toEqual([-180, -60, 180, 85.0511])   // across the antimeridian
+    expect(tileBounds(null)).toBeUndefined()
   })
   it('colour, opacity and width override the default paint', () => {
     const [fill, line] = layerSpec(by('fx_leases'), { colour: '#ff0000', opacity: 0.3, width: 2 }).layers

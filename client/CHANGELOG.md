@@ -13,6 +13,8 @@
 - `getPlace` reads fewer row groups. It now picks them from the place_id statistics itself, smallest first. When more
   than 4 could hold the id (a spatially sorted layer), it also prunes by the place's bbox from the index. New helper
   `candidateGroups(metadata, id, bbox?)`. The 30,111-site Navigator layer made the place page fetch about 1 GB.
+- A raster layer's source gets `bounds` from the layer bbox (new helper `tileBounds`), so MapLibre requests no tiles
+  outside it. VLIZ's tile cache answers HTTP 400 `TileOutOfRange` there.
 - Data: `protectedseas_navigator` is split into six layers by Navigator category: `protectedseas_mpa`,
   `protectedseas_fisheries`, `protectedseas_jurisdiction`, `protectedseas_vessel`, `protectedseas_human_use` and
   `protectedseas_other`.

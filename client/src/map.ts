@@ -13,6 +13,19 @@ const kindsFor = (geomType: string): Array<'fill' | 'line' | 'circle'> => {
   return g.includes('point') ? ['circle'] : g.includes('line') ? ['line'] : ['fill', 'line']
 }
 
+/**
+ * a raster source's `bounds` from the layer bbox, so MapLibre asks for no tile outside it: VLIZ GeoWebCache answers
+ * HTTP 400 TileOutOfRange there (e.g. Marine Regions archipelagic waters at z4, 2026-10-20), not a blank tile. an
+ * unwrapped bbox (east beyond 180, across the antimeridian) keeps every longitude; latitudes clamp to Web Mercator.
+ */
+export function tileBounds(bbox: number[] | null | undefined): [number, number, number, number] | undefined {
+  if (!bbox || bbox.length !== 4 || !bbox.every(Number.isFinite)) return undefined
+  const M = 85.0511
+  const [w, s, e, n] = bbox
+  const across = e > 180 || w < -180 || w > e
+  return [across ? -180 : w, Math.max(s, -M), across ? 180 : e, Math.min(n, M)]
+}
+
 /** the MapLibre source and layer specs for a layer: pure, so it can be inspected without a map. */
 export function layerSpec(layer: Layer, opts: AddLayerOptions = {}) {
   const { colour, opacity, width } = opts
@@ -23,7 +36,8 @@ export function layerSpec(layer: Layer, opts: AddLayerOptions = {}) {
     if (opacity !== undefined) paint['raster-opacity'] = opacity
     return {
       sourceId: sourceId(layer.slug),
-      source  : { type: 'raster', tiles: r.tiles, tileSize: r.tile_size, minzoom: r.minzoom, maxzoom: r.maxzoom, attribution: layer.attribution_html },
+      source  : { type: 'raster', tiles: r.tiles, tileSize: r.tile_size, minzoom: r.minzoom, maxzoom: r.maxzoom, attribution: layer.attribution_html,
+                  ...(tileBounds(layer.bbox) ? { bounds: tileBounds(layer.bbox) } : {}) },
       layers  : [{ id: layerId(layer.slug, 'raster'), type: 'raster' as DrawKind, source: sourceId(layer.slug), paint } as Record<string, any>],
     }
   }
