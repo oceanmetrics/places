@@ -1,6 +1,6 @@
 export * from './client'
 export * from './types'
-export { layerSpec, registerPmtiles, sourceId, layerId, isRaster, tileBounds, DRAW_KINDS } from './map'
+export { layerSpec, registerPmtiles, sourceId, layerId, isRaster, isDerived, viaLayer, derivedDisplay, displayFilter, tileBounds, DRAW_KINDS } from './map'
 export type { DrawKind } from './map'
 export { unwrapAntimeridian, wrapLongitude, geometryBBox } from './unwrap'
 export { wkbToGeometry } from './wkb'

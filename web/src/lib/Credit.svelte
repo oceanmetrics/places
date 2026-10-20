@@ -1,7 +1,8 @@
 <script lang="ts">
   // one layer's licence + attribution + citation block (used by the place, layer and credits pages)
   import type { Layer } from '@oceanmetrics/places'
-  import { sanitizeHtml } from './helpers'
+  import { manifest } from './data.svelte'
+  import { sanitizeHtml, viaTitle } from './helpers'
   import CopyButton from './CopyButton.svelte'
   let { layer, heading = true }: { layer: Layer; heading?: boolean } = $props()
 </script>
@@ -12,7 +13,8 @@
       <tr>
         <th>Source</th>
         <td><a href={layer.source_link.href} target="_blank" rel="noopener noreferrer">{layer.source_link.title}</a>
-          {#if layer.kind === 'raster'}<span class="muted"> · the data stay with the source; maps use its own tiles</span>{/if}</td>
+          {#if layer.kind === 'raster'}<span class="muted"> · the data stay with the source; maps use its own tiles</span>{/if}
+          {#if layer.kind === 'derived'}<span class="muted"> · drawn by {viaTitle(layer, manifest.layers)}; the data stay internal</span>{/if}</td>
       </tr>
     {/if}
     <tr>

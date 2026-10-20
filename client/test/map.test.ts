@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { unwrapAntimeridian, wkbToGeometry, layerSpec, registerPmtiles, createClient, isRaster, tileBounds } from '../src/index'
-import type { Layer, MapLike } from '../src/index'
-import { FIXTURES } from './server'
+import { unwrapAntimeridian, wkbToGeometry, layerSpec, registerPmtiles, createClient, isRaster, isDerived, viaLayer, derivedDisplay, displayFilter, tileBounds } from '../src/index'
+import type { IndexPlace, Layer, MapLike } from '../src/index'
+import { FIXTURES, serveFixtures } from './server'
 
 const layers: Layer[] = JSON.parse(readFileSync(FIXTURES + 'index/layers.json', 'utf8')).layers
 const by = (s: string) => layers.find((l) => l.slug === s)!
@@ -125,5 +125,92 @@ describe('unwrapAntimeridian', () => {
     const copy = JSON.stringify(g)
     unwrapAntimeridian(g)
     expect(JSON.stringify(g)).toBe(copy)
+  })
+})
+
+// derived layers (kind "derived": fx_hs, drawn by the PMTiles of fx_leases) ----
+describe('derived layers', () => {
+  const hs = by('fx_hs')
+  const row = (place_id: string, source_id: string | null, collection = 'fx_hs'): IndexPlace =>
+    ({ place_id, name: `name of ${place_id}`, collection, source_id, url: null, bbox: [0, 0, 1, 1] }) as IndexPlace
+  const rows = [row('FXH:B-2', 'FX:B-2'), row('FXH:A-1', 'FX:A-1'), row('FXH:NO', null), row('FX:A-1', 'FX:A-1', 'fx_leases')]
+  let srv: Awaited<ReturnType<typeof serveFixtures>>
+  beforeAll(async () => { srv = await serveFixtures() })
+  afterAll(() => srv.close())
+
+  it('the fixture row is derived: no tiles of its own, drawn via fx_leases', () => {
+    expect(isDerived(hs)).toBe(true)
+    expect(isDerived(by('fx_leases'))).toBe(false)
+    expect(hs).toMatchObject({ kind: 'derived', pmtiles: null, source_layer: null, display: { via: 'fx_leases', id_from: 'place_id' } })
+    expect(viaLayer(hs, layers)!.slug).toBe('fx_leases')
+  })
+  it('viaLayer is null when via is not in the manifest or has no tiles of its own (a missing or a raster via)', () => {
+    expect(viaLayer(hs, layers.filter((l) => l.slug !== 'fx_leases'))).toBeNull()
+    expect(viaLayer({ ...hs, display: { via: 'fx_ref', id_from: 'x' } }, layers)).toBeNull()     // raster
+    expect(viaLayer({ ...hs, display: { via: 'fx_hs', id_from: 'x' } }, layers)).toBeNull()      // another derived layer
+    expect(viaLayer({ ...hs, display: null }, layers)).toBeNull()
+    expect(viaLayer(by('fx_leases'), layers)).toBeNull()                                           // not derived
+  })
+  it('derivedDisplay lists the pieces of the layer\'s own collection by source_id, sorted, leaving out rows with no source_id', () => {
+    const d = derivedDisplay(hs, layers, rows)!
+    expect(d.via.slug).toBe('fx_leases')
+    expect(d.ids).toEqual(['FX:A-1', 'FX:B-2'])
+    expect(d.pieces.map((p) => [p.place_id, p.source_id])).toEqual([['FXH:A-1', 'FX:A-1'], ['FXH:B-2', 'FX:B-2']])
+    expect(derivedDisplay(hs, layers.filter((l) => l.slug !== 'fx_leases'), rows)).toBeNull()
+    expect(derivedDisplay(by('fx_leases'), layers, rows)).toBeNull()
+  })
+  it('the filter keeps only the via features that are pieces', () => {
+    expect(displayFilter(['FX:A-1', 'FX:B-2'])).toEqual(['in', ['get', 'place_id'], ['literal', ['FX:A-1', 'FX:B-2']]])
+  })
+  it('layerSpec draws the via PMTiles, filtered to the pieces, with the derived layer\'s own paint and attribution', () => {
+    const d = derivedDisplay(hs, layers, rows)!
+    const s = layerSpec(hs, { opacity: 0.3 }, d)
+    expect(s.sourceId).toBe('places:fx_hs')
+    expect(s.source).toEqual({ type: 'vector', url: 'pmtiles://https://storage.oceanmetrics.io/gazetteer/fx_leases/places.pmtiles', attribution: hs.attribution_html })
+    expect(s.layers.map((l) => [l.id, l.type, l.source, l['source-layer'], l.filter])).toEqual([
+      ['places:fx_hs:fill', 'fill', 'places:fx_hs', 'fx_leases', displayFilter(['FX:A-1', 'FX:B-2'])],
+      ['places:fx_hs:line', 'line', 'places:fx_hs', 'fx_leases', displayFilter(['FX:A-1', 'FX:B-2'])]])
+    expect(s.layers[0].paint).toEqual({ 'fill-color': '#2a7fb8', 'fill-opacity': 0.3 })     // not the via layer's orange
+  })
+  it('a vector layer has no filter (regression: the derived branch must not touch ordinary layers)', () => {
+    expect(layerSpec(by('fx_leases')).layers.every((l) => !('filter' in l))).toBe(true)
+  })
+  it('layerSpec of a derived layer without its display source throws, and says what is missing', () => {
+    expect(() => layerSpec(hs)).toThrow(/derived layer fx_hs needs its display source/)
+  })
+  it('client.displaySource reads the pieces from the published index; null for an ordinary layer or a missing via', async () => {
+    const c = createClient({ base: srv.base })
+    const d = (await c.displaySource('fx_hs'))!
+    expect(d.ids).toEqual(['FX:A-1', 'FX:B-2'])
+    expect(d.pieces.map((p) => p.name)).toEqual(['Piece one', 'Piece two'])
+    expect(await c.displaySource('fx_leases')).toBeNull()
+    expect(await c.displaySource('nope')).toBeNull()
+    const noVia = createClient({ base: srv.base, fetch: (async (u: any, i: any) => String(u).endsWith('layers.json')
+      ? new Response(JSON.stringify({ layers: layers.filter((l) => l.slug !== 'fx_leases') })) : fetch(u, i)) as typeof fetch })
+    expect(await noVia.displaySource('fx_hs')).toBeNull()
+  })
+  it('client.addLayer adds the filtered via source, restyles on a second call, removes cleanly', async () => {
+    const c = createClient({ base: srv.base })
+    const map = new FakeMap()
+    expect(await c.addLayer(map, 'fx_hs', { beforeId: 'labels' })).toEqual(['places:fx_hs:fill', 'places:fx_hs:line'])
+    expect(map.sources.get('places:fx_hs').url).toContain('fx_leases/places.pmtiles')
+    expect(map.getLayer('places:fx_hs:fill').filter).toEqual(displayFilter(['FX:A-1', 'FX:B-2']))
+    await c.addLayer(map, 'fx_hs', { colour: '#00ff00' })
+    expect(map.layers.length).toBe(2)
+    expect(map.getLayer('places:fx_hs:fill').paint['fill-color']).toBe('#00ff00')
+    c.removeLayer(map, 'fx_hs')
+    expect(map.layers.length + map.sources.size).toBe(0)
+  })
+  it('client.addLayer rejects, without touching the map, when via is missing (the app lists the layer but does not draw it)', async () => {
+    const noVia = createClient({ base: srv.base, fetch: (async (u: any, i: any) => String(u).endsWith('layers.json')
+      ? new Response(JSON.stringify({ layers: layers.filter((l) => l.slug !== 'fx_leases') })) : fetch(u, i)) as typeof fetch })
+    const map = new FakeMap()
+    await expect(noVia.addLayer(map, 'fx_hs')).rejects.toThrow(/drawn by "fx_leases"/)
+    expect(map.layers.length + map.sources.size).toBe(0)
+  })
+  it('getPlace of a derived place pinned to its layer is null: its geometry is not published (no parquet read)', async () => {
+    const c = createClient({ base: srv.base })
+    expect(await c.getPlace('FXH:A-1', { slug: 'fx_hs' })).toBeNull()
+    expect(srv.requests.some((r) => r.includes('fx_hs/places.parquet'))).toBe(false)
   })
 })

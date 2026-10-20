@@ -2,11 +2,11 @@
   import maplibregl from 'maplibre-gl'
   import 'maplibre-gl/dist/maplibre-gl.css'
   import * as pmtiles from 'pmtiles'
-  import { addLayer, creditsFor, identify, layerLabel, registerPmtiles, removeLayer, layerId, DRAW_KINDS, type BBox, type Layer, type PlaceFeature } from '@oceanmetrics/places'
+  import { addLayer, creditsFor, displaySource, identify, layerLabel, registerPmtiles, removeLayer, layerId, DRAW_KINDS, type BBox, type DerivedPiece, type Layer, type PlaceFeature } from '@oceanmetrics/places'
   import { onMount } from 'svelte'
   import { applyTheme, BASEMAP_CREDIT, LABELS_BELOW, style } from './basemap'
   import { buildSearch, parseView, type LayerSel, type Projection } from './grammar'
-  import { layerPath, sanitizeHtml, withBase, fmtDate, placePath } from './helpers'
+  import { drawable, layerPath, pieceProps, sanitizeHtml, withBase, fmtDate, placePath } from './helpers'
   import { BASE } from './data.svelte'
   import { loc, navigate } from './router.svelte'
   import { theme } from './theme.svelte'
@@ -31,6 +31,8 @@
   let map: maplibregl.Map | undefined
   let ready = $state(false)
   let on = new Set<string>()        // slugs currently on the map
+  // derived layers on the map: the piece each drawn `via` feature stands for, by the feature's place_id (= the piece's source_id)
+  const pieceOf = new Map<string, Map<string, DerivedPiece>>()
   let queue: Promise<void> = Promise.resolve()
   const failed = new Set<string>()
 
@@ -94,7 +96,7 @@
   const projCtrl = new ProjectionControl()
 
   const refreshCredits = async () => {
-    const slugs = selected.map((s) => s.slug).filter((s) => layers.some((l) => l.slug === s))
+    const slugs = selected.map((s) => s.slug).filter((s) => layers.some((l) => l.slug === s && drawable(l, layers)))
     try { credits.set(slugs.length ? await creditsFor(slugs, { html: true }) : '') } catch { credits.set('') }
   }
 
@@ -102,13 +104,18 @@
   async function doSync(sel: LayerSel[]) {
     const m = map
     if (!m) return
-    const want = sel.filter((s) => layers.some((l) => l.slug === s.slug))
+    // a derived layer whose `via` layer is missing is listed (the layer list says why) but not drawn
+    const want = sel.filter((s) => layers.some((l) => l.slug === s.slug && drawable(l, layers)))
     const slugs = new Set(want.map((w) => w.slug))
-    for (const s of [...on]) if (!slugs.has(s)) { removeLayer(m, s); on.delete(s) }
+    for (const s of [...on]) if (!slugs.has(s)) { removeLayer(m, s); on.delete(s); pieceOf.delete(s) }
     for (const w of want) {
       try {
         await addLayer(m, w.slug, { colour: w.colour ?? undefined, opacity: w.opacity ?? undefined, width: w.width ?? undefined, beforeId: LABELS_BELOW })
         on.add(w.slug)
+        if (layers.find((l) => l.slug === w.slug)?.kind === 'derived' && !pieceOf.has(w.slug)) {
+          const d = await displaySource(w.slug)
+          if (d) pieceOf.set(w.slug, new Map([...d.pieces].reverse().map((p) => [p.source_id, p])))   // the first piece of a source_id wins
+        }
       } catch (e) {
         console.warn(`places: layer ${w.slug} not drawn`, e)
         if (!failed.has(w.slug)) { failed.add(w.slug); onlayererror?.(w.slug) }
@@ -243,14 +250,22 @@
       }
     })
 
+    // a clicked feature of a derived layer is the `via` layer's feature (an FAO area); it stands for the derived place
+    const asPlace = (f: maplibregl.MapGeoJSONFeature): Pick<maplibregl.MapGeoJSONFeature, 'properties' | 'source'> => {
+      const slug = String(f.source).replace(/^places:/, '')
+      const piece = pieceOf.get(slug)?.get(String(f.properties?.place_id))
+      const layer = layers.find((l) => l.slug === slug)
+      return piece && layer ? { properties: pieceProps(piece, layer), source: f.source } : f
+    }
     const interactive = () => m.getStyle().layers.filter((l) => l.id.startsWith('places:') && l.type !== 'raster').map((l) => l.id)
     if (popups) {
       m.on('click', async (e) => {
         const ids = interactive()
         const f = ids.length ? m.queryRenderedFeatures(e.point, { layers: ids })[0] : undefined
         if (f) {
-          new maplibregl.Popup({ maxWidth: '320px' }).setLngLat(e.lngLat).setDOMContent(popupContent(f)).addTo(m)
-          if (f.properties?.place_id) onpick?.(String(f.properties.place_id))
+          const p = asPlace(f)
+          new maplibregl.Popup({ maxWidth: '320px' }).setLngLat(e.lngLat).setDOMContent(popupContent(p)).addTo(m)
+          if (p.properties?.place_id) onpick?.(String(p.properties.place_id))
           return
         }
         // a reference layer is the publisher's PNG tiles: ask its GetFeatureInfo what is under the point (first on top)

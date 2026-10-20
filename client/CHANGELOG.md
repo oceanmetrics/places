@@ -5,8 +5,14 @@
 - layers.json may hold a `kind: "derived"` row (new `Layer.display` = `{via, id_from}`): pieces computed from a reference
   collection, with no PMTiles or parquet of their own (the first is `fao_high_seas`, the high seas cut by FAO major
   fishing area). The map draws the PMTiles of layer `via` and shows each place in its feature whose place_id is the
-  place's index `source_id`. `getPlace` no longer looks for a parquet of a derived layer. Drawing a derived layer in the
-  web app is not done yet.
+  place's index `source_id`. `getPlace` no longer looks for a parquet of a derived layer (pinned to one, it returns null).
+- `addLayer` / `layerSpec` draw a derived layer: the `via` layer's PMTiles as the derived layer's own source
+  (`places:<slug>`), filtered to the `via` features whose place_id is a piece's `source_id`
+  (`["in", ["get", "place_id"], ["literal", ids]]`), with the derived layer's own paint. `addLayer` rejects, touching nothing,
+  when `via` is missing from the manifest or has no tiles of its own. New helpers: `displaySource(slug)` (the `via` layer
+  and the pieces by `source_id`, null when not drawable), the pure `derivedDisplay(layer, layers, indexRows)`,
+  `viaLayer(layer, layers)`, `isDerived(layer)` and `displayFilter(ids)`; `layerSpec(layer, opts, display)` takes the
+  display source. New types `DisplaySource` and `DerivedPiece`.
 
 ## 0.5.0
 

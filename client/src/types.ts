@@ -104,6 +104,29 @@ export interface Layer {
   h3?             : string | null
 }
 
+/** one place of a derived layer, as the map needs it to show it in a feature of the `via` layer. */
+export interface DerivedPiece {
+  /** the derived place's id (FAOHS:21): what a click on its feature selects. */
+  place_id : string
+  /** the `via` feature's place_id that draws it (FAO:21): the index row's source_id. */
+  source_id: string
+  name     : string
+  url      : string | null
+  bbox     : BBox | null
+}
+
+/** what drawing a derived layer needs (see `derivedDisplay`): the layer that draws it and its places. */
+export interface DisplaySource {
+  layer : Layer
+  /** the layer whose PMTiles draw the derived layer. */
+  via   : Layer
+  /** the `display.id_from` column of the derived collection (informative: the index row's source_id holds its value). */
+  idFrom: string
+  pieces: DerivedPiece[]
+  /** the distinct source_ids of `pieces`: the `via` features to draw. */
+  ids   : string[]
+}
+
 export interface ClientConfig {
   /** root of the published gazetteer (trailing slash optional). */
   base?     : string

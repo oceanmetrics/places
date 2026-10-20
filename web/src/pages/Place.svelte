@@ -5,7 +5,7 @@
   import CopyButton from '../lib/CopyButton.svelte'
   import { BASE, manifest, loadManifest } from '../lib/data.svelte'
   import {
-    calcofiLink, erddapLink, fmtValue, geojsonSql, layerForPlace, layerPath, parquetUrl, placePath, sanitizeHtml, withBase,
+    calcofiLink, derivedLine, erddapLink, fmtValue, geojsonSql, keepsGeometry, layerForPlace, layerPath, parquetUrl, placePath, sanitizeHtml, viaTitle, withBase,
   } from '../lib/helpers'
 
   let { id }: { id: string } = $props()
@@ -21,7 +21,7 @@
     try {
       const [f, hits] = await Promise.all([getPlace(id, { unwrap: true }), search(id, { limit: 20 }).catch(() => [])])
       row = (f ? hits.find((h) => h.place_id === id && h.collection === f.collection) : hits.find((h) => h.place_id === id)) ?? null
-      const refOnly = !f && row && manifest.layers.some((l) => l.slug === row!.collection && l.kind === 'raster')
+      const refOnly = !f && row && manifest.layers.some((l) => l.slug === row!.collection && keepsGeometry(l))
       if (f || refOnly) {
         feature = f; status = 'ok'
         samePlace(id, { slug: f?.collection ?? row!.collection }).then((c) => { copies = c }).catch(() => { copies = [] })
@@ -34,7 +34,7 @@
 
   const attrs = $derived((feature?.properties ?? (row ? { ...row, bbox: undefined, centroid: undefined, also: undefined } : {})) as Record<string, unknown>)
   const layer = $derived(feature || row || manifest.status === 'ok' ? layerForPlace(manifest.layers, id, attrs, feature?.collection ?? row?.collection) : undefined)
-  const isRef = $derived(layer?.kind === 'raster')
+  const isRef = $derived(keepsGeometry(layer))
   const url = $derived(layer && !isRef ? parquetUrl(BASE, layer.collection) : '')
   const sourceUrl = $derived(String(row?.url ?? attrs.url ?? '') || '')
   const servedBy = $derived(feature?.served_by ? new URL(feature.served_by).host : '')
@@ -63,9 +63,10 @@
     {#if sourceUrl || layer?.source_link?.href}
       <p class="source">
         {#if sourceUrl}<a class="btn secondary small" href={sourceUrl} target="_blank" rel="noopener noreferrer">View at {layer?.source_link?.title ?? 'the source'} ↗</a>{/if}
-        {#if layer?.source_link?.href}<span class="muted">Source: <a href={layer.source_link.href} target="_blank" rel="noopener noreferrer">{layer.source_link.title}</a>{#if servedBy}{' · boundary served by '}<code>{servedBy}</code>{/if}{#if isRef && !feature}{" · shown from the source's map tiles"}{/if}</span>{/if}
+        {#if layer?.source_link?.href}<span class="muted">Source: <a href={layer.source_link.href} target="_blank" rel="noopener noreferrer">{layer.source_link.title}</a>{#if servedBy}{' · boundary served by '}<code>{servedBy}</code>{/if}{#if layer?.kind === 'raster' && !feature}{" · shown from the source's map tiles"}{/if}</span>{/if}
       </p>
     {/if}
+    {#if layer?.kind === 'derived'}<p class="muted">{derivedLine(layer, manifest.layers)}</p>{/if}
     <div class="mapbox">
       {#await import('../lib/PlacesMap.svelte')}
         <p class="muted">Loading the map…</p>
@@ -117,7 +118,9 @@
     </div>
 
     <h2>Download</h2>
-    {#if isRef}
+    {#if layer?.kind === 'derived'}
+      <p>These places are computed by Ocean Metrics from {viaTitle(layer, manifest.layers)}; their geometry stays internal, so there is no download.</p>
+    {:else if isRef}
       <p>The source asked that its data not be republished, so there is no copy here:
         {#if layer?.raster?.link}<a href={layer.raster.link} target="_blank" rel="noopener noreferrer">get it from {layer.source_link?.title ?? 'the source'}</a>{:else}get it from the source{/if}.</p>
     {:else}

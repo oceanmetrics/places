@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Layer } from '@oceanmetrics/places'
 import {
   authorityOf, calcofiLink, defaultColour, erddapLink, fmtDate, fmtN, fmtValue, geojsonSql, groupByAuthority,
-  layerForPlace, matchRoute, parquetUrl, placePath, sanitizeHtml, stacRoot, withBase,
+  derivedLine, drawable, keepsGeometry, layerForPlace, matchRoute, pieceProps, viaTitle, parquetUrl, placePath, sanitizeHtml, stacRoot, withBase,
 } from './helpers'
 
 const L = (o: Partial<Layer>): Layer => ({
@@ -153,5 +153,38 @@ describe('sanitizeHtml', () => {
 
   it('escapes a stray angle bracket', () => {
     expect(sanitizeHtml('a < b')).toBe('a &lt; b')
+  })
+})
+
+describe('derived layers', () => {
+  const via = L({ slug: 'fao_major_areas', title: 'FAO major fishing areas', pmtiles: 'https://x/fao_major_areas/places.pmtiles' })
+  const hs = L({ slug: 'fao_high_seas', title: 'High seas by FAO area', kind: 'derived', pmtiles: null, source_layer: null,
+    display: { via: 'fao_major_areas', id_from: 'fao_id' }, place_type: 'high_seas_piece' })
+
+  it('says what draws the layer and that its geometry stays internal', () => {
+    expect(derivedLine(hs, [via, hs])).toBe('Drawn by FAO major fishing areas; the geometry of these places stays internal.')
+    expect(viaTitle(hs, [via, hs])).toBe('FAO major fishing areas')
+  })
+  it('a missing via: listed, not drawable, one line says so, nothing throws', () => {
+    expect(drawable(hs, [hs])).toBe(false)
+    expect(derivedLine(hs, [hs])).toBe('Not drawn: it is drawn by fao_major_areas, which is not published yet.')
+    expect(viaTitle(hs, [hs])).toBe('fao_major_areas')
+    expect(drawable(hs, [via, hs])).toBe(true)
+  })
+  it('a via without tiles of its own (a raster) is not drawable either', () => {
+    expect(drawable(hs, [L({ slug: 'fao_major_areas', kind: 'raster', pmtiles: null, source_layer: null }), hs])).toBe(false)
+  })
+  it('other layers are always drawable and have no derived line', () => {
+    expect(drawable(via, [via])).toBe(true)
+    expect(derivedLine(via, [via])).toBe('')
+  })
+  it('raster and derived layers keep no geometry here; vector layers do', () => {
+    expect(keepsGeometry(hs)).toBe(true)
+    expect(keepsGeometry(L({ kind: 'raster' }))).toBe(true)
+    expect(keepsGeometry(via)).toBe(false)
+  })
+  it('a clicked FAO area stands for the derived place, not the FAO area', () => {
+    expect(pieceProps({ place_id: 'FAOHS:21', source_id: 'FAO:21', name: 'High seas of FAO area 21', url: null, bbox: null }, hs))
+      .toEqual({ name: 'High seas of FAO area 21', place_id: 'FAOHS:21', url: null, place_type: 'high_seas_piece' })
   })
 })

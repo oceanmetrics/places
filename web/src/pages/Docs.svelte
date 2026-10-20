@@ -3,7 +3,7 @@
   import { layersJsonUrl, recipes, REPO_URL, stacRoot, withBase } from '../lib/helpers'
 
   const r = recipes(`${BASE}boem_wind_leases/places.parquet`)
-  const manifestFields = 'slug, title, collection, kind, raster, source_link, pmtiles, source_layer, geom_type, n, updated, version, paint, authority, place_type, bbox, attribution, attribution_html, license, license_url, citation'
+  const manifestFields = 'slug, title, collection, kind, raster, display, source_link, pmtiles, source_layer, geom_type, n, updated, version, paint, authority, place_type, bbox, attribution, attribution_html, license, license_url, citation'
 </script>
 
 <main class="page">
@@ -24,6 +24,15 @@
   <p>A row with <code>kind: "raster"</code> is a reference layer: it is drawn from its publisher's own tile service
     (<code>raster.tiles</code>, an XYZ template) and links to the data at <code>raster.link</code>. There is no
     <code>places.pmtiles</code> or <code>places.parquet</code> for it here.</p>
+  <p>A row with <code>kind: "derived"</code> holds pieces computed from a reference collection (the first is
+    <code>fao_high_seas</code>, the high seas cut by FAO major fishing area). It has no <code>places.pmtiles</code> or
+    <code>places.parquet</code> either: the geometry of its places stays internal. <code>display</code> =
+    <code>{'{'}via, id_from{'}'}</code> says how a map draws it: take the PMTiles of the layer <code>via</code> and keep the
+    features whose <code>place_id</code> equals the <code>source_id</code> of one of the derived layer's index rows
+    (<code>id_from</code> names the column that value comes from). Each place is drawn as that feature, with the derived layer's own
+    <code>paint</code>, and a click selects the derived place, not the feature's own. The JavaScript client does this in
+    <code>addLayer</code> (a MapLibre filter <code>["in", ["get", "place_id"], ["literal", ids]]</code>); an app that cannot find
+    <code>via</code> should list the layer but not draw it.</p>
   <p>Every row's <code>source_link</code> names the source gazetteer or publisher to credit and link back to. Each index
     row's <code>url</code> is that place's own page at the source (its Marine Regions page, a Navigator site's managing
     authority), and <code>source_id</code> its id there.</p>

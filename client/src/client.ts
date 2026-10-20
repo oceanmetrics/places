@@ -1,12 +1,12 @@
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
 import type { AsyncBuffer, FileMetaData } from 'hyparquet'
 import { compressors } from 'hyparquet-compressors'
-import { addLayerSpec, removeLayerSpec } from './map'
+import { addLayerSpec, derivedDisplay, isDerived, removeLayerSpec } from './map'
 import { geometryBBox, unwrapAntimeridian } from './unwrap'
 import { wkbToGeometry } from './wkb'
 import type { Geometry } from 'geojson'
 import type {
-  AddLayerOptions, BBox, ClientConfig, CreditRef, GetPlaceOptions, IndexPlace, Layer, MapLike, PlaceFeature, SearchOptions,
+  AddLayerOptions, BBox, ClientConfig, CreditRef, DisplaySource, GetPlaceOptions, IndexPlace, Layer, MapLike, PlaceFeature, SearchOptions,
 } from './types'
 
 export const DEFAULT_BASE = 'https://storage.oceanmetrics.io/gazetteer/'
@@ -162,8 +162,24 @@ export function createClient(initial: ClientConfig = {}) {
     return l
   }
 
+  /**
+   * what a derived layer is drawn from: the layer `via` and the layer's places by source_id (see `derivedDisplay`).
+   * null when the layer is not derived or `via` is not published (or has no PMTiles).
+   */
+  async function displaySource(slug: string): Promise<DisplaySource | null> {
+    const layers = await listLayers()
+    const layer = layers.find((x) => x.slug === slug)
+    if (!layer || !isDerived(layer)) return null
+    return derivedDisplay(layer, layers, await loadIndex())
+  }
+
+  /** a derived layer is drawn by the PMTiles of its `via` layer, filtered to its own places; throws when `via` is missing. */
   async function addLayer(map: MapLike, slug: string, opts: AddLayerOptions = {}): Promise<string[]> {
-    return addLayerSpec(map, await getLayer(slug), opts)
+    const layer = await getLayer(slug)
+    if (!isDerived(layer)) return addLayerSpec(map, layer, opts)
+    const display = await displaySource(slug)
+    if (!display) throw new Error(`places: derived layer ${slug} is drawn by "${layer.display?.via}", which is not in the manifest as a layer with tiles of its own`)
+    return addLayerSpec(map, layer, opts, display)
   }
   const removeLayer = (map: MapLike, slug: string): void => removeLayerSpec(map, slug)
 
@@ -308,6 +324,7 @@ export function createClient(initial: ClientConfig = {}) {
   async function referencePlace(id: string, opts: GetPlaceOptions): Promise<PlaceFeature | null | undefined> {
     const layers = await listLayers()
     const isRef = (slug: string) => layers.some((l) => l.slug === slug && l.kind === 'raster')
+    if (opts.slug && layers.some((l) => l.slug === opts.slug && isDerived(l))) return null     // pieces: no geometry of ours
     if (opts.slug && !isRef(opts.slug)) return undefined
     if (!opts.slug && !layers.some((l) => l.kind === 'raster')) return undefined
     const rows = await loadIndex()
@@ -389,7 +406,7 @@ export function createClient(initial: ClientConfig = {}) {
     return creditLine(parts)
   }
 
-  return { configure, listLayers, getLayer, addLayer, removeLayer, search, samePlace, getPlace, identify, creditsFor }
+  return { configure, listLayers, getLayer, displaySource, addLayer, removeLayer, search, samePlace, getPlace, identify, creditsFor }
 }
 
 // the default client ----
@@ -397,6 +414,7 @@ const def = createClient()
 export const configure = def.configure
 export const listLayers = def.listLayers
 export const getLayer = def.getLayer
+export const displaySource = def.displaySource
 export const addLayer = def.addLayer
 export const removeLayer = def.removeLayer
 export const search = def.search

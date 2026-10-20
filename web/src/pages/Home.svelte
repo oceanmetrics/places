@@ -2,7 +2,7 @@
   import { getPlace, layerLabel, type IndexPlace, type PlaceFeature } from '@oceanmetrics/places'
   import { BASE, index, manifest, searchPlaces } from '../lib/data.svelte'
   import { buildSearch, parseView, type LayerSel } from '../lib/grammar'
-  import { collectionDir, defaultColour, fmtDate, fmtLonLat, fmtN, groupByAuthority, layerPath, placePath, sanitizeHtml, withBase } from '../lib/helpers'
+  import { collectionDir, defaultColour, derivedLine, drawable, fmtDate, fmtLonLat, fmtN, groupByAuthority, layerPath, placePath, sanitizeHtml, withBase } from '../lib/helpers'
   import { loc, navigate } from '../lib/router.svelte'
 
   // the URL is the state: layers=… and place=… are read here and written back with replaceState ----
@@ -65,17 +65,26 @@
   // the chosen place: drawn on the map from the collection parquet ----
   let place = $state<PlaceFeature | null>(null)
   let placeError = $state('')
+  let placeNote = $state('')
+  let placeLabel = $state('')   // the name of a place that has no feature to take it from (a derived one)
   let pt = 0
   $effect(() => {
     const id = view.place
     const my = ++pt
     place = null
     placeError = ''
+    placeNote = ''
+    placeLabel = ''
     if (!id) return
     getPlace(id, { unwrap: true })
-      .then((f) => {
+      .then(async (f) => {
         if (my !== pt) return
-        if (f) place = f
+        if (f) { place = f; return }
+        // a place of a derived layer has no geometry of ours to draw: say what draws it and go to it
+        const row = (await searchPlaces(id, 20)).find((h) => h.place_id === id)
+        const dl = row && manifest.layers.find((l) => l.slug === row.collection && l.kind === 'derived')
+        if (my !== pt) return
+        if (dl && row) { placeNote = derivedLine(dl, manifest.layers); placeLabel = row.name; mapRef?.fitTo(row.bbox) }
         else placeError = `Place ${id} was not found in any published collection.`
       })
       .catch((e: unknown) => { if (my === pt) placeError = `Place ${id} could not be read: ${(e as Error).message}` })
@@ -109,7 +118,7 @@
   let badLayers = $state<string[]>([])
   const onlayererror = (slug: string) => { if (!badLayers.includes(slug)) badLayers = [...badLayers, slug] }
   const titleOf = (slug: string) => { const l = manifest.layers.find((l) => l.slug === slug); return l ? layerLabel(l) : slug }
-  const placeName = $derived(String(place?.properties?.name ?? view.place ?? ''))
+  const placeName = $derived(String(place?.properties?.name ?? (placeLabel || view.place) ?? ''))
 </script>
 
 <div class="home">
@@ -171,6 +180,7 @@
         <div class="row"><strong>{placeName}</strong><button class="btn secondary small" type="button" onclick={() => write({ place: null })}>Clear</button></div>
         <div class="muted">{view.place}</div>
         {#if placeError}<div class="notice">{placeError}</div>{/if}
+        {#if placeNote}<div class="muted">{placeNote}</div>{/if}
         <div class="row"><a class="btn small" href={withBase(placePath(view.place), BASE)}>Place page</a></div>
       </section>
     {/if}
@@ -216,7 +226,8 @@
                 {/if}
               </div>
             {/if}
-            {#if badLayers.includes(s.slug)}<div class="notice">Tiles for this layer could not be loaded; it may not be published yet.</div>{/if}
+            {#if l && !drawable(l, manifest.layers)}<div class="notice">{derivedLine(l, manifest.layers)}</div>
+            {:else if badLayers.includes(s.slug)}<div class="notice">Tiles for this layer could not be loaded; it may not be published yet.</div>{/if}
           </li>
         {/each}
       </ul>
@@ -232,7 +243,7 @@
           <li>
             <div class="lrow">
               <label>
-                <input type="checkbox" aria-label={layerLabel(l)} checked={isOn(l.slug)} onchange={() => toggle(l.slug)} />
+                <input type="checkbox" aria-label={layerLabel(l)} checked={isOn(l.slug)} disabled={!drawable(l, manifest.layers) && !isOn(l.slug)} onchange={() => toggle(l.slug)} />
                 {#if l.kind === 'raster'}
                   <span class="sw raster" title="Map tiles from the publisher"></span>
                 {:else}
@@ -247,9 +258,11 @@
                 <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.4" /><circle cx="8" cy="4.9" r="1" fill="currentColor" /><path d="M8 7.2v4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
               </button>
             </div>
+            {#if !drawable(l, manifest.layers) && !isOn(l.slug)}<div class="muted small-note">{derivedLine(l, manifest.layers)}</div>{/if}
             {#if info === l.slug}
               <div class="card linfo">
                 <div class="muted">{fmtN(l.n)} places · {l.geom_type}{l.version ? ` · v${l.version}` : ''}{l.updated ? ` · ${fmtDate(l.updated)}` : ''}</div>
+                {#if l.kind === 'derived'}<div class="muted">{derivedLine(l, manifest.layers)}</div>{/if}
                 {#if l.license}<div class="muted">Licence: {#if l.license_url}<a href={l.license_url} target="_blank" rel="noopener noreferrer">{l.license}</a>{:else}{l.license}{/if}</div>{/if}
                 {#if l.attribution_html || l.attribution}
                   <div class="attr">{@html sanitizeHtml(l.attribution_html || l.attribution)}</div>
@@ -257,9 +270,9 @@
                 <div class="row">
                   <a class="btn small" href={withBase(layerPath(l.slug), BASE)}>Full layer page</a>
                   <a class="btn secondary small" href={collectionDir(BASE, l.collection)} target="_blank" rel="noopener noreferrer">Collection README</a>
-                  <button class="btn secondary small" type="button" onclick={() => toggle(l.slug)}>{isOn(l.slug) ? 'Remove from map' : 'Add to map'}</button>
+                  <button class="btn secondary small" type="button" disabled={!drawable(l, manifest.layers) && !isOn(l.slug)} onclick={() => toggle(l.slug)}>{isOn(l.slug) ? 'Remove from map' : 'Add to map'}</button>
                   {#if l.bbox}
-                    <button class="btn secondary small" type="button" onclick={() => { if (!isOn(l.slug)) toggle(l.slug); zoomTo(l.slug) }}>Zoom to</button>
+                    <button class="btn secondary small" type="button" disabled={!drawable(l, manifest.layers) && !isOn(l.slug)} onclick={() => { if (!isOn(l.slug)) toggle(l.slug); zoomTo(l.slug) }}>Zoom to</button>
                   {/if}
                 </div>
               </div>
@@ -309,6 +322,7 @@
   .hits .also span { display: inline; }
   .layers label { display: flex; gap: 8px; align-items: center; padding: 4px 0; cursor: pointer; }
   .lrow { display: flex; align-items: center; gap: 4px; }
+  .small-note { font-size: 12px; margin: 0 0 4px 24px; }
   .lrow label { flex: 1; min-width: 0; }
   .info-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%; background: transparent; color: var(--text-muted); cursor: pointer; }
   .info-btn:hover, .info-btn[aria-expanded='true'] { color: var(--brand-text); background: var(--bg-tint); }

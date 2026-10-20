@@ -1,5 +1,5 @@
 // pure helpers shared by the pages (kept free of the DOM and the map so they are unit-tested)
-import type { Layer } from '@oceanmetrics/places'
+import { isDerived, layerLabel, viaLayer, type DerivedPiece, type Layer } from '@oceanmetrics/places'
 
 export const DEFAULT_BASE = 'https://storage.oceanmetrics.io/gazetteer/'
 export const REPO_URL     = 'https://github.com/oceanmetrics/places'
@@ -194,4 +194,32 @@ export function sanitizeHtml(html: string): string {
     const href = (h?.[1] ?? h?.[2] ?? '').trim()
     return /^https?:\/\//i.test(href) ? `<a href="${escAttr(href)}" target="_blank" rel="noopener noreferrer">` : '<a>'
   }).join('')
+}
+
+// derived layers (layers.json kind "derived": pieces computed from a reference collection, drawn as another layer's features) ----
+/** a layer with no copy of its geometry here: a raster (reference) layer or a derived one. */
+export const keepsGeometry = (layer: Pick<Layer, 'kind'> | undefined) => layer?.kind === 'raster' || layer?.kind === 'derived'
+
+/** can the map draw the layer? every layer but a derived one whose `via` layer is missing or has no tiles of its own. */
+export const drawable = (layer: Layer, layers: Layer[]) => !isDerived(layer) || !!viaLayer(layer, layers)
+
+/** the title of the layer that draws a derived layer (its slug while that layer is not in the manifest). */
+export function viaTitle(layer: Layer, layers: Layer[]): string {
+  const slug = layer.display?.via ?? ''
+  const via = layers.find((l) => l.slug === slug)
+  return via ? layerLabel(via) : slug
+}
+
+/** one line on a derived layer: what draws it and that its geometry stays internal, or why it is not drawn. '' for any other layer. */
+export function derivedLine(layer: Layer, layers: Layer[]): string {
+  if (!isDerived(layer)) return ''
+  const via = viaTitle(layer, layers) || 'another layer'
+  return drawable(layer, layers)
+    ? `Drawn by ${via}; the geometry of these places stays internal.`
+    : `Not drawn: it is drawn by ${via}, which is not published yet.`
+}
+
+/** the popup / pick properties of a clicked `via` feature shown as the derived place it stands for. */
+export function pieceProps(piece: DerivedPiece, layer: Layer): Record<string, unknown> {
+  return { name: piece.name, place_id: piece.place_id, url: piece.url, place_type: layer.place_type }
 }

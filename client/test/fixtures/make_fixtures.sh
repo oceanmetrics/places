@@ -83,6 +83,14 @@ COPY (
   FROM (VALUES ('FXR:1', 'First fixture zone', -40.0, -40.0, '1', 'Fixtureland · FXL'),
                ('FXR:2', 'Second fixture zone', -30.0, -40.0, '2', NULL),
                ('FXR:3', 'Global fixture zone', -170.0, -60.0, '3', NULL)) z(place_id, name, x0, y0, source_id, keywords)
+  UNION ALL
+  -- fx_hs is a derived layer (kind "derived", display {via: fx_leases, id_from: place_id}): its pieces are index rows only,
+  -- drawn as the fx_leases features whose place_id is the piece's source_id (as FAOHS:21 is drawn as FAO:21)
+  SELECT place_id, name, 'FXH', 'high_seas_piece', 'MultiPolygon', 'fx_hs', {'xmin': x0, 'ymin': y0, 'xmax': x0 + 1, 'ymax': y0 + 1},
+         x0 + 0.5, y0 + 0.5, 1.0e4, 'CC-BY-4.0', 'Fixture Agency. Processed by Ocean Metrics.', '1.0.0',
+         '2026-10-01T12:00:00Z', NULL, source_id, NULL, NULL
+  FROM (VALUES ('FXH:A-1', 'Piece one', -110.0, 10.0, 'FX:A-1'),
+               ('FXH:B-2', 'Piece two', -108.0, 10.0, 'FX:B-2')) z(place_id, name, x0, y0, source_id)
   ORDER BY collection, place_id
 ) TO 'index/places_index.parquet' (FORMAT parquet, ROW_GROUP_SIZE 4, COMPRESSION zstd);
 

@@ -3,7 +3,7 @@
   import Credit from '../lib/Credit.svelte'
   import { BASE, loadManifest, manifest } from '../lib/data.svelte'
   import { layerLabel } from '@oceanmetrics/places'
-  import { calcofiLink, collectionDir, collectionUrl, fmtDate, fmtN, parquetUrl, withBase } from '../lib/helpers'
+  import { calcofiLink, collectionDir, collectionUrl, derivedLine, drawable, fmtDate, fmtN, layerPath, parquetUrl, viaTitle, withBase } from '../lib/helpers'
 
   let { slug }: { slug: string } = $props()
   onMount(() => { loadManifest() })
@@ -26,6 +26,9 @@
       <a class="btn secondary" href={calcofiLink(layer.slug)} target="_blank" rel="noopener noreferrer">Use in CalCOFI explore</a>
     </div>
 
+    {#if layer.kind === 'derived'}
+      <p class={drawable(layer, manifest.layers) ? 'muted' : 'notice'}>{derivedLine(layer, manifest.layers)}</p>
+    {/if}
     <div class="mapbox">
       {#await import('../lib/PlacesMap.svelte')}
         <p class="muted">Loading the map…</p>
@@ -47,6 +50,14 @@
           <tr><th>Data</th><td>
             {#if layer.raster?.link}<a href={layer.raster.link} target="_blank" rel="noopener noreferrer">at the publisher</a> · {/if}
             <a href={collectionUrl(BASE, layer.collection)}>collection.json</a> (metadata only: no copy of the data here)
+          </td></tr>
+        {:else if layer.kind === 'derived'}
+          <tr><th>Drawn by</th><td>
+            <a href={withBase(layerPath(layer.display?.via ?? ''), BASE)}>{viaTitle(layer, manifest.layers)}</a>
+            (each place is shown as its feature there, matched on <code>{layer.display?.id_from}</code>)
+          </td></tr>
+          <tr><th>Data</th><td>
+            <a href={collectionUrl(BASE, layer.collection)}>collection.json</a> (metadata only: the geometry of these places stays internal, so there is no parquet or PMTiles)
           </td></tr>
         {:else}
           <tr><th>Files</th><td>

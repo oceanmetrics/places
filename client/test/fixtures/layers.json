@@ -253,6 +253,59 @@
     "href": "https://fixture.example/zones",
     "title": "Fixture Institute"
    }
+  },
+  {
+   "slug": "fx_hs",
+   "title": "Fixture derived pieces",
+   "collection": "fx_hs",
+   "kind": "derived",
+   "raster": null,
+   "display": {
+    "via": "fx_leases",
+    "id_from": "place_id"
+   },
+   "pmtiles": null,
+   "source_layer": null,
+   "geom_type": "MultiPolygon",
+   "n": 2,
+   "updated": "2026-10-01T12:00:00Z",
+   "version": "1.0.0",
+   "paint": {
+    "fill": {
+     "fill-color": "#2a7fb8",
+     "fill-opacity": 0.45
+    },
+    "line": {
+     "line-color": "#1b5a85",
+     "line-width": 1
+    }
+   },
+   "authority": "FXH",
+   "place_type": "high_seas_piece",
+   "bbox": [
+    -110,
+    10,
+    -107,
+    11
+   ],
+   "attribution": "Fixture Agency. Processed by Ocean Metrics.",
+   "attribution_html": "<a href=\"https://fixture.example/\">Fixture Agency</a>. Processed by Ocean Metrics.",
+   "license": "CC-BY-4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0/",
+   "citation": "Fixture Agency. Processed by Ocean Metrics. Fixture derived pieces, v1.0.0. Ocean Metrics gazetteer, 2026. https://storage.oceanmetrics.io/gazetteer/fx_hs/",
+   "status": null,
+   "status_history": null,
+   "status_label": null,
+   "search_rank": 0,
+   "created": "2026-10-01",
+   "source_date": null,
+   "parquet": null,
+   "parquet_sha256": null,
+   "h3": null,
+   "source_link": {
+    "href": "https://fixture.example/",
+    "title": "Fixture Agency"
+   }
   }
  ]
 }

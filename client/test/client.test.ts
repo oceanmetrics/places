@@ -11,7 +11,7 @@ afterAll(() => srv.close())
 describe('listLayers', () => {
   it('fetches layers.json from the configured base', async () => {
     const layers = await c.listLayers()
-    expect(layers.map((l) => l.slug)).toEqual(['fx_leases', 'fx_aoa', 'fx_stations', 'fx_lines', 'fx_ref'])
+    expect(layers.map((l) => l.slug)).toEqual(['fx_leases', 'fx_aoa', 'fx_stations', 'fx_lines', 'fx_ref', 'fx_hs'])
     expect(layers[0]).toMatchObject({ source_layer: 'fx_leases', n: 6, license: 'CC-PDDC' })
     expect(layers[0].source_link).toEqual({ href: 'https://fixture.example/', title: 'Fixture Agency' })   // credit link
     expect(layers.find((l) => l.slug === 'fx_ref')!.raster!.feature_url).toBe('fx_ref/wfs/{source_id}.json')
@@ -40,7 +40,7 @@ describe('listLayers', () => {
         return String(url).endsWith('index/layers.json') ? Promise.resolve(new Response(null, { status })) : fetch(url, init)
       }) as typeof fetch
       const fb = createClient({ base: srv.base, fetch: f })
-      expect((await fb.listLayers()).length).toBe(5)
+      expect((await fb.listLayers()).length).toBe(6)
       expect(seen).toEqual([srv.base + 'index/layers.json', srv.base + 'layers.json'])
     }
   })
@@ -55,7 +55,7 @@ describe('listLayers', () => {
     const bad = createClient({ base: srv.base + 'missing/' })
     await expect(bad.listLayers()).rejects.toThrow(/layers\.json: 404/)
     bad.configure({ base: srv.base })
-    expect((await bad.listLayers()).length).toBe(5)
+    expect((await bad.listLayers()).length).toBe(6)
   })
 })
 
@@ -88,7 +88,7 @@ describe('search', () => {
   })
   it('reads the centroid from the live centroid_lon / centroid_lat columns (regression: it was always null)', async () => {
     const hits = await c.search('', { limit: 100 })
-    expect(hits.length).toBe(13)
+    expect(hits.length).toBe(15)
     expect(hits.every((p) => p.centroid !== null && p.collection !== '' && p.geom_type !== null)).toBe(true)
     expect((await c.search('delta'))[0].centroid).toEqual([-117.5, 39.5])
   })
@@ -110,7 +110,7 @@ describe('search', () => {
   it('filters by collection, one slug or several', async () => {
     expect((await c.search('FX:C-3', { collection: 'fx_aoa' })).map((p) => [p.collection, p.name])).toEqual([['fx_aoa', 'Charlie lease (AOA copy)']])
     expect((await c.search('lease', { collection: ['fx_leases'] })).every((p) => p.collection === 'fx_leases')).toBe(true)
-    expect((await c.search('', { collection: [], limit: 100 })).length).toBe(13)
+    expect((await c.search('', { collection: [], limit: 100 })).length).toBe(15)
     expect((await c.search('', { collection: 'no_such_slug' })).length).toBe(0)
   })
   it('lists every copy of a place without `group`', async () => {
@@ -129,7 +129,7 @@ describe('search', () => {
   })
   it('grouping does not touch places without copies, nor the cached index rows', async () => {
     const all = await c.search('', { group: true, limit: 100 })
-    expect(all.length).toBe(12)
+    expect(all.length).toBe(14)
     expect((await c.search('zulu')).every((p) => p.also === undefined)).toBe(true)
   })
   it('samePlace lists the other copies, [] for a place with none', async () => {
