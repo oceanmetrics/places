@@ -91,9 +91,11 @@ def write_metadata(cfg: dict, out: Path, table, geo: dict, prov: dict, header: d
   return coll
 
 
-def restac_layer(cfg: dict, staging: Path) -> dict:
+def restac_layer(cfg: dict, staging: Path, version: str | None = None) -> dict:
   """rewrite a staged collection's metadata from its YAML and staged files, without fetching or rebuilding the data
-  (e.g. after a metadata-only config change such as `reference` or `place_url`). the build time stays the staged one."""
+  (e.g. after a metadata-only config change such as `reference` or `place_url`). the build time stays the staged one.
+  `version` sets a new collection version for a metadata-only republish (e.g. mr_* 1.0.1 for `info_url`, 2026-10-20:
+  a rebuild would re-download every Marine Regions layer from VLIZ); the rows keep the version they were built with."""
   import pyarrow.parquet as pq
   out = staging / cfg["slug"]
   pf = pq.ParquetFile(out / "places.parquet")
@@ -101,6 +103,8 @@ def restac_layer(cfg: dict, staging: Path) -> dict:
   prov = json.loads((out / "provenance.json").read_text())
   header, _ = tiles.read_pmtiles(out / "places.pmtiles")
   old = json.loads((out / "collection.json").read_text())
+  if version:
+    prov["version"] = version
   coll = write_metadata(cfg, out, _SchemaRows(pf), geo, prov, header, old["updated"], prov["version"])
   return {"slug": cfg["slug"], "reference": bool(coll.get("gazetteer:reference")), "assets": sorted(coll["assets"])}
 

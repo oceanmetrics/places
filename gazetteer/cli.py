@@ -23,6 +23,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--slug", action="append", help="only this collection (repeatable); default every one")
     p.add_argument("--sources", type=Path, default=ROOT / "sources")
     p.add_argument("--staging", type=Path, default=ROOT / "catalog" / "staging")
+    if name == "restac":
+      p.add_argument("--version", help="a new collection version for a metadata-only republish (rows unchanged)")
     if name == "build":
       p.add_argument("--cache", type=Path, default=ROOT / "cache")
       p.add_argument("--version", help="release version written into every row (default: the config's)")
@@ -44,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
   if a.cmd == "restac":
     for slug in slugs:
-      print(json.dumps(restac_layer(cfgs[slug], a.staging)))
+      print(json.dumps(restac_layer(cfgs[slug], a.staging, a.version)))
     return 0
   if a.cmd == "detect":
     res = detect_all([cfgs[s] for s in slugs], a.published_base)
