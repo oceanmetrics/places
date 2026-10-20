@@ -65,6 +65,10 @@ describe('search', () => {
     expect(hits.map((h) => h.place_id)).toEqual(['FXR:1'])
     expect(hits[0].keywords).toBe('Fixtureland · FXL')
     expect((await c.search('fixture zone fxl')).map((h) => h.place_id)).toEqual(['FXR:1'])   // name words + a keyword
+    // a keyword equal to the whole query ranks with name prefixes, ordered by area (the EEZ was cut off below 12 Navigator
+    // "Belgium ..." prefix matches)
+    expect((await c.search('fxl')).map((h) => h.place_id)).toEqual(['FXR:1'])
+    expect((await c.search('fixtureland', { limit: 1 }))[0].place_id).toBe('FXR:1')
     const zone = await c.search('zone')
     expect(zone.map((h) => h.place_id)).toContain('FXR:2')                                    // name matches still all there
   })

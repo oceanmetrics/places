@@ -192,8 +192,8 @@ export function createClient(initial: ClientConfig = {}) {
 
   /**
    * search places_index.parquet by name, place_id or keywords (e.g. country, territory). Every whitespace-separated word
-   * of `q` must occur (case and accent insensitive); results rank exact name, name prefix, word prefix, substring, then a
-   * keyword-only match, larger areas first.
+   * of `q` must occur (case and accent insensitive); results rank exact name, then name prefix or a keyword equal to the
+   * query, word prefix, substring, then other keyword-only matches, larger areas first.
    * a place_id is unique within a collection, not across them (`BOEM:OCS-P 0562` is in two collections): every
    * (collection, place_id) is its own hit; pass the hit's `collection` to `getPlace` as `slug`.
    */
@@ -212,7 +212,9 @@ export function createClient(initial: ClientConfig = {}) {
         const name = norm(p.name), id = norm(p.place_id), hay = `${name} ${id}`, kw = norm(p.keywords ?? '')
         const inName = words.every((w) => hay.includes(w))
         if (!inName && !(kw && words.every((w) => hay.includes(w) || kw.includes(w)))) continue
-        score = !inName ? 4 : id === query ? 0 : name === query ? 0 : name.startsWith(query) ? 1
+        // a keyword equal to the whole query (territory "Belgium") ranks with name prefixes; area then orders them
+        const kwExact = !!kw && kw.split(' · ').includes(query)
+        score = !inName ? (kwExact ? 1 : 4) : id === query ? 0 : name === query ? 0 : name.startsWith(query) ? 1
           : name.split(/[\s\-_/,()]+/).some((w) => w.startsWith(words[0])) ? 2 : 3
       }
       scored.push([score, p])
