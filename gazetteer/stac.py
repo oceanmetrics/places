@@ -159,6 +159,7 @@ def build_collection(cfg: dict, table: pa.Table, geo: dict, provenance: dict, di
     "gazetteer:source_link": source_link(cfg),
     **({"citation": " ".join(cfg["citation"].split())} if cfg.get("citation") else {}),
     **layer_status_fields(cfg),
+    **access_fields(cfg),
     **ref,
     "assets": assets,
   }
@@ -195,6 +196,13 @@ def layer_status_fields(cfg: dict) -> dict:
   """{'gazetteer:status', 'gazetteer:status_history'} for a config that documents a layer-level status; {} otherwise."""
   st, hist = layer_status(cfg)
   return {"gazetteer:status": st, "gazetteer:status_history": hist} if st else {}
+
+
+def access_fields(cfg: dict) -> dict:
+  """{'gazetteer:access'}: `public` (default) or `unlisted` from the config's `access`. an unlisted collection is
+  published and reachable by link but never listed: build_index.py leaves it out of search, the client's layers() drops
+  its layers.json row unless asked."""
+  return {"gazetteer:access": cfg.get("access") or "public"}
 
 
 def readme(cfg: dict, table: pa.Table, provenance: dict, collection: dict, version: str) -> str:

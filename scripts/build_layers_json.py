@@ -31,7 +31,12 @@ status and versions (all null when unknown, so an older collection still makes a
                            else the collection's own file:checksum); consumers pin `version` + `parquet_sha256`
   h3                       absolute URL of <slug>/h3/membership.json, the place x H3 membership (res 1-7, share of each
                            cell inside; scripts/build_h3_membership.py), only while it was built from this row's
-                           parquet_sha256; else null
+                           parquet_sha256; else null. a row has h3 exactly when it is a vector polygon layer whose
+                           membership is current (platform packages/catalog/schemas/places-layers.schema.json)
+  access                   "public" or "unlisted", the collection's `gazetteer:access` (the source YAML's `access`,
+                           default public). an unlisted layer is in the manifest, so a link to it works, but apps
+                           leave it out of lists unless asked (client: layers({ includeUnlisted: true })) and
+                           build_index.py leaves its places out of search
 
   python scripts/build_layers_json.py [--out catalog/staging/layers.json] [--h3 catalog/h3] [--no-remote] [--no-local]
 """
@@ -290,6 +295,7 @@ def layer_row(coll: dict, style: dict | None = None, version: str | None = None,
     "parquet"         : f"{base.rstrip('/')}/{slug}/places.parquet" if parquet_asset(coll) else None,
     "parquet_sha256"  : parquet_sha256(coll, ver, ledger) if parquet_asset(coll) else None,
     "h3"              : None,
+    "access"          : coll.get("gazetteer:access") or "public",
   }
 
 

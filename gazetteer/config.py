@@ -24,6 +24,7 @@ PLACE_TYPES |= {"disposal_site", "military_area"}   # MarineCadastre scan 2026-1
 PLACE_TYPES |= {"statistical_area", "high_seas_area"}   # fao_major_areas; fao_high_seas (the high seas cut by FAO area), 2026-10-20
 KINDS |= {"derive"}                          # computed from other collections' built parquet (gazetteer/derive.py)
 FILTER_KINDS = {"arcgis", "navigator_export"}   # source kinds that take `exclude` / `include` ({native field: [values]})
+ACCESS = ("public", "unlisted")             # config `access`: public (default) is listed and searched; unlisted is reachable by link only
 STYLE_KEYS = {"fill_color", "fill_opacity", "line_color", "line_width"}   # config `style:` (polygon layers)
 
 REQUIRED = ["slug", "title", "description", "authority", "place_type", "version", "license", "attribution",
@@ -79,6 +80,8 @@ def validate_config(cfg: dict, label: str = "config") -> None:
   except ValueError as e:
     errs.append(str(e))
   errs += reference_problems(cfg)
+  if cfg.get("access", "public") not in ACCESS:
+    errs.append(f"access must be one of {list(ACCESS)} (default public), got {cfg['access']!r}")
   if cfg.get("spatial_sort") and cfg.get("id_sort"):
     errs.append("spatial_sort and id_sort are exclusive (one row order)")
   sf = cfg.get("search_fields")

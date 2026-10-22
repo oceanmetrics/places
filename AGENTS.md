@@ -44,6 +44,15 @@ Rules for anyone (human or agent) changing this repo. Each rule is guarded by a 
   is the row's `parquet_sha256`. Republishing a polygon collection means rebuilding its membership (or accepting
   `h3: null` until it is). Shares are ≥ 0.01 of the cell or the cell holds ≥ 1% of the place (`MIN_SHARE`).
 
+- **`access: public | unlisted`** (optional top-level key of a `sources/<authority>/<layer>.yml`, default `public`; any other value
+  is a config error). It is written to collection.json as `gazetteer:access` and to every layers.json row as `access`
+  (the manifest's field list: `... parquet`, `parquet_sha256`, `h3`, `access`). An `unlisted` collection is published and
+  reachable by link, and its layers.json row stays so the link works, but `build_index.py` leaves its places out of
+  search and the client's `layers()` drops its row unless called with `{ includeUnlisted: true }`. The row schema is
+  `packages/catalog/schemas/places-layers.schema.json` in oceanmetrics/platform (every row has `access`; a vector row with
+  Polygon / MultiPolygon geometry has an `h3` URL, every other row has `h3: null`); a pytest validates the builder's output
+  against it (`$OM_SCHEMAS_DIR`, else `../platform/packages/catalog/schemas`).
+
 ## Publishing
 
 - `rashid check` must pass before every publish (the sync workflow runs it; run it locally before any manual push).

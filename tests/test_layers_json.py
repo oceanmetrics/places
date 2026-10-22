@@ -48,6 +48,7 @@ def test_row_exact():
     # an older collection (no layer status, no parquet asset, no ledger) keeps the new keys, all null
     "status": None, "status_history": None, "status_label": None, "search_rank": 0, "created": None, "source_date": None,
     "parquet": None, "parquet_sha256": None, "h3": None,
+    "access": "public",                       # no `gazetteer:access` in an older collection
   }
 
 

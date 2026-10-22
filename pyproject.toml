@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "pmtiles>=3.4"]
+dev = ["pytest>=8", "pmtiles>=3.4", "jsonschema>=4.23"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

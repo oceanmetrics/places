@@ -190,3 +190,17 @@ def test_reference_info_url_needs_bbox_and_info_id(cfg):
   with pytest.raises(ValueError, match="needs reference.info_id"):
     validate_config({**base, "reference": {**base["reference"], "info_url": "https://w?BBOX={bbox}"}})
   validate_config({**base, "reference": {**base["reference"], "info_url": "https://w?BBOX={bbox}", "info_id": "mrgid"}})
+
+
+def test_access_is_public_or_unlisted_and_defaults_to_public(cfg):
+  validate_config(cfg)                                       # no key: public
+  validate_config({**cfg, "access": "public"})
+  validate_config({**cfg, "access": "unlisted"})
+  for bad in ("private", "Unlisted", "", None, ["unlisted"]):
+    with pytest.raises(ValueError, match="access must be one of"):
+      validate_config({**cfg, "access": bad})
+
+
+def test_no_configured_layer_is_unlisted_yet():
+  # the Marine Regions copies become unlisted on Day 3 (2026-10-23); until then every layer is public
+  assert {slug for slug, c in CFGS.items() if c.get("access", "public") != "public"} == set()

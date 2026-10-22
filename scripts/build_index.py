@@ -7,6 +7,7 @@
 
 collections come from (a) catalog/staging/*/places.parquet (local, wins on a slug clash) and (b) the published
 catalog's children that carry a places.parquet asset (erddap/stats/rasters/... children have none and are skipped).
+a collection with `gazetteer:access: unlisted` (the YAML's `access`) is left out: its places are not searchable.
 rerunnable and deterministic: the same inputs give the same bytes. python: pyarrow + shapely (project deps).
 
   python scripts/build_index.py [--out DIR] [--staging DIR] [--base URL] [--no-remote] [--no-local]
@@ -289,6 +290,12 @@ def remote_sources(base: str, cache: Path, fetch=get_json, get_file=download) ->
 
   with ThreadPoolExecutor(8) as ex:
     return [s for s in ex.map(one, hrefs) if s]
+
+
+def listed(sources: list[Source]) -> list[Source]:
+  """the sources whose collection is public (`gazetteer:access`, default public): an unlisted collection is published
+  and reachable by link, but its places are never in the search index or the crosswalk."""
+  return [s for s in sources if (s.coll.get("gazetteer:access") or "public") != "unlisted"]
 
 
 def merge_sources(published: list[Source], local: list[Source], internal: list[Source] = ()) -> list[Source]:
@@ -603,7 +610,7 @@ def main(argv=None) -> int:
   intern = [] if a.no_internal else internal_sources(Path(a.internal).expanduser())
   with tempfile.TemporaryDirectory(prefix="places-index-") as tmp:
     rem = [] if a.no_remote else remote_sources(a.base, Path(tmp))
-    sources = with_config(merge_sources(rem, loc, intern), load_all(ROOT / "sources"))
+    sources = with_config(listed(merge_sources(rem, loc, intern)), load_all(ROOT / "sources"))
     stats = build(sources, out)
   origins = {s.slug: s.origin for s in sources}
   (out / "collection.json").write_text(json.dumps(collection_json(stats, out), indent=2, ensure_ascii=False) + "\n")

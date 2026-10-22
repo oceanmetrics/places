@@ -46,6 +46,12 @@ uv run scripts/build_h3_membership.py [--slug noaa_sanctuaries ...] --layers-out
 `layers.json` advertises a row's `h3` (the URL of its `membership.json`) only while `places_sha256` equals the row's
 `parquet_sha256`: a collection republished without rebuilding its membership drops back to `h3: null`, never to stale cells.
 The membership is a derived sidecar, not a STAC asset, so building it changes no collection version.
+### Access
+
+`layers.json` rows end with `h3` and `access`. `access` is `public` or `unlisted`, from the optional `access:` key of the
+layer's `sources/<authority>/<layer>.yml` (default `public`) through the collection's `gazetteer:access`. An unlisted layer
+stays in `layers.json` so a link to it works, but it is not in the place index (no search) and
+`@oceanmetrics/places` `layers()` omits it unless called with `{ includeUnlisted: true }`.
 
 ```sql
 -- the res-5 cells of Monterey Bay NMS, with the share of each inside
