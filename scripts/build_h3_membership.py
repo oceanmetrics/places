@@ -107,12 +107,14 @@ def source_parquet(row: dict, base: str, base_direct: str, cache: Path) -> Path:
 def build_one(row: dict, src: Path, out: Path, res_max: int = m.RES_MAX, workers: int = 1) -> dict | None:
   t = pq.read_table(src, columns=["place_id", "geometry"])
   t0 = time.time()
-  tables = m.collection_membership(t, res_max, workers=workers)
+  warnings: list = []
+  tables = m.collection_membership(t, res_max, workers=workers, warnings=warnings)
   if not any(tb.num_rows for tb in tables.values()):
     return None
   extra = {"slug": row["slug"], "collection_version": row.get("version"), "places_sha256": row["parquet_sha256"],
            "built": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "seconds": round(time.time() - t0, 1),
-           "places": len({p for tb in tables.values() for p in tb.column("place_id").to_pylist()})}
+           "places": len({p for tb in tables.values() for p in tb.column("place_id").to_pylist()}),
+           "warnings": warnings}
   return m.write_membership(tables, out / row["slug"], version=row.get("version") or "", extra=extra)
 
 

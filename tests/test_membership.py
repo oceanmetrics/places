@@ -136,3 +136,88 @@ def test_write_membership_splits_res_6_and_7_by_parent(tmp_path):
   want = {(r["place_id"], f["res"], f["parent"]) for f in man["files"] if f["parent"]
           for r in pq.read_table(tmp_path / f["path"]).to_pylist()}
   assert {(r["place_id"], r["res"], r["parent"]) for r in par} == want and len(par) == len(want)
+
+
+# regressions: noaa_efh, 2026-10-22, "unable to assign free hole to a shell" killed the whole --missing run ----
+
+def bowtie_with_hole(x0=-180.0, y0=0.0):
+  """an invalid polygon (a bowtie, so a self-intersecting shell, with a hole in one lobe) just east of the antimeridian;
+  the cells that cross it are matched against its copy shifted by +360."""
+  return Polygon([(x0, y0), (x0 + 10, y0 + 10), (x0 + 10, y0), (x0, y0 + 10), (x0, y0)],
+                 [[(x0 + 1, y0 + 4), (x0 + 2.5, y0 + 4), (x0 + 2.5, y0 + 6), (x0 + 1, y0 + 6), (x0 + 1, y0 + 4)]])
+
+
+def test_regression_free_hole_antimeridian_lobe(monkeypatch):
+  bow = m.to_plane(bowtie_with_hole())
+  assert not shapely.is_valid(bow)
+  # clip_by_rect hands back such a piece for a valid place; both the piece and its +360 copy must not reach GEOS invalid
+  monkeypatch.setattr(m, "subdivide", lambda g, max_vertices=m.MAX_VERTICES: [bow])
+  cells = np.array(sorted({h3.latlng_to_cell(la, lo, 3) for la in np.arange(-2, 12, 0.5) for lo in np.arange(-185, -165, 0.5)}))
+  polys = m.cell_polygons(cells, 3)
+  shifted = shapely.affinity.translate(bow, xoff=360)  # the lobe as the antimeridian cells see it, x ~ 180..190
+  assert any(shapely.intersects(polys, shifted))
+  with pytest.raises(shapely.errors.GEOSException):  # the bug: the intersection raises on the invalid piece
+    shapely.intersection(polys, np.full(len(polys), shifted, dtype=object))
+  geom = shapely.make_valid(bowtie_with_hole())
+  pieces = m.place_pieces(geom)
+  assert pieces and all(shapely.is_valid(p) for p in pieces)
+  warnings = []
+  out = m.place_membership(geom, res_max=4, min_share=0, warnings=warnings)
+  true = shapely.make_valid(bow).area
+  for res, (cs, shares) in out.items():
+    assert weighted_area(cs, shares, res) == pytest.approx(true, rel=1e-9), res
+  assert warnings == []  # made valid once per place, so no cell needed a fallback
+
+
+def test_a_raising_cell_is_retried_buffered_then_given_the_centre_rule(monkeypatch):
+  g = square(-121, 34, 1.0)
+  clean = dict(zip(*m.place_membership(g, res_max=4, min_share=0)[4]))
+  real = shapely.intersection
+  calls = {"n": 0}
+
+  def raise_once(a, b, **kw):  # the vectorised call raises, then the per-cell retry works
+    calls["n"] += 1
+    if calls["n"] == 1:
+      raise shapely.errors.GEOSException("TopologyException: unable to assign free hole to a shell")
+    return real(a, b, **kw)
+
+  monkeypatch.setattr(shapely, "intersection", raise_once)
+  w1 = []
+  once = dict(zip(*m.place_membership(g, res_max=4, min_share=0, warnings=w1, place_id="t:a")[4]))
+  assert once.keys() == clean.keys() and all(once[c] == pytest.approx(clean[c], abs=1e-9) for c in once)
+
+  def always(a, b, **kw):
+    raise shapely.errors.GEOSException("TopologyException: unable to assign free hole to a shell")
+
+  monkeypatch.setattr(shapely, "intersection", always)
+  w2 = []
+  centre = dict(zip(*m.place_membership(g, res_max=4, min_share=0, warnings=w2, place_id="t:a")[4]))
+  assert set(centre.values()) <= {1.0}  # cells are in or out by their centre
+  assert all(w["place_id"] == "t:a" and "centre-in rule" in w["reason"] and w["cell"] for w in w2)
+  inside = {w["cell"] for w in w2 if "share 1" in w["reason"]}
+  assert inside == set(centre)
+  assert len(w2) > len(centre)  # the dropped cells are listed too
+
+
+def test_one_bad_place_does_not_abort_the_collection(monkeypatch):
+  real = m.cell_shares
+
+  def flaky(cells, res, pieces, tree, warnings=None, place_id=None):
+    if place_id == "t:b":
+      raise shapely.errors.GEOSException("TopologyException: unable to assign free hole to a shell at 201.0 0.8")
+    return real(cells, res, pieces, tree, warnings, place_id)
+
+  monkeypatch.setattr(m, "cell_shares", flaky)
+  t = collection([("t:a", square(-121, 34, 0.5)), ("t:b", square(-110, 20, 0.5)), ("t:c", square(150, -30, 0.2))])
+  warnings = []
+  out = m.collection_membership(t, res_max=4, warnings=warnings)
+  assert set(out[4].column("place_id").to_pylist()) == {"t:a", "t:c"}
+  assert [(w["place_id"], w["cell"]) for w in warnings] == [("t:b", None)]
+  assert "place skipped" in warnings[0]["reason"] and "GEOSException" in warnings[0]["reason"]
+
+
+def test_warnings_are_written_into_membership_json(tmp_path):
+  t = collection([("t:a", square(-121, 34, 0.3))])
+  w = [{"place_id": "t:a", "cell": "8429a1dffffffff", "reason": "x"}]
+  man = m.write_membership(m.collection_membership(t, res_max=4), tmp_path, version="1", extra={"warnings": w})
+  assert json.loads((tmp_path / "h3" / "membership.json").read_text())["warnings"] == w == man["warnings"]

@@ -40,5 +40,5 @@ catalog/h3/
 proto/**/data/
 
 # background H3 membership job (tmux window om:h3)
-h3_missing.log
-h3_missing.done
+h3_missing*.log
+h3_missing*.done

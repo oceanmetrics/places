@@ -13,6 +13,12 @@ cell whose six neighbours are all inside are inside without a test.
 
 antimeridian: places are stored split at +/-180. a cell crossing it is unwrapped to longitudes past 180, and a cell
 around a pole to a band closed along the pole, so every place part is also matched as a copy shifted by +360.
+
+robustness: a valid place can still be cut into invalid pieces (clip_by_rect leaves self-touching rings along its cut),
+and GEOS then raises on the intersection (noaa_efh, 2026-10-22: "unable to assign free hole to a shell"). so the pieces
+are made valid once per place; a cell whose intersection still raises is retried with buffer(0), then given the
+centre-in rule (share 1 when its centre lies in the place, else dropped), and listed in `warnings`. a place that
+fails any other way is skipped with a warning; one place never aborts the collection.
 """
 from __future__ import annotations
 
@@ -26,6 +32,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import shapely
 from shapely import STRtree
+from shapely.errors import GEOSException
 
 MIN_SHARE = 0.01
 RES_MAX = 7
@@ -51,6 +58,16 @@ def _polygons(geom) -> list:
   if geom.geom_type in ("MultiPolygon", "GeometryCollection"):
     return [p for g in geom.geoms for p in _polygons(g)]
   return []
+
+
+def valid_polygons(geoms) -> list:
+  """the polygonal parts of geometries made valid: make_valid may return a collection with lines or points, dropped."""
+  geoms = np.asarray(list(geoms), dtype=object)
+  if not len(geoms):
+    return []
+  bad = ~shapely.is_valid(geoms)
+  geoms[bad] = shapely.make_valid(geoms[bad])
+  return [p for g in geoms for p in _polygons(g) if p.area > 0]
 
 
 def subdivide(geom, max_vertices: int = MAX_VERTICES) -> list:
@@ -83,7 +100,7 @@ def place_pieces(geom) -> list:
   if not parts:
     return []
   g = shapely.union_all(parts)
-  pieces = subdivide(g)
+  pieces = valid_polygons(subdivide(g))  # clip_by_rect can leave invalid rings, so once per place, not per cell
   return pieces + [shapely.affinity.translate(p, xoff=360) for p in pieces]
 
 
@@ -117,15 +134,59 @@ def cell_polygons(cells, res: int) -> np.ndarray:
   return np.array([shapely.Polygon(cell_ring(c, poles)) for c in cells], dtype=object)
 
 
-def cell_shares(cells, res: int, pieces: list, tree: STRtree) -> tuple[np.ndarray, np.ndarray]:
-  """(share of each cell's area inside the place (0..1), each cell's area in the plane)."""
+def _warn(warnings, place_id, cell, reason):
+  if warnings is not None:
+    warnings.append({"place_id": place_id, "cell": cell, "reason": reason})
+
+
+def _overlap_areas(polys, ci, pj, pieces, cells, warnings=None, place_id=None) -> np.ndarray:
+  """area of each (cell, piece) pair's intersection. if GEOS raises, redo pair by pair: retry with both buffered by 0,
+  then the centre-in rule for the cell (all its area when its centre lies in a piece, else none); each is a warning."""
+  ps = np.asarray(pieces, dtype=object)[pj]
+  try:
+    return shapely.area(shapely.intersection(polys[ci], ps))
+  except GEOSException:
+    pass
+  a = np.zeros(len(ci))
+  hard: dict[int, str] = {}  # cell index -> the GEOS message of the failure buffer(0) did not cure
+  soft: dict[int, str] = {}
+  for k, (i, p) in enumerate(zip(ci, ps)):
+    try:
+      a[k] = shapely.area(shapely.intersection(polys[i], p))
+      continue
+    except GEOSException as e:
+      first = str(e)
+    try:
+      a[k] = shapely.area(shapely.intersection(shapely.buffer(polys[i], 0), shapely.buffer(p, 0)))
+      soft[i] = first
+    except GEOSException as e:
+      hard[i] = str(e)
+  for i, msg in soft.items():
+    if i not in hard:
+      _warn(warnings, place_id, str(cells[i]), f"intersection raised ({msg}); recomputed with the cell and place buffered by 0")
+  for i, msg in hard.items():
+    centre = shapely.centroid(polys[i])
+    inside = any(bool(shapely.contains(pieces[j], centre)) for j in pj[ci == i])
+    a[ci == i] = 0
+    if inside:
+      a[np.flatnonzero(ci == i)[0]] = polys[i].area
+    _warn(warnings, place_id, str(cells[i]),
+          f"intersection raised ({msg}) and buffer(0) did not cure it; centre-in rule: {'share 1' if inside else 'dropped'}")
+  return a
+
+
+def cell_shares(cells, res: int, pieces: list, tree: STRtree, warnings: list | None = None,
+                place_id: str | None = None) -> tuple[np.ndarray, np.ndarray]:
+  """(share of each cell's area inside the place (0..1), each cell's area in the plane). `pieces` should be valid
+  (place_pieces makes them so); a cell whose intersection still raises is handled as in _overlap_areas and appended
+  to `warnings` as {place_id, cell, reason}."""
   if not len(cells):
     return np.zeros(0), np.zeros(0)
   polys = cell_polygons(cells, res)
   ci, pj = tree.query(polys)
   inter = np.zeros(len(cells))
   if len(ci):
-    a = shapely.area(shapely.intersection(polys[ci], np.asarray(pieces, dtype=object)[pj]))
+    a = _overlap_areas(polys, ci, pj, pieces, cells, warnings, place_id)
     inter = np.bincount(ci, weights=a, minlength=len(cells))
   area = shapely.area(polys)
   return np.clip(inter / area, 0, 1), area
@@ -133,9 +194,10 @@ def cell_shares(cells, res: int, pieces: list, tree: STRtree) -> tuple[np.ndarra
 
 # the refinement ----
 
-def place_membership(geom, res_max: int = RES_MAX, min_share: float = MIN_SHARE) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+def place_membership(geom, res_max: int = RES_MAX, min_share: float = MIN_SHARE, warnings: list | None = None,
+                     place_id: str | None = None) -> dict[int, tuple[np.ndarray, np.ndarray]]:
   """{res: (cells, shares)} for res 1..res_max, sorted by cell: every cell with share >= min_share or holding
-  >= min_share of the place's area."""
+  >= min_share of the place's area. cells that needed a fallback are appended to `warnings` (see cell_shares)."""
   pieces = place_pieces(geom)
   out: dict[int, tuple[np.ndarray, np.ndarray]] = {}
   if not pieces:
@@ -145,7 +207,7 @@ def place_membership(geom, res_max: int = RES_MAX, min_share: float = MIN_SHARE)
   cand = np.array(sorted(h3.get_res0_cells()))
   deep: list = []  # inside without a test (children of inside cells whose neighbours are all inside)
   for res in range(0, res_max + 1):
-    share, area = cell_shares(cand, res, pieces, tree)
+    share, area = cell_shares(cand, res, pieces, tree, warnings, place_id)
     if res >= 1:
       keep = (share > 0) & ((share >= min_share) | (share * area >= min_share * place_area))
       cells = np.concatenate([np.array(deep, dtype=object), cand[keep].astype(object)])
@@ -170,19 +232,25 @@ def place_membership(geom, res_max: int = RES_MAX, min_share: float = MIN_SHARE)
   return out
 
 
-def _one_place(args) -> tuple[str, dict]:
+def _one_place(args) -> tuple[str, dict, list]:
+  """(place_id, {res: (cells, shares)}, warnings); a place that fails outright is empty, with a warning saying why."""
   pid, wkbs, res_max, min_share = args
-  gs = list(shapely.from_wkb(wkbs))
-  g = gs[0] if len(gs) == 1 else shapely.union_all(gs)
-  return pid, place_membership(g, res_max, min_share)
+  warns: list = []
+  try:
+    gs = list(shapely.from_wkb(wkbs))
+    g = gs[0] if len(gs) == 1 else shapely.union_all(gs)
+    return pid, place_membership(g, res_max, min_share, warns, pid), warns
+  except Exception as e:  # one place must never abort the collection
+    return pid, {}, warns + [{"place_id": pid, "cell": None, "reason": f"place skipped: {type(e).__name__}: {e}"}]
 
 
 def collection_membership(table: pa.Table, res_max: int = RES_MAX, min_share: float = MIN_SHARE,
-                          workers: int = 1) -> dict[int, pa.Table]:
+                          workers: int = 1, warnings: list | None = None) -> dict[int, pa.Table]:
   """{res: table(place_id, h3, share)} for the polygon places of a collection table (place_id + WKB geometry).
 
   rows sorted by place_id, h3; a place may have several rows in the table (components): their geometries are unioned.
-  `workers` > 1 computes places in that many processes (the result is identical).
+  `workers` > 1 computes places in that many processes (the result is identical). cells that needed a fallback, and
+  places skipped after an error, are printed and appended to `warnings` as {place_id, cell, reason}.
   """
   ids = table.column("place_id").to_pylist()
   geoms = shapely.from_wkb(np.array(table.column("geometry").to_pylist(), dtype=object))
@@ -196,15 +264,25 @@ def collection_membership(table: pa.Table, res_max: int = RES_MAX, min_share: fl
     # big places first, so one giant does not start last
     order = sorted(range(len(jobs)), key=lambda i: -sum(len(w) for w in jobs[i][1]))
     with ProcessPoolExecutor(workers) as ex:
-      done = dict(ex.map(_one_place, [jobs[i] for i in order], chunksize=1))
-    results = [(pid, done[pid]) for pid, *_ in jobs]
+      done = {r[0]: r for r in ex.map(_one_place, [jobs[i] for i in order], chunksize=1)}
+    results = [done[pid] for pid, *_ in jobs]
   else:
     results = map(_one_place, jobs)
-  for pid, out in results:
+  found: list = []
+  for pid, out, warns in results:
+    found.extend(warns)
     for res, (cells, shares) in out.items():
       cols[res][0].extend([pid] * len(cells))
       cols[res][1].extend(cells.tolist())
       cols[res][2].extend(shares.tolist())
+  if found:
+    print(f"  warnings: {len(found)} in {len({w['place_id'] for w in found})} place(s)", flush=True)
+    for w in found[:20]:
+      print(f"    {w['place_id']} {w['cell'] or '-'}: {w['reason']}"[:300], flush=True)
+    if len(found) > 20:
+      print(f"    ... {len(found) - 20} more (all in membership.json)", flush=True)
+  if warnings is not None:
+    warnings.extend(found)
   return {r: pa.table({"place_id": c[0], "h3": c[1], "share": c[2]}, schema=SCHEMA) for r, c in cols.items()}
 
 
