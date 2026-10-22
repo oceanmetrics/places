@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { env } from 'cloudflare:test'
 import { handle } from '../src/index'
 import { rollupUsage } from '../src/meter'
-import { CAP_KEY, GOOD_KEY, ORIGIN, PARQUET, PMTILES, get, now, rig, seed } from './helpers'
+import { CAP_KEY, GOOD_KEY, ORIGIN, PARQUET, PMTILES, UNLISTED_PARQUET, get, now, rig, seed } from './helpers'
 
 const LICENSE = '<https://storage.oceanmetrics.io/gazetteer/credits>; rel="license"'
 const run = (r: ReturnType<typeof rig>, req: Request) => handle(req, r.env, now)
@@ -122,6 +122,97 @@ describe('anonymous tier', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*')
     expect(res.headers.get('retry-after')).toBe('60')
     expect((await res.json() as { error: string }).error).toBe('rate_limited')
+  })
+})
+
+describe('unlisted copies (/unlisted/gazetteer/..., UNLISTED bucket)', () => {
+  const U = '/unlisted/gazetteer/mr_eez'
+
+  it('keyless parquet, pmtiles and README: 403 key_required with CORS, no anonymous tier, metered unlisted', async () => {
+    const r = rig()
+    for (const f of ['places.parquet', 'places.pmtiles', 'README.md']) {
+      const res = await run(r, get(`${U}/${f}`, { headers: { range: 'bytes=0-1023', origin: ORIGIN, 'cf-connecting-ip': '203.0.113.9' } }))
+      expect(res.status, f).toBe(403)
+      expect(res.headers.get('access-control-allow-origin')).toBe('*')
+      expect((await res.json() as { error: string }).error).toBe('key_required')
+    }
+    expect(r.limited.anon).toEqual([])
+    expect(r.points.map(p => [p.blobs[2], p.blobs[6], p.doubles[1]])).toEqual([
+      ['unlisted', 'unlisted/gazetteer/mr_eez/places.parquet', 403],
+      ['unlisted', 'unlisted/gazetteer/mr_eez/places.pmtiles', 403],
+      ['unlisted', 'unlisted/gazetteer/mr_eez/README.md', 403],
+    ])
+  })
+
+  it('keyed Range: 206 from the UNLISTED bucket with range headers, Link, echoed origin, metered class unlisted', async () => {
+    const r = rig()
+    const res = await run(r, get(`${U}/places.parquet?key=${GOOD_KEY}`, { headers: { range: 'bytes=0-1023', origin: ORIGIN } }))
+    expect(res.status).toBe(206)
+    expect(res.headers.get('content-range')).toBe('bytes 0-1023/30000')
+    expect(res.headers.get('content-length')).toBe('1024')
+    expect(res.headers.get('accept-ranges')).toBe('bytes')
+    expect(res.headers.get('etag')).toMatch(/^"[0-9a-f]+"$/)
+    expect(res.headers.get('link')).toBe(LICENSE)
+    expect(res.headers.get('content-type')).toBe('application/vnd.apache.parquet')
+    expect(res.headers.get('access-control-allow-origin')).toBe(ORIGIN)
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(UNLISTED_PARQUET.slice(0, 1024))
+    expect(r.points[0].indexes).toEqual([GOOD_KEY])
+    expect(r.points[0].blobs).toEqual([GOOD_KEY, 'erddap-places', 'unlisted', ORIGIN, 'free', 'GET', 'unlisted/gazetteer/mr_eez/places.parquet'])
+    expect(r.points[0].doubles).toEqual([1024, 206])
+  })
+
+  it('keyed HEAD + Range: bytes=0- is 206 with full length; ETag If-None-Match is 304', async () => {
+    const r = rig()
+    const k = `${U}/places.pmtiles?key=${GOOD_KEY}`
+    const head = await run(r, get(k, { method: 'HEAD', headers: { range: 'bytes=0-' } }))
+    expect(head.status).toBe(206)
+    expect(head.headers.get('content-range')).toBe('bytes 0-9999/10000')
+    expect(await head.text()).toBe('')
+    const nm = await run(r, get(k, { headers: { 'if-none-match': head.headers.get('etag')! } }))
+    expect(nm.status).toBe(304)
+  })
+
+  it('wrong key or wrong Origin: 403 invalid_key / origin_not_allowed, as on the public archives', async () => {
+    const r = rig()
+    const bad = await run(r, get(`${U}/places.parquet?key=WRONGKEY123456`, { headers: { range: 'bytes=0-9' } }))
+    expect(bad.status).toBe(403)
+    expect((await bad.json() as { error: string }).error).toBe('invalid_key')
+    const wo = await run(r, get(`${U}/places.parquet?key=${GOOD_KEY}`, { headers: { range: 'bytes=0-9', origin: 'https://evil.example.com' } }))
+    expect(wo.status).toBe(403)
+    expect((await wo.json() as { error: string }).error).toBe('origin_not_allowed')
+  })
+
+  it('keyless /unlisted/gazetteer/index/unlisted.json: 200, open tier, class unlisted', async () => {
+    const r = rig({ anonOk: false })
+    const res = await run(r, get('/unlisted/gazetteer/index/unlisted.json'))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ collections: [{ slug: 'mr_eez' }] })
+    expect(res.headers.get('access-control-allow-origin')).toBe('*')
+    expect(r.limited.anon).toEqual([])
+    expect(r.points[0].blobs.slice(2, 5)).toEqual(['unlisted', '', 'open'])
+  })
+
+  it('the two buckets do not leak into each other; public paths unchanged', async () => {
+    const r = rig()
+    // the public bucket has no mr_eez data, the unlisted bucket has no mpa
+    const pub = await run(r, get(`/gazetteer/mr_eez/places.parquet?key=${GOOD_KEY}`, { headers: { range: 'bytes=0-9' } }))
+    expect(pub.status).toBe(404)
+    const unl = await run(r, get(`/unlisted/gazetteer/mpa/places.parquet?key=${GOOD_KEY}`, { headers: { range: 'bytes=0-9' } }))
+    expect(unl.status).toBe(404)
+    const anon = await run(r, get('/gazetteer/mpa/places.parquet', { headers: { range: 'bytes=0-99' } }))
+    expect(anon.status).toBe(206)
+    expect(new Uint8Array(await anon.arrayBuffer())).toEqual(PARQUET.slice(0, 100))
+    expect(r.points.map(p => p.blobs[2])).toEqual(['parquet', 'unlisted', 'parquet'])
+    expect(r.points[2].blobs[4]).toBe('anonymous')
+  })
+
+  it('un-ranged unlisted parquet over the threshold: 200 with the full-file warning, class stays unlisted', async () => {
+    const r = rig({ FULLFILE_BYTES: '10000' })
+    const res = await run(r, get(`${U}/places.parquet?key=${GOOD_KEY}`))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-om-warn')).toContain('full-file-read')
+    expect((await res.arrayBuffer()).byteLength).toBe(30000)
+    expect(r.points[0].blobs[2]).toBe('unlisted')
   })
 })
 
@@ -296,5 +387,11 @@ describe('through the real worker entrypoint (wrangler.toml bindings)', () => {
     const bad = await SELF.fetch(`${url}x`)
     expect(bad.status).toBe(403)
     expect(bad.headers.get('access-control-allow-origin')).toBe('*')
+    const unl = await SELF.fetch('https://storage.oceanmetrics.io/unlisted/gazetteer/mr_eez/places.parquet', { headers: { range: 'bytes=0-1023' } })
+    expect(unl.status).toBe(403)
+    const unlKeyed = await SELF.fetch(`https://storage.oceanmetrics.io/unlisted/gazetteer/mr_eez/places.parquet?key=${GOOD_KEY}`, { headers: { range: 'bytes=0-1023' } })
+    expect(unlKeyed.status).toBe(206)
+    expect(unlKeyed.headers.get('content-range')).toBe('bytes 0-1023/30000')
+    await unlKeyed.arrayBuffer()
   })
 })

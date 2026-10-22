@@ -1,7 +1,7 @@
 // gazetteer front: keys, CORS, ranges, metering over the R2 bucket ----
 import type { Env, KeyConfig } from './env'
 import { applyCors, originAllowed } from './cors'
-import { classify, guessContentType, LICENSE_LINK, objectKey } from './paths'
+import { classify, guessContentType, LICENSE_LINK, target } from './paths'
 import { parseRange, preconditionStatus, resolveRange, type ByteRange } from './range'
 import { evaluateCap, getUsage, rollupUsage, secondsToNextMonth, writeMetric, type Metric } from './meter'
 
@@ -35,11 +35,14 @@ export async function handle(request: Request, env: Env, now: Date = new Date())
     return err(405, { error: 'method_not_allowed', message: 'GET, HEAD and OPTIONS only' }, { allow: 'GET, HEAD, OPTIONS' })
   }
 
-  const objKey = objectKey(url.pathname)
-  if (!objKey) return err(404, { error: 'not_found', message: 'paths are served under /gazetteer/' })
-  m.path = objKey
+  const t = target(url.pathname)
+  if (!t) return err(404, { error: 'not_found', message: 'paths are served under /gazetteer/' })
+  const objKey = t.key
+  const bucket = t.store === 'unlisted' ? env.UNLISTED : env.BUCKET
+  m.path = t.store === 'unlisted' ? `unlisted/${objKey}` : objKey
+  if (!bucket) return err(404, { error: 'not_found' })
 
-  const { cls, gated } = classify(objKey)
+  const { cls, gate } = classify(objKey, t.store)
   m.cls = cls
 
   // key resolution ----
@@ -51,12 +54,16 @@ export async function handle(request: Request, env: Env, now: Date = new Date())
   const usable = cfg !== null && !cfg.disabled
 
   let usageHeader = ''
-  if (!gated) {
+  if (gate === 'open') {
     // keyless content: a valid key only attributes the request, a bad or stale key is ignored (never a 403)
     if (usable) {
       m.key = keyId; m.app = cfg!.app; m.tier = cfg!.tier ?? 'free'
       if (origin && originAllowed(origin, cfg!.origins)) allowOrigin = origin
     }
+  } else if (!keyId && gate === 'key') {
+    // unlisted copies: no anonymous tier
+    return err(403, { error: 'key_required',
+      message: 'this path needs ?key=<your key> (see https://storage.oceanmetrics.io/gazetteer/credits)' })
   } else if (!keyId) {
     // anonymous tier: low rate limit instead of a 403, so existing keyless apps keep working
     m.tier = 'anonymous'
@@ -93,7 +100,7 @@ export async function handle(request: Request, env: Env, now: Date = new Date())
   }
 
   // object (serve() reclassifies m.cls to `fullfile` for a flagged un-ranged parquet read) ----
-  const served = await serve(request, env, objKey, m)
+  const served = await serve(request, bucket, objKey, m, env)
   if (usageHeader) served.res.headers.set('x-om-usage', usageHeader)
   return finish(served.res, served.bytes)
 
@@ -124,12 +131,12 @@ function unsatisfiable(size: number): Served {
   return { res: new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}`, 'accept-ranges': 'bytes' } }), bytes: 0 }
 }
 
-async function serve(request: Request, env: Env, objKey: string, m: Metric): Promise<Served> {
+async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metric, env: Env): Promise<Served> {
   const isHead = request.method === 'HEAD'
   const range  = parseRange(request.headers.get('range'))
 
   if (isHead) {
-    const obj = await env.BUCKET.head(objKey)
+    const obj = await bucket.head(objKey)
     if (!obj) return notFound()
     const h = baseHeaders(obj, objKey)
     const pre = preconditionStatus(request.headers, obj.httpEtag)
@@ -147,10 +154,10 @@ async function serve(request: Request, env: Env, objKey: string, m: Metric): Pro
 
   let obj: R2Object | R2ObjectBody | null
   try {
-    obj = await env.BUCKET.get(objKey, { onlyIf: request.headers, ...(range ? { range: toR2Range(range) } : {}) })
+    obj = await bucket.get(objKey, { onlyIf: request.headers, ...(range ? { range: toR2Range(range) } : {}) })
   } catch (e) {
     if (!range) throw e
-    const head = await env.BUCKET.head(objKey)
+    const head = await bucket.head(objKey)
     if (!head) return notFound()
     return unsatisfiable(head.size)
   }
@@ -175,9 +182,10 @@ async function serve(request: Request, env: Env, objKey: string, m: Metric): Pro
   }
 
   // un-ranged: the duckdb-wasm >= 1.30 whole-file signature is observable, not blocked
+  // (an unlisted parquet keeps its `unlisted` class but gets the same warning)
   const limit = Number(env.FULLFILE_BYTES ?? FULLFILE_DEFAULT)
-  if (m.cls === 'parquet' && obj.size > limit) {
-    m.cls = 'fullfile'
+  if ((m.cls === 'parquet' || (m.cls === 'unlisted' && objKey.toLowerCase().endsWith('.parquet'))) && obj.size > limit) {
+    if (m.cls === 'parquet') m.cls = 'fullfile'
     h.set('x-om-warn', 'full-file-read; send a Range header (duckdb-wasm >=1.30: db.open({filesystem:{forceFullHTTPReads:false}}))')
   }
   h.set('content-length', String(obj.size))

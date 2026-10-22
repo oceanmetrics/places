@@ -1,17 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import { originAllowed } from '../src/cors'
-import { classify, objectKey } from '../src/paths'
+import { classify, objectKey, target } from '../src/paths'
 import { parseRange, preconditionStatus, resolveRange } from '../src/range'
 import { evaluateCap, monthLabel } from '../src/meter'
 
 describe('paths', () => {
-  it('classifies by extension; only parquet/pmtiles outside index/ are gated', () => {
-    expect(classify('gazetteer/catalog.json')).toEqual({ cls: 'stac', gated: false })
-    expect(classify('gazetteer/a/b.parquet')).toEqual({ cls: 'parquet', gated: true })
-    expect(classify('gazetteer/a/b.PMTILES')).toEqual({ cls: 'pmtiles', gated: true })
-    expect(classify('gazetteer/index/crosswalk.parquet')).toEqual({ cls: 'parquet', gated: false })
-    expect(classify('gazetteer/README.md')).toEqual({ cls: 'other', gated: false })
-    expect(classify('gazetteer/a/b.thumb.jpg')).toEqual({ cls: 'other', gated: false })
+  it('classifies by extension; only parquet/pmtiles outside index/ fall to the anonymous tier', () => {
+    expect(classify('gazetteer/catalog.json')).toEqual({ cls: 'stac', gate: 'open' })
+    expect(classify('gazetteer/a/b.parquet')).toEqual({ cls: 'parquet', gate: 'anonymous' })
+    expect(classify('gazetteer/a/b.PMTILES')).toEqual({ cls: 'pmtiles', gate: 'anonymous' })
+    expect(classify('gazetteer/index/crosswalk.parquet')).toEqual({ cls: 'parquet', gate: 'open' })
+    expect(classify('gazetteer/README.md')).toEqual({ cls: 'other', gate: 'open' })
+    expect(classify('gazetteer/a/b.thumb.jpg')).toEqual({ cls: 'other', gate: 'open' })
+  })
+  it('unlisted: class unlisted, every path needs a key except gazetteer/index/', () => {
+    expect(classify('gazetteer/mr_eez/places.parquet', 'unlisted')).toEqual({ cls: 'unlisted', gate: 'key' })
+    expect(classify('gazetteer/mr_eez/README.md', 'unlisted')).toEqual({ cls: 'unlisted', gate: 'key' })
+    expect(classify('gazetteer/index/unlisted.json', 'unlisted')).toEqual({ cls: 'unlisted', gate: 'open' })
+  })
+  it('routes /unlisted/gazetteer/... to the unlisted bucket with the same key layout', () => {
+    expect(target('/gazetteer/a/b.json')).toEqual({ store: 'public', key: 'gazetteer/a/b.json' })
+    expect(target('/unlisted/gazetteer/mr_eez/places.parquet')).toEqual({ store: 'unlisted', key: 'gazetteer/mr_eez/places.parquet' })
+    expect(objectKey('/unlisted/gazetteer/mr_eez/places.parquet')).toBeNull()
+    for (const p of ['/unlisted/', '/unlisted/x.json', '/unlisted/gazetteer/../x', '/unlisted/unlisted/gazetteer/a.json']) expect(target(p), p).toBeNull()
   })
   it('rejects paths outside gazetteer/, traversal and directory paths', () => {
     expect(objectKey('/gazetteer/a/b.json')).toBe('gazetteer/a/b.json')

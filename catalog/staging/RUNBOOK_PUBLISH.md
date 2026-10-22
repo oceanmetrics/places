@@ -152,3 +152,33 @@ pulled `catalog/pub/<slug>/` and its ledger, copies the staged assets over it, r
 would otherwise auto-create a patch version) and runs `portolan version bump`, so the ledger ends at the new version exactly once.
 Refuses when the pulled ledger already has that version. Then rebuild index/ and layers.json (step 4; the manifest is published at
 `index/layers.json`, the client falls back to the root `layers.json`) and upload as in step 3.
+
+## Unlisted copies (Marine Regions GeoParquet + PMTiles, since 2026-10-22)
+
+The reference collections (`mr_*`, and `fao_high_seas` derived from `mr_high_seas`) are never uploaded by
+`publish_collections.sh`. Their full-resolution `places.parquet` and `places.pmtiles` go to the second R2 bucket
+`oceanmetrics-io-unlisted` instead, same key layout (`gazetteer/<slug>/places.parquet`, `places.pmtiles`, `provenance.json`,
+`README.md`), plus `gazetteer/index/unlisted.json` (slug, version, credit, the two hrefs relative to that file, rows). The
+contract is Ben's email to VLIZ of 2026-10-22 (notes `om/om_2026-10.md`, "VLIZ email sent"): one copy per release, unlisted,
+not offered for download, credit and DOI on every map, the public layers stay on VLIZ's raster tiles. Nothing in the public
+catalog, `layers.json` or the index links to them; the Worker serves them at `/unlisted/gazetteer/<slug>/...` with a key only
+(`worker/README.md`). `fao_high_seas` has no PMTiles by design.
+
+Per release, on the build machine (the files never enter the repo):
+
+```sh
+ST=/Volumes/msens_big/_big/oceanmetrics/unlisted_stage    # README.md + provenance.json + index/unlisted.json, outside the repo
+R=~/.config/oceanmetrics/rclone-r2.sh
+# provenance.json: the published one (its sha256 is the internal collection.json's `provenance` asset checksum)
+for s in $(ls ~/data/oceanmetrics/places-internal); do $R copyto r2:oceanmetrics-io-public/gazetteer/$s/provenance.json $ST/gazetteer/$s/provenance.json; done
+python3 -I $ST/stage_unlisted.py $ST                       # READMEs + index/unlisted.json; asserts DuckDB rows == provenance record_count
+$R copy $ST/gazetteer r2:oceanmetrics-io-unlisted/gazetteer --s3-no-check-bucket
+$R copy ~/data/oceanmetrics/places-internal r2:oceanmetrics-io-unlisted/gazetteer --s3-no-check-bucket \
+  --include '*/places.parquet' --header-upload 'Content-Type: application/vnd.apache.parquet'
+$R copy ~/data/oceanmetrics/places-internal r2:oceanmetrics-io-unlisted/gazetteer --s3-no-check-bucket --include '*/places.pmtiles'
+$R check ~/data/oceanmetrics/places-internal r2:oceanmetrics-io-unlisted/gazetteer --one-way --include '*/places.parquet' --include '*/places.pmtiles'
+```
+
+rclone sets `.json` and `.md` content types from the extension but not `.parquet`, hence the `--header-upload`. Check:
+`curl -sI '<worker>/unlisted/gazetteer/mr_eez/places.parquet?key=<id>' -H 'Range: bytes=0-1023'` is 206 and the same without
+the key is 403 `key_required`. Any change VLIZ asks for (credit wording, maximum zoom) is applied at the next upload.

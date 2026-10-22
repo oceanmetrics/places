@@ -4,6 +4,8 @@
 export interface Env {
   /** R2 bucket holding the `gazetteer/...` key layout */
   BUCKET: R2Bucket
+  /** R2 bucket of unlisted copies (same `gazetteer/...` layout), served at `/unlisted/gazetteer/...` with a key only */
+  UNLISTED: R2Bucket
   /** KV: `key:<id>` -> KeyConfig (JSON); `usage:<id>:<YYYY-MM>` -> bytes this month (written by the rollup) */
   KEYS: KVNamespace
   /** Analytics Engine dataset, one data point per request */

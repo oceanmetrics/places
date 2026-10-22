@@ -21,6 +21,10 @@ waits on the DNS cutover.** Steps that need the account or DNS are marked **BEN-
 | key at or over its monthly byte cap | 429 JSON `{error:"monthly_cap_exceeded", key, cap_bytes, used_bytes}`, `Retry-After` to the start of next UTC month |
 | key at or over `soft_pct` (default 80 %) of its cap | served, with `X-OM-Usage: used=...; cap=...; pct=...; state=soft` |
 | un-ranged GET of a parquet over `FULLFILE_BYTES` (16 MiB) | 200 (not blocked), metric class `fullfile`, `X-OM-Warn: full-file-read ...` |
+| `/unlisted/gazetteer/<slug>/...` (any file) with a valid `?key=` | served from the `UNLISTED` bucket (`oceanmetrics-io-unlisted`, same `gazetteer/...` key layout) with the same key, Origin, cap, Range/HEAD/ETag/CORS and `Link` rules as the public archives; metric class `unlisted`, object path `unlisted/gazetteer/...` |
+| same, no key | **no anonymous tier**: 403 JSON `key_required` (with CORS) |
+| same, wrong key or Origin | 403 `invalid_key` / `origin_not_allowed`, as above |
+| `/unlisted/gazetteer/index/unlisted.json` (anything under `unlisted/gazetteer/index/`) | keyless, like the public index; metric class `unlisted` |
 
 HTTP details: single `Range` honoured with 206 + `Content-Range`/`Content-Length`/`Accept-Ranges` (R2 range reads;
 multi-range and malformed `Range` are ignored per RFC 9110, giving a 200); suffix and open-ended ranges; 416 with
@@ -41,7 +45,7 @@ One Analytics Engine data point per request (every response, errors included):
 | field | content |
 |---|---|
 | `index1` | key id, or `anon` |
-| `blob1`..`blob7` | key id (`''` if keyless), app, class (`stac`/`parquet`/`pmtiles`/`other`/`fullfile`), Origin, tier (`anonymous`, `open` for keyless content, else the key's tier), method, object path |
+| `blob1`..`blob7` | key id (`''` if keyless), app, class (`stac`/`parquet`/`pmtiles`/`other`/`fullfile`/`unlisted`), Origin, tier (`anonymous`, `open` for keyless content, else the key's tier), method, object path (prefixed `unlisted/` for the unlisted bucket) |
 | `double1`, `double2` | response bytes (the declared body length: a ranged GET is its range, HEAD/304/errors are 0), HTTP status |
 
 Bytes are charged when the response starts, not when the body finishes, so an aborted download over-counts slightly.
@@ -57,7 +61,7 @@ Consequence: a cap is enforced with up to ~15 minutes of lag, and it is a billin
 ```sh
 cd worker
 npm install
-npm test            # vitest + @cloudflare/vitest-plugin (workerd via miniflare), 31 tests
+npm test            # vitest + @cloudflare/vitest-plugin (workerd via miniflare), 40 tests
 npm run typecheck
 ```
 
@@ -75,6 +79,10 @@ where the default temp dir is read-only, run with `TMPDIR=<writable dir> npm tes
    object `Content-Type` as you copy (`.parquet`, `.pmtiles`, `.json`); the Worker falls back to an extension guess. Upload
    `gazetteer/credits` (the licence/credits page the Link header points to). Do not add public access or CORS rules to the
    bucket: the Worker is the only reader.
+   Second bucket `oceanmetrics-io-unlisted` (created 2026-10-22, binding `UNLISTED`): the unlisted Marine Regions copies
+   (`gazetteer/<slug>/places.parquet`, `places.pmtiles`, `provenance.json`, `README.md`, and `gazetteer/index/unlisted.json`),
+   uploaded per release with rclone as in `catalog/staging/RUNBOOK_PUBLISH.md` "Unlisted copies" (parquet with
+   `--header-upload 'Content-Type: application/vnd.apache.parquet'`). Same rule: no public access, the Worker is the only reader.
 4. **BEN-DOES** KV: `npx wrangler kv namespace create KEYS`, paste the printed id over `REPLACE_WITH_KV_NAMESPACE_ID` in
    `wrangler.toml`.
 5. **BEN-DOES** Analytics Engine: enable it for the account (dashboard, Workers > Analytics Engine); the dataset
@@ -90,7 +98,8 @@ where the default temp dir is read-only, run with `TMPDIR=<writable dir> npm tes
 9. **BEN-DOES** Production route once DNS is in Cloudflare: uncomment `routes` in `wrangler.toml`
    (`storage.oceanmetrics.io/*`), deploy, then retire the Caddy VM after a week.
 10. Smoke test (replace the key): `curl -sI -H 'Range: bytes=0-' 'https://storage.oceanmetrics.io/gazetteer/<collection>/places.parquet?key=<id>'`
-    should be `206` with `Content-Range`. Client reminder from the spike: duckdb-wasm >= 1.30 must open with
+    should be `206` with `Content-Range`. Unlisted: `curl -sI -H 'Range: bytes=0-1023' '<url>/unlisted/gazetteer/mr_eez/places.parquet?key=<id>'`
+    is `206`, and `403` (`key_required`) without the key. Client reminder from the spike: duckdb-wasm >= 1.30 must open with
     `db.open({filesystem:{forceFullHTTPReads:false}})` or it downloads whole files (these show up as `fullfile`).
 
 ## Minting keys

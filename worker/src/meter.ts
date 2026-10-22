@@ -36,8 +36,8 @@ export async function getUsage(env: Env, id: string, now: Date): Promise<number>
 
 /** one request's metric row. Analytics Engine layout (keep in step with the rollup SQL and the README):
  *    index1  key id, or `anon`
- *    blob1   key id ('' when keyless)   blob2 app   blob3 path class (stac|parquet|pmtiles|other|fullfile)
- *    blob4   origin                     blob5 tier (anonymous|open|<key tier>)   blob6 method   blob7 object path
+ *    blob1   key id ('' when keyless)   blob2 app   blob3 path class (stac|parquet|pmtiles|other|fullfile|unlisted)
+ *    blob4   origin                     blob5 tier (anonymous|open|<key tier>)   blob6 method   blob7 object path (`unlisted/` prefixed for the unlisted bucket)
  *    double1 response bytes             double2 http status */
 export interface Metric {
   key:    string
