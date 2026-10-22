@@ -45,7 +45,7 @@ ROW_GROUP = 5000
 INDEX_VERSION = "1.0.0"
 
 # schemas (plain utf8/double so hyparquet can range-read them) ----
-# the client fixture client/test/fixtures/index/places_index.parquet must mirror this schema (see make_fixtures.sh)
+# the client fixture platform/packages/places/test/fixtures/index/places_index.parquet (oceanmetrics/platform) must mirror this schema (see make_fixtures.sh)
 BBOX_T = pa.struct([("xmin", pa.float64()), ("ymin", pa.float64()), ("xmax", pa.float64()), ("ymax", pa.float64())])
 INDEX_SCHEMA = pa.schema([
   ("place_id", pa.string()), ("name", pa.string()), ("authority", pa.string()), ("place_type", pa.string()),

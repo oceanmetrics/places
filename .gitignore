@@ -20,7 +20,7 @@ catalog/**/.portolan/
 *.thumb.jpg
 changed.json
 
-# node (web/, client/)
+# node (web/, worker/)
 node_modules/
 dist/
 

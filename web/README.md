@@ -2,8 +2,9 @@
 
 The website at places.oceanmetrics.io: search the places index, browse layers on a map, and read the licence and
 citation of everything on screen. Svelte 5 + Vite + TypeScript + MapLibre GL + pmtiles, a static SPA with
-client-side routing. Data comes from the sibling [`client/`](../client/README.md) package (`@oceanmetrics/places`),
-which reads `layers.json`, the places index, GeoParquet and PMTiles straight from object storage.
+client-side routing. Data comes from the `@oceanmetrics/places` client (since 2026-10-22 in
+[oceanmetrics/platform `packages/places`](https://github.com/oceanmetrics/platform/tree/main/packages/places), a sibling checkout
+linked locally until the npm publish on Day 5, 2026-10-26), which reads `layers.json`, the places index, GeoParquet and PMTiles straight from object storage.
 
 | route | page |
 |---|---|
@@ -17,7 +18,8 @@ which reads `layers.json`, the places index, GeoParquet and PMTiles straight fro
 
 ```sh
 cd web
-npm install          # links ../client as @oceanmetrics/places (used from its TypeScript source, no client build needed)
+npm install          # links ../../platform/packages/places as @oceanmetrics/places (its TypeScript source, no client build needed);
+                     # needs a checkout of oceanmetrics/platform next to this repo, with `npm install` run at its root
 npm run dev          # http://localhost:5180
 npm test             # vitest: URL grammar codec (round trips) and pure helpers
 npm run check        # svelte-check
@@ -28,7 +30,7 @@ If vitest cannot create its temp dir in a sandbox, set `TMPDIR` to a writable di
 
 Data base URL: `https://storage.oceanmetrics.io/gazetteer/` by default; override at build time with
 `VITE_PLACES_BASE=https://…/` or at run time with `?base=https://…/` (internal links keep it). To develop offline, serve
-`client/test/fixtures/` with CORS and Range support and use `?base=http://127.0.0.1:<port>/`.
+`platform/packages/places/test/fixtures/` with CORS and Range support and use `?base=http://127.0.0.1:<port>/`.
 
 Everything degrades: when `index/layers.json` or the places index is not published the page shows a notice and still
 renders (search falls back to filtering the layer list; a layer whose tiles are missing is flagged, not fatal).
@@ -37,7 +39,7 @@ renders (search falls back to filtering the layer list; a layer whose tiles are 
 ## Deploy
 
 **Live now at <https://oceanmetrics.io/places/>** via GitHub Pages (`.github/workflows/pages.yml`: on push to `main`
-touching `web/` or `client/`, it checks, tests, builds with `--base=/places/` and deploys; `404.html` is a copy of
+touching `web/`, it checks out oceanmetrics/platform next to this repo, checks, tests, builds with `--base=/places/` and deploys; `404.html` is a copy of
 `index.html`, the SPA fallback). The app base is `import.meta.env.BASE_URL` (`APP_BASE` in `lib/helpers.ts`): routes
 are matched and internal links written under it, so the same build runs at `/` (dev, Workers) and `/places/` (Pages).
 

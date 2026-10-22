@@ -8,7 +8,7 @@
     "allowJs": true,
     "checkJs": false,
     "moduleDetection": "force",
-    "paths": { "@oceanmetrics/places": ["../client/src/index.ts"] }
+    "paths": { "@oceanmetrics/places": ["../../platform/packages/places/src/index.ts"] }
   },
   "include": ["src/**/*.ts", "src/**/*.svelte"]
 }

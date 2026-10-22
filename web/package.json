@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@oceanmetrics/places": "file:../client",
+    "@oceanmetrics/places": "file:../../platform/packages/places",
     "maplibre-gl": "^5.24.0",
     "pmtiles": "^4.5.0"
   },

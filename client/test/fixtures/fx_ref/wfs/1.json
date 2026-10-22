@@ -1,5 +1,0 @@
-{"type":"FeatureCollection","features":[
- {"type":"Feature","properties":{"mrgid":1,"geoname":"First fixture zone","pol_type":"200NM"},
-  "geometry":{"type":"Polygon","coordinates":[[[-40,-40],[-30,-40],[-30,-30],[-40,-30],[-40,-40]]]}},
- {"type":"Feature","properties":{"mrgid":1,"geoname":"First fixture zone"},
-  "geometry":{"type":"Polygon","coordinates":[[[-29,-40],[-28,-40],[-28,-39],[-29,-39],[-29,-40]]]}}]}

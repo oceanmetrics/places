@@ -6,7 +6,7 @@ name: pages
 on:
   push:
     branches: [main]
-    paths: ['web/**', 'client/**', '.github/workflows/pages.yml']
+    paths: ['web/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -22,33 +22,42 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # until Day 5 (2026-10-26) the client is a file: link to a sibling checkout of oceanmetrics/platform
+      # (web/package.json -> ../../platform/packages/places), so both repos sit side by side in the workspace
       - uses: actions/checkout@v4
+        with:
+          path: places
+      - uses: actions/checkout@v4
+        with:
+          repository: oceanmetrics/platform
+          ref: main
+          path: platform
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: |
-            web/package-lock.json
-            client/package-lock.json
-      # web/ imports the client from ../client/src (vite alias), so the client's own deps must be installed
+            places/web/package-lock.json
+            platform/package-lock.json
+      # web/ imports the client from platform/packages/places/src (vite alias), so the platform's deps must be installed
       - run: npm ci
-        working-directory: client
+        working-directory: platform
       - run: npm ci
-        working-directory: web
+        working-directory: places/web
       - run: npm run check
-        working-directory: web
+        working-directory: places/web
       - run: npm run test
-        working-directory: web
+        working-directory: places/web
       - run: npm run build -- --base=/places/
-        working-directory: web
+        working-directory: places/web
       # SPA fallback: GitHub Pages serves 404.html for unknown paths (/places/p/NMS:PMNM, /places/credits)
-      - run: cp web/dist/index.html web/dist/404.html
+      - run: cp places/web/dist/index.html places/web/dist/404.html
       - uses: actions/configure-pages@v5
         with:
           enablement: true   # first run creates the Pages site (workflow build type)
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web/dist
+          path: places/web/dist
 
   deploy:
     needs: build

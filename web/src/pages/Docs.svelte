@@ -56,7 +56,7 @@
   <h2>JavaScript client</h2>
   <pre>import {'{'} listLayers, addLayer, search, getPlace, creditsFor {'}'} from '@oceanmetrics/places'</pre>
   <p>The client lists layers, draws them on a MapLibre map, searches the index, fetches one place and builds the credit line. See the
-    <a href="{REPO_URL}/tree/main/client">client README</a>.</p>
+    <a href="https://github.com/oceanmetrics/platform/tree/main/packages/places">client README</a>.</p>
 
   <h2>Source and rules</h2>
   <p>Code, sources and the licence tiers are in the repository: <a href={REPO_URL}>{REPO_URL}</a>.</p>
