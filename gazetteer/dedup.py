@@ -25,11 +25,14 @@ PLACEHOLDER = re.compile(r"^(no common name|unnamed|unknown|no name|n/?a)\b")
 # then layers that re-use other agencies' boundaries (1: the MPA Inventory, ProtectedSeas Navigator; HAPCs drawn on
 # sanctuary lines), then
 # legacy copies (2: erddap-places' `places`). an app can override it (client `search({ group, prefer })`).
-SEARCH_RANK = {"mpa_inventory": 1, "noaa_hapc": 1, "protectedseas_navigator": 1, "places": 2}
+SEARCH_RANK = {"mpa_inventory": 1, "noaa_hapc": 1, "places": 2}
+SEARCH_RANK_PREFIX = {"protectedseas_": 1}  # the Navigator groups (protectedseas_mpa, _fisheries ...; split 2026-10-20)
 
 
 def search_rank(slug: str) -> int:
-  return SEARCH_RANK.get(slug, 0)
+  if slug in SEARCH_RANK:
+    return SEARCH_RANK[slug]
+  return next((r for pre, r in SEARCH_RANK_PREFIX.items() if slug.startswith(pre)), 0)
 
 
 def norm_name(s: str | None) -> str:

@@ -166,7 +166,9 @@ def test_local_rows_take_created_from_the_published_ledger(tmp_path):
 def test_search_rank_puts_the_agency_layer_before_aggregators_and_legacy_copies():
   rank = lambda slug: bl.layer_row({**COLL, "id": slug})["search_rank"]
   assert (rank("noaa_sanctuaries"), rank("mpa_inventory"), rank("noaa_hapc"), rank("places")) == (0, 1, 1, 2)
-  assert rank("protectedseas_navigator") == 1 and rank("mr_eez") == 0
+  assert rank("protectedseas_mpa") == 1 and rank("mr_eez") == 0
+  # regression: the rank named the retired protectedseas_navigator, so its six groups ranked with the agency layers
+  assert {rank(f"protectedseas_{g}") for g in ("mpa", "fisheries", "jurisdiction", "vessel", "human_use", "other")} == {1}
 
 
 def test_legacy_places_layer_gets_a_real_title_regression():
