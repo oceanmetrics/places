@@ -19,6 +19,11 @@ and GEOS then raises on the intersection (noaa_efh, 2026-10-22: "unable to assig
 are made valid once per place; a cell whose intersection still raises is retried with buffer(0), then given the
 centre-in rule (share 1 when its centre lies in the place, else dropped), and listed in `warnings`. a place that
 fails any other way is skipped with a warning; one place never aborts the collection.
+
+memory: a big layer (protectedseas_fisheries, 2026-10-22) has more rows at res 7 than one Arrow string column can hold
+(2 GB of offsets), so the rows are never one table. `Membership` keeps each place's cells as uint64 H3 indexes and shares
+as float32 (12 bytes a row), and the files are written from it a partition at a time, the strings made per block of
+BLOCK_ROWS rows.
 """
 from __future__ import annotations
 
@@ -41,6 +46,9 @@ MAX_VERTICES = 256         # a place is cut into pieces of at most this many ver
 INSIDE = 1 - 1e-9
 
 SCHEMA = pa.schema([("place_id", pa.string()), ("h3", pa.string()), ("share", pa.float32())])
+
+ROW_GROUP = 65536          # rows per Parquet row group
+BLOCK_ROWS = 1 << 20       # rows turned into Arrow strings at a time: a string column holds 2 GB at most, and a layer has far more rows
 
 
 # geometry in the equal-area plane ----
@@ -232,21 +240,138 @@ def place_membership(geom, res_max: int = RES_MAX, min_share: float = MIN_SHARE,
   return out
 
 
+# the compact store ----
+
+_HEX = np.frombuffer(b"0123456789abcdef", dtype=np.uint8)
+_NIBBLES = np.arange(56, -1, -4, dtype=np.uint64)  # the 15 hex digits of a cell index (the top nibble is always 0)
+
+
+def cells_to_u64(cells) -> np.ndarray:
+  return np.array([h3.str_to_int(c) for c in cells], dtype=np.uint64)
+
+
+def u64_to_cells(cells: np.ndarray) -> pa.Array:
+  """H3 indexes -> an Arrow string array of their 15 hex digits (what h3.int_to_str gives), without a Python loop."""
+  cells = np.asarray(cells, dtype=np.uint64)
+  n = len(cells)
+  chars = np.ascontiguousarray(_HEX[((cells[:, None] >> _NIBBLES) & np.uint64(15)).astype(np.uint8)])
+  offsets = np.arange(n + 1, dtype=np.int32) * 15
+  return pa.Array.from_buffers(pa.string(), n, [None, pa.py_buffer(offsets), pa.py_buffer(chars)])
+
+
+def parent_u64(cells: np.ndarray, res: int) -> np.ndarray:
+  """the res-`res` parent of H3 indexes: the resolution field set to `res`, the digits below it set to 7."""
+  cells = np.asarray(cells, dtype=np.uint64)
+  return (cells & ~(np.uint64(0xF) << np.uint64(52))) | (np.uint64(res) << np.uint64(52)) \
+         | np.uint64((1 << (3 * (15 - res))) - 1)
+
+
+class Membership:
+  """the membership of a collection: per res, one (place index, cells, shares) entry per place (or run of one place),
+  in place_id, h3 order; cells are uint64 H3 indexes sorted ascending (the order of their strings), shares float32."""
+
+  def __init__(self, res_max: int = RES_MAX):
+    self.pids: list[str] = []
+    self.entries: dict[int, list[tuple[int, np.ndarray, np.ndarray]]] = {r: [] for r in range(1, res_max + 1)}
+    self._index: dict[str, int] = {}
+
+  @property
+  def res(self) -> list[int]:
+    return sorted(self.entries)
+
+  def add(self, pid: str, cells: np.ndarray, shares: np.ndarray, res: int) -> None:
+    if not len(cells):
+      return
+    i = self._index.setdefault(pid, len(self.pids))
+    if i == len(self.pids):
+      self.pids.append(pid)
+    self.entries[res].append((i, np.asarray(cells, dtype=np.uint64), np.asarray(shares, dtype=np.float32)))
+
+  def rows(self, res: int) -> int:
+    return sum(len(e[1]) for e in self.entries[res])
+
+  def places(self) -> int:
+    return len({e[0] for es in self.entries.values() for e in es})
+
+  @classmethod
+  def from_tables(cls, tables: dict[int, pa.Table]) -> "Membership":
+    """a Membership from {res: table(place_id, h3, share)}: a run of equal place_ids is one entry."""
+    mem = cls(0)
+    for res, t in tables.items():
+      mem.entries[res] = []
+      ids = t.column("place_id").to_pylist()
+      cells = cells_to_u64(t.column("h3").to_pylist())
+      shares = t.column("share").to_numpy()
+      starts = [0] + [k for k in range(1, len(ids)) if ids[k] != ids[k - 1]]
+      for a, z in zip(starts, starts[1:] + [len(ids)]):
+        mem.add(ids[a], cells[a:z], shares[a:z], res)
+    return mem
+
+  def table(self, res: int) -> pa.Table:
+    """res's rows as one table (place_id, h3, share). a chunked table, so it can exceed what one string array holds,
+    but it is all in memory: for tests and small collections, the writer does not use it."""
+    parts = list(_blocks(self, res, _runs(self, res, None)[None] if self.entries[res] else []))
+    return pa.concat_tables(parts) if parts else SCHEMA.empty_table()
+
+
+def _runs(mem: Membership, res: int, parent_res: int | None) -> dict:
+  """{parent (None, or its uint64 index): [(entry, start, stop)]} for the entries of res, parents ascending; within a
+  parent the runs are in entry order, so the rows keep their place_id, h3 order."""
+  if parent_res is None:
+    return {None: [(k, 0, len(e[1])) for k, e in enumerate(mem.entries[res])]}
+  out: dict[int, list] = {}
+  for k, (_, cells, _) in enumerate(mem.entries[res]):
+    par = parent_u64(cells, parent_res)
+    if len(par) > 1 and not (par[1:] >= par[:-1]).all():
+      raise ValueError("cells of a place must be sorted to be split by parent")
+    keys, starts = np.unique(par, return_index=True)
+    for key, a, z in zip(keys.tolist(), starts.tolist(), starts[1:].tolist() + [len(par)]):
+      out.setdefault(key, []).append((k, a, z))
+  return dict(sorted(out.items()))
+
+
+def _blocks(mem: Membership, res: int, runs: list):
+  """tables (place_id, h3, share) of about BLOCK_ROWS rows each, from runs [(entry, start, stop)] in order."""
+  pids = pa.array(mem.pids, pa.string())
+  buf: list = []
+  n = 0
+
+  def flush():
+    idx = np.concatenate([np.full(z - a, mem.entries[res][k][0], dtype=np.int32) for k, a, z in buf])
+    cells = np.concatenate([mem.entries[res][k][1][a:z] for k, a, z in buf])
+    shares = np.concatenate([mem.entries[res][k][2][a:z] for k, a, z in buf])
+    place = pa.DictionaryArray.from_arrays(pa.array(idx), pids).dictionary_decode()  # place_id made plain, per block
+    return pa.table({"place_id": place, "h3": u64_to_cells(cells), "share": pa.array(shares)}, schema=SCHEMA)
+
+  for k, a, z in runs:
+    for s in range(a, z, BLOCK_ROWS):  # a run longer than a block is cut
+      e = min(s + BLOCK_ROWS, z)
+      buf.append((k, s, e))
+      n += e - s
+      if n >= BLOCK_ROWS:
+        yield flush()
+        buf, n = [], 0
+  if buf:
+    yield flush()
+
+
 def _one_place(args) -> tuple[str, dict, list]:
-  """(place_id, {res: (cells, shares)}, warnings); a place that fails outright is empty, with a warning saying why."""
+  """(place_id, {res: (cells as uint64, shares as float32)}, warnings); a place that fails outright is empty, with a
+  warning saying why."""
   pid, wkbs, res_max, min_share = args
   warns: list = []
   try:
     gs = list(shapely.from_wkb(wkbs))
     g = gs[0] if len(gs) == 1 else shapely.union_all(gs)
-    return pid, place_membership(g, res_max, min_share, warns, pid), warns
+    out = place_membership(g, res_max, min_share, warns, pid)
+    return pid, {r: (cells_to_u64(c), s.astype(np.float32)) for r, (c, s) in out.items()}, warns
   except Exception as e:  # one place must never abort the collection
     return pid, {}, warns + [{"place_id": pid, "cell": None, "reason": f"place skipped: {type(e).__name__}: {e}"}]
 
 
-def collection_membership(table: pa.Table, res_max: int = RES_MAX, min_share: float = MIN_SHARE,
-                          workers: int = 1, warnings: list | None = None) -> dict[int, pa.Table]:
-  """{res: table(place_id, h3, share)} for the polygon places of a collection table (place_id + WKB geometry).
+def compute_membership(table: pa.Table, res_max: int = RES_MAX, min_share: float = MIN_SHARE,
+                       workers: int = 1, warnings: list | None = None) -> Membership:
+  """the Membership of the polygon places of a collection table (place_id + WKB geometry).
 
   rows sorted by place_id, h3; a place may have several rows in the table (components): their geometries are unioned.
   `workers` > 1 computes places in that many processes (the result is identical). cells that needed a fallback, and
@@ -258,23 +383,21 @@ def collection_membership(table: pa.Table, res_max: int = RES_MAX, min_share: fl
   for pid, g in zip(ids, geoms):
     if _polygons(g):
       by_id.setdefault(pid, []).append(g)
-  cols: dict[int, list] = {r: [[], [], []] for r in range(1, res_max + 1)}
+  mem = Membership(res_max)
   jobs = [(pid, [shapely.to_wkb(g) for g in by_id[pid]], res_max, min_share) for pid in sorted(by_id)]
   if workers > 1 and len(jobs) > 1:
     # big places first, so one giant does not start last
     order = sorted(range(len(jobs)), key=lambda i: -sum(len(w) for w in jobs[i][1]))
     with ProcessPoolExecutor(workers) as ex:
       done = {r[0]: r for r in ex.map(_one_place, [jobs[i] for i in order], chunksize=1)}
-    results = [done[pid] for pid, *_ in jobs]
+    results = (done.pop(pid) for pid, *_ in jobs)
   else:
     results = map(_one_place, jobs)
   found: list = []
   for pid, out, warns in results:
     found.extend(warns)
     for res, (cells, shares) in out.items():
-      cols[res][0].extend([pid] * len(cells))
-      cols[res][1].extend(cells.tolist())
-      cols[res][2].extend(shares.tolist())
+      mem.add(pid, cells, shares, res)
   if found:
     print(f"  warnings: {len(found)} in {len({w['place_id'] for w in found})} place(s)", flush=True)
     for w in found[:20]:
@@ -283,7 +406,15 @@ def collection_membership(table: pa.Table, res_max: int = RES_MAX, min_share: fl
       print(f"    ... {len(found) - 20} more (all in membership.json)", flush=True)
   if warnings is not None:
     warnings.extend(found)
-  return {r: pa.table({"place_id": c[0], "h3": c[1], "share": c[2]}, schema=SCHEMA) for r, c in cols.items()}
+  return mem
+
+
+def collection_membership(table: pa.Table, res_max: int = RES_MAX, min_share: float = MIN_SHARE,
+                          workers: int = 1, warnings: list | None = None) -> dict[int, pa.Table]:
+  """{res: table(place_id, h3, share)} for the polygon places of a collection table; see compute_membership. every
+  table is in memory: for a big collection use compute_membership and write_membership."""
+  mem = compute_membership(table, res_max, min_share, workers, warnings)
+  return {r: mem.table(r) for r in mem.res}
 
 
 # the files ----
@@ -292,35 +423,53 @@ def parent_of(cell: str, res: int) -> str:
   return h3.cell_to_parent(cell, res)
 
 
-def write_membership(tables: dict[int, pa.Table], out_dir: Path, version: str, parent_res: dict[int, int] = PARENT_RES,
-                     min_share: float = MIN_SHARE, extra: dict | None = None) -> dict:
+def _write_partition(f: Path, blocks, row_group_size: int) -> None:
+  """write blocks (tables of SCHEMA) as one Parquet file whose row groups all hold row_group_size rows but the last,
+  whatever the block sizes (what pq.write_table gives for the whole table)."""
+  f.parent.mkdir(parents=True, exist_ok=True)
+  carry = None
+  with pq.ParquetWriter(f, SCHEMA, compression="zstd") as w:
+    for t in blocks:
+      if carry is not None:
+        t = pa.concat_tables([carry, t]).combine_chunks()
+      n = t.num_rows // row_group_size * row_group_size
+      if n:
+        w.write_table(t.slice(0, n), row_group_size=row_group_size)
+      carry = t.slice(n) if n < t.num_rows else None
+    if carry is not None:
+      w.write_table(carry, row_group_size=row_group_size)
+
+
+def write_membership(tables: "dict[int, pa.Table] | Membership", out_dir: Path, version: str,
+                     parent_res: dict[int, int] = PARENT_RES, min_share: float = MIN_SHARE,
+                     extra: dict | None = None) -> dict:
   """write h3/res=<r>/membership.parquet (res <= 5) and h3/res=<r>/p=<parent>/membership.parquet (split res) under
-  out_dir, and h3/membership.json describing them (plus `extra`, e.g. what it was built from); returns that manifest."""
+  out_dir, and h3/membership.json describing them (plus `extra`, e.g. what it was built from); returns that manifest.
+  each file is written from its own rows, BLOCK_ROWS at a time, so no table of a whole res is ever built."""
+  mem = tables if isinstance(tables, Membership) else Membership.from_tables(tables)
   root = Path(out_dir) / "h3"
   manifest = {"version": version, "min_share": min_share, "columns": ["place_id", "h3", "share"],
               "share": "fraction of the cell's area inside the place (equal-area plane), float32",
-              "res": sorted(tables), "parent_res": {str(k): v for k, v in parent_res.items() if k in tables},
+              "res": mem.res, "parent_res": {str(k): v for k, v in parent_res.items() if k in mem.entries},
               "files": []}
-  for res, t in sorted(tables.items()):
-    if res in parent_res:
-      parents = np.array([parent_of(c, parent_res[res]) for c in t.column("h3").to_pylist()])
-      order = np.argsort(parents, kind="stable")  # stable: rows keep their place_id, h3 order within a parent
-      keys, starts = np.unique(parents[order], return_index=True)
-      groups = {str(k): order[a:z] for k, a, z in zip(keys, starts, list(starts[1:]) + [len(order)])}
-    else:
-      groups = {None: np.arange(t.num_rows)}
-    for p, idx in groups.items():
-      part = t.take(pa.array(idx))
-      rel = f"h3/res={res}/membership.parquet" if p is None else f"h3/res={res}/p={p}/membership.parquet"
+  parents: set = set()  # which split files hold each place: (place_id, res, parent), so a reader finds them without the others
+  for res in mem.res:
+    runs = _runs(mem, res, parent_res.get(res))
+    for p, rs in runs.items():
+      ps = None if p is None else u64_to_cells(np.array([p], dtype=np.uint64))[0].as_py()
+      rel = f"h3/res={res}/membership.parquet" if ps is None else f"h3/res={res}/p={ps}/membership.parquet"
       f = Path(out_dir) / rel
-      f.parent.mkdir(parents=True, exist_ok=True)
-      pq.write_table(part, f, compression="zstd", row_group_size=65536)
-      manifest["files"].append({"res": res, "parent": p, "path": rel, "rows": part.num_rows,
-                                "places": len(set(part.column("place_id").to_pylist())), "bytes": f.stat().st_size})
-  # which split files hold each place: (place_id, res, parent), so a reader finds a place's files without the others
-  idx = [(pid, res, parent_of(c, parent_res[res])) for res, t in tables.items() if res in parent_res
-         for pid, c in zip(t.column("place_id").to_pylist(), t.column("h3").to_pylist())]
-  idx = sorted(set(idx))
+      if rs:
+        _write_partition(f, _blocks(mem, res, rs), ROW_GROUP)
+      else:  # a res with no rows still gets its (empty) file
+        f.parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(SCHEMA.empty_table(), f, compression="zstd", row_group_size=ROW_GROUP)
+      who = {mem.entries[res][k][0] for k, _, _ in rs}
+      manifest["files"].append({"res": res, "parent": ps, "path": rel, "rows": sum(z - a for _, a, z in rs),
+                                "places": len(who), "bytes": f.stat().st_size})
+      if ps is not None:
+        parents.update((mem.pids[i], res, ps) for i in who)
+  idx = sorted(parents)
   pq.write_table(pa.table({"place_id": [i[0] for i in idx], "res": pa.array([i[1] for i in idx], pa.int8()),
                            "parent": [i[2] for i in idx]}), root / "parents.parquet", compression="zstd")
   manifest["parents"] = "h3/parents.parquet"

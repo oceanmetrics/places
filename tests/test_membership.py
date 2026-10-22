@@ -221,3 +221,115 @@ def test_warnings_are_written_into_membership_json(tmp_path):
   w = [{"place_id": "t:a", "cell": "8429a1dffffffff", "reason": "x"}]
   man = m.write_membership(m.collection_membership(t, res_max=4), tmp_path, version="1", extra={"warnings": w})
   assert json.loads((tmp_path / "h3" / "membership.json").read_text())["warnings"] == w == man["warnings"]
+
+
+# the writer works a partition at a time ----
+
+def write_membership_global(tables, out_dir, version, parent_res=m.PARENT_RES, min_share=m.MIN_SHARE, extra=None,
+                            row_group_size=65536):
+  """the writer before 2026-10-22, kept as the reference: one global take per partition, on whole-res tables."""
+  root = out_dir / "h3"
+  manifest = {"version": version, "min_share": min_share, "columns": ["place_id", "h3", "share"],
+              "share": "fraction of the cell's area inside the place (equal-area plane), float32",
+              "res": sorted(tables), "parent_res": {str(k): v for k, v in parent_res.items() if k in tables},
+              "files": []}
+  for res, t in sorted(tables.items()):
+    if res in parent_res:
+      parents = np.array([h3.cell_to_parent(c, parent_res[res]) for c in t.column("h3").to_pylist()])
+      order = np.argsort(parents, kind="stable")
+      keys, starts = np.unique(parents[order], return_index=True)
+      groups = {str(k): order[a:z] for k, a, z in zip(keys, starts, list(starts[1:]) + [len(order)])}
+    else:
+      groups = {None: np.arange(t.num_rows)}
+    for p, idx in groups.items():
+      part = t.take(pa.array(idx))
+      rel = f"h3/res={res}/membership.parquet" if p is None else f"h3/res={res}/p={p}/membership.parquet"
+      f = out_dir / rel
+      f.parent.mkdir(parents=True, exist_ok=True)
+      pq.write_table(part, f, compression="zstd", row_group_size=row_group_size)
+      manifest["files"].append({"res": res, "parent": p, "path": rel, "rows": part.num_rows,
+                                "places": len(set(part.column("place_id").to_pylist())), "bytes": f.stat().st_size})
+  idx = sorted({(pid, res, h3.cell_to_parent(c, parent_res[res])) for res, t in tables.items() if res in parent_res
+                for pid, c in zip(t.column("place_id").to_pylist(), t.column("h3").to_pylist())})
+  pq.write_table(pa.table({"place_id": [i[0] for i in idx], "res": pa.array([i[1] for i in idx], pa.int8()),
+                           "parent": [i[2] for i in idx]}), root / "parents.parquet", compression="zstd")
+  manifest["parents"] = "h3/parents.parquet"
+  manifest["rows"] = sum(x["rows"] for x in manifest["files"])
+  manifest["bytes"] = sum(x["bytes"] for x in manifest["files"])
+  manifest.update(extra or {})
+  (root / "membership.json").write_text(json.dumps(manifest, indent=2) + "\n")
+  return manifest
+
+
+def synthetic_collection():
+  return collection([("t:b", square(-121, 34, 0.4)), ("t:a", square(-120, 34, 0.3)), ("t:a", square(-119.5, 34, 0.3)),
+                     ("t:c", square(-60, -30, 0.5)), ("t:d", square(150, -30, 0.2)), ("t:line", LineString([(0, 0), (1, 1)]))])
+
+
+def assert_same_files(man_a, man_b, dir_a, dir_b):
+  assert man_a == man_b
+  for rel in ["h3/parents.parquet", "h3/membership.json"] + [f["path"] for f in man_a["files"]]:
+    assert (dir_a / rel).read_bytes() == (dir_b / rel).read_bytes(), rel
+
+
+def test_u64_cells_are_the_strings_of_h3_and_parents_are_h3_parents():
+  cells = sorted(set(h3.get_res0_cells()) | set(h3.cell_to_children("8029fffffffffff", 3)) | set(_pole_children()))
+  u = m.cells_to_u64(cells)
+  assert m.u64_to_cells(u).to_pylist() == cells
+  for res in (7, 3):
+    kids = sorted({k for c in cells[:40:8] for k in h3.cell_to_children(h3.cell_to_children(c, 2)[3], res)}
+                  | set(_pole_children(res)))
+    uk = m.cells_to_u64(kids)
+    for pr in (1, 2, 3):
+      if pr < res:
+        assert m.u64_to_cells(m.parent_u64(uk, pr)).to_pylist() == [h3.cell_to_parent(c, pr) for c in kids]
+
+
+def _pole_children(res=3):
+  return [h3.latlng_to_cell(90, 0, res), h3.latlng_to_cell(-90, 0, res), h3.latlng_to_cell(0, 180, res)]
+
+
+def test_the_written_partitions_read_back_with_the_previous_schema(tmp_path):
+  t = synthetic_collection()
+  tables = m.collection_membership(t, res_max=7)
+  man = m.write_membership(m.compute_membership(t, res_max=7), tmp_path / "new", version="1")
+  write_membership_global(tables, tmp_path / "old", version="1")
+  for f in man["files"]:
+    new, old = pq.ParquetFile(tmp_path / "new" / f["path"]), pq.ParquetFile(tmp_path / "old" / f["path"])
+    assert new.schema_arrow.equals(old.schema_arrow) and new.schema_arrow.equals(m.SCHEMA)
+    assert pq.read_table(tmp_path / "new" / f["path"]).schema.equals(m.SCHEMA)  # place_id plain string, not dictionary
+    assert new.schema.to_arrow_schema().field("place_id").type == pa.string()
+    assert new.schema.equals(old.schema)  # the Parquet physical schema too
+
+
+def test_regression_write_membership_offset_overflow(tmp_path, monkeypatch):
+  """protectedseas_fisheries (2026-10-22): the global `take` over a whole res of that layer failed with "offset overflow
+  while concatenating arrays" (more than 2 GB of string offsets in one column). the writer now builds each partition from
+  its own rows, BLOCK_ROWS at a time; with BLOCK_ROWS and the row group tiny it takes that path on every partition (many
+  blocks per file, runs cut, rows carried between blocks) and must write the files the global take wrote."""
+  t = synthetic_collection()
+  tables = m.collection_membership(t, res_max=7)
+  assert max(tb.num_rows for tb in tables.values()) > 200
+  monkeypatch.setattr(m, "BLOCK_ROWS", 7)
+  monkeypatch.setattr(m, "ROW_GROUP", 50)
+  for src, name in ((m.compute_membership(t, res_max=7), "compact"), (tables, "tables")):
+    got = m.write_membership(src, tmp_path / name, version="1", extra={"warnings": []})
+    want = write_membership_global(tables, tmp_path / ("ref_" + name), version="1", extra={"warnings": []},
+                                   row_group_size=50)
+    assert_same_files(got, want, tmp_path / name, tmp_path / ("ref_" + name))
+    assert any(pq.ParquetFile(tmp_path / name / f["path"]).num_row_groups > 1 for f in got["files"])
+
+
+def test_write_membership_with_the_default_sizes_equals_the_global_take(tmp_path):
+  t = synthetic_collection()
+  tables = m.collection_membership(t, res_max=7)
+  got = m.write_membership(m.compute_membership(t, res_max=7), tmp_path / "new", version="1")
+  want = write_membership_global(tables, tmp_path / "old", version="1")
+  assert_same_files(got, want, tmp_path / "new", tmp_path / "old")
+
+
+def test_membership_counts_rows_and_places():
+  mem = m.compute_membership(synthetic_collection(), res_max=5)
+  tables = m.collection_membership(synthetic_collection(), res_max=5)
+  assert all(mem.rows(r) == tables[r].num_rows for r in mem.res)
+  assert mem.places() == 4 and mem.res == [1, 2, 3, 4, 5]

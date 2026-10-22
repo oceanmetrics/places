@@ -108,14 +108,15 @@ def build_one(row: dict, src: Path, out: Path, res_max: int = m.RES_MAX, workers
   t = pq.read_table(src, columns=["place_id", "geometry"])
   t0 = time.time()
   warnings: list = []
-  tables = m.collection_membership(t, res_max, workers=workers, warnings=warnings)
-  if not any(tb.num_rows for tb in tables.values()):
+  mem = m.compute_membership(t, res_max, workers=workers, warnings=warnings)  # compact: written a partition at a time
+  del t
+  if not any(mem.rows(r) for r in mem.res):
     return None
   extra = {"slug": row["slug"], "collection_version": row.get("version"), "places_sha256": row["parquet_sha256"],
            "built": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "seconds": round(time.time() - t0, 1),
-           "places": len({p for tb in tables.values() for p in tb.column("place_id").to_pylist()}),
+           "places": mem.places(),
            "warnings": warnings}
-  return m.write_membership(tables, out / row["slug"], version=row.get("version") or "", extra=extra)
+  return m.write_membership(mem, out / row["slug"], version=row.get("version") or "", extra=extra)
 
 
 def attach_published(lj: dict, out: Path) -> dict:
