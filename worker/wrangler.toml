@@ -21,7 +21,7 @@ bucket_name = "oceanmetrics-io-public"
 
 [[kv_namespaces]]
 binding = "KEYS"
-id      = "REPLACE_WITH_KV_NAMESPACE_ID"
+id      = "46f26ef9bf444bff9b220a3b9fe6bff8"
 
 [[analytics_engine_datasets]]
 binding = "METRICS"
