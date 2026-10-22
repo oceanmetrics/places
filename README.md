@@ -46,6 +46,9 @@ uv run scripts/build_h3_membership.py [--slug noaa_sanctuaries ...] --layers-out
 `layers.json` advertises a row's `h3` (the URL of its `membership.json`) only while `places_sha256` equals the row's
 `parquet_sha256`: a collection republished without rebuilding its membership drops back to `h3: null`, never to stale cells.
 The membership is a derived sidecar, not a STAC asset, so building it changes no collection version.
+`--missing` builds every polygon vector layer whose membership is absent from the bucket or stale (the sync passes it every
+week); the contract is that each such layer has an `h3` URL.
+
 ### Access
 
 `layers.json` rows end with `h3` and `access`. `access` is `public` or `unlisted`, from the optional `access:` key of the

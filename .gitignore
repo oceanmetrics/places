@@ -38,3 +38,7 @@ catalog/h3/
 
 # prototypes: local data (internal reference tiles, cached API pulls) never committed
 proto/**/data/
+
+# background H3 membership job (tmux window om:h3)
+h3_missing.log
+h3_missing.done

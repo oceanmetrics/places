@@ -169,10 +169,10 @@ jobs:
           slugs=$(for b in ${{ steps.build.outputs.built }}; do s=${b%%:*}; isref "$s" || echo "--slug $s"; done)
           lj="$RUNNER_TEMP/layers.json"
           uv run scripts/build_layers_json.py --no-local --out "$lj"
-          if [ -n "$slugs" ]; then   # without --slug the script would rebuild every collection's membership
-            uv run scripts/build_h3_membership.py $slugs --layers "file://$lj" --out "$RUNNER_TEMP/h3" --upload
-            uv run scripts/build_layers_json.py --no-local --out "$lj"
-          fi
+          # the changed slugs, plus --missing: every polygon vector layer whose membership is absent or stale on the
+          # bucket, so each one has `h3` after every sync (layers.json schema rule), not only the ones rebuilt today
+          uv run scripts/build_h3_membership.py $slugs --missing --layers "file://$lj" --out "$RUNNER_TEMP/h3" --upload
+          uv run scripts/build_layers_json.py --no-local --out "$lj"
           uv run scripts/build_index.py --no-local --out "$RUNNER_TEMP/index"
           aws s3 sync "$RUNNER_TEMP/index/" s3://oceanmetrics.io-public/gazetteer/index/ --exclude '.portolan/*'
           aws s3 cp "$lj" s3://oceanmetrics.io-public/gazetteer/index/layers.json --content-type application/json

@@ -42,7 +42,8 @@ Rules for anyone (human or agent) changing this repo. Each rule is guarded by a 
 - **H3 membership follows its parquet.** `<slug>/h3/` is built from the PUBLISHED `places.parquet`
   (`scripts/build_h3_membership.py`) and `layers.json` advertises `h3` only while `membership.json`'s `places_sha256`
   is the row's `parquet_sha256`. Republishing a polygon collection means rebuilding its membership (or accepting
-  `h3: null` until it is). Shares are ≥ 0.01 of the cell or the cell holds ≥ 1% of the place (`MIN_SHARE`).
+  `h3: null` until it is); the weekly sync runs `build_h3_membership.py --missing`, which also builds every polygon vector
+  layer whose membership is absent or stale, so the schema's "polygon vector row has h3" rule holds after each sync. Shares are ≥ 0.01 of the cell or the cell holds ≥ 1% of the place (`MIN_SHARE`).
 
 - **`access: public | unlisted`** (optional top-level key of a `sources/<authority>/<layer>.yml`, default `public`; any other value
   is a config error). It is written to collection.json as `gazetteer:access` and to every layers.json row as `access`
