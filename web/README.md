@@ -3,8 +3,8 @@
 The website at places.oceanmetrics.io: search the places index, browse layers on a map, and read the licence and
 citation of everything on screen. Svelte 5 + Vite + TypeScript + MapLibre GL + pmtiles, a static SPA with
 client-side routing. Data comes from the `@oceanmetrics/places` client (since 2026-10-22 in
-[oceanmetrics/platform `packages/places`](https://github.com/oceanmetrics/platform/tree/main/packages/places), a sibling checkout
-linked locally until the npm publish on Day 5, 2026-10-26), which reads `layers.json`, the places index, GeoParquet and PMTiles straight from object storage.
+[oceanmetrics/platform `packages/places`](https://github.com/oceanmetrics/platform/tree/main/packages/places), installed from npm;
+a client change is made and released there, then the range in `package.json` is bumped here), which reads `layers.json`, the places index, GeoParquet and PMTiles straight from object storage.
 
 | route | page |
 |---|---|
@@ -18,8 +18,7 @@ linked locally until the npm publish on Day 5, 2026-10-26), which reads `layers.
 
 ```sh
 cd web
-npm install          # links ../../platform/packages/places as @oceanmetrics/places (its TypeScript source, no client build needed);
-                     # needs a checkout of oceanmetrics/platform next to this repo, with `npm install` run at its root
+npm install          # @oceanmetrics/places and @oceanmetrics/status from npm (the client's built dist/); no sibling checkout
 npm run dev          # http://localhost:5180
 npm test             # vitest: URL grammar codec (round trips), pure helpers, the indicators slot (synthetic fixtures, no network)
 npm run check        # svelte-check
@@ -38,7 +37,7 @@ If vitest cannot create its temp dir in a sandbox, set `TMPDIR` to a writable di
 
 Data base URL: `https://storage.oceanmetrics.io/gazetteer/` by default; override at build time with
 `VITE_PLACES_BASE=https://…/` or at run time with `?base=https://…/` (internal links keep it). To develop offline, serve
-`platform/packages/places/test/fixtures/` with CORS and Range support and use `?base=http://127.0.0.1:<port>/`.
+the client repo's `packages/places/test/fixtures/` (oceanmetrics/platform) with CORS and Range support and use `?base=http://127.0.0.1:<port>/`.
 
 ## Indicators on the place page
 
@@ -73,7 +72,7 @@ unreadable indicators catalog is a notice in the Indicators section).
 ## Deploy
 
 **Live now at <https://oceanmetrics.io/places/>** via GitHub Pages (`.github/workflows/pages.yml`: on push to `main`
-touching `web/`, it checks out oceanmetrics/platform next to this repo, checks, tests, builds with `--base=/places/` and deploys; `404.html` is a copy of
+touching `web/`, it runs `npm ci`, checks, tests, builds with `--base=/places/` and deploys; `404.html` is a copy of
 `index.html`, the SPA fallback). The app base is `import.meta.env.BASE_URL` (`APP_BASE` in `lib/helpers.ts`): routes
 are matched and internal links written under it, so the same build runs at `/` (dev, Workers) and `/places/` (Pages).
 

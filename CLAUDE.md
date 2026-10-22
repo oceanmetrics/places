@@ -18,7 +18,7 @@ Each collection = `places.parquet` (GeoParquet 1.1) + `places.pmtiles` + `collec
 |---|---|---|
 | `build.py` + `gazetteer/` + `sources/` | Python (uv), tippecanoe | build pipeline: YAML config -> staged collection |
 | `scripts/` | Python, bash | catalog-wide artifacts (index, `layers.json`, browse pages), contribution validation, publish |
-| `web/` | Svelte 5 + Vite + MapLibre | the site (live at https://oceanmetrics.io/places/ via GitHub Pages); uses the `@oceanmetrics/places` client from its TS source (sibling checkout of oceanmetrics/platform, see below) |
+| `web/` | Svelte 5 + Vite + MapLibre | the site (live at https://oceanmetrics.io/places/ via GitHub Pages); uses the `@oceanmetrics/places` client from npm (see below) |
 | `worker/` | Cloudflare Worker | future R2 front for storage (keys, Range/CORS, metering); code and tests only, not deployed |
 
 `R/build_places.R` is a copy that still runs from `oceanmetrics/erddap-places`; edits here are not picked up yet.
@@ -46,18 +46,21 @@ Tests in `tests/test_staged.py` and similar run only when `catalog/staging/<slug
 
 JS (`web/` and `worker/` are each their own npm package; run `npm install` inside it first). The `@oceanmetrics/places` client
 (reads `layers.json`, index, parquet and PMTiles straight from storage) lives in https://github.com/oceanmetrics/platform
-`packages/places` since 2026-10-22; `web/` links it as `file:../../platform/packages/places`, so clone `oceanmetrics/platform`
-next to this repo and run `npm install` at its root first. The link stays until the npm publish on Day 5 (2026-10-26).
+`packages/places` since 2026-10-22 and is on npm: `web/` depends on
+`@oceanmetrics/places` and `@oceanmetrics/status` from the registry and consumes the client's built `dist/` like any other
+consumer, with no sibling checkout. A client change is made in oceanmetrics/platform `packages/places` and released there
+(version, `CHANGELOG.md`, npm publish); then bump the range in `web/package.json` here. `@oceanmetrics/catalog` (devDependency of
+`web/`) brings the JSON schemas that `tests/test_layers_schema.py` validates against.
 
 ```sh
-cd ../platform && npm test && npm run typecheck   # the client, in its own repo
+# the client is tested in its own repo (oceanmetrics/platform: npm test && npm run typecheck)
 cd web && npm run dev      # http://localhost:5180; also: npm test, npm run check (svelte-check), npm run build
 cd worker && npm test && npm run typecheck
 ```
 
 If vitest cannot create its temp dir in a sandbox, set `TMPDIR` to a writable directory. The web app reads data from
 `https://storage.oceanmetrics.io/gazetteer/` by default; override with `VITE_PLACES_BASE` at build time or `?base=` at
-run time (e.g. serve `platform/packages/places/test/fixtures/` locally with CORS + Range).
+run time (e.g. serve the client repo's `packages/places/test/fixtures/` locally with CORS + Range).
 
 ## Build pipeline architecture
 
@@ -101,9 +104,9 @@ the `rashid check` gate. Read `catalog/staging/RUNBOOK_PUBLISH.md` first: it has
 must not be published yet (e.g. `noaa_esa_critical_habitat`) and the reference collections (`mr_*`, metadata only). `.github/workflows/sync.yml` is the weekly detect ->
 rebuild -> publish (through `publish_collections.sh --republish`) -> H3 / index / layers.json job on the self-hosted
 `macmini` runner (Mondays 07:43 UTC; this repo is the only publisher of the place collections since 2026-10-16, when the
-BOEM / NOAA AOA ones moved here from erddap-places); it reads the published catalog from the S3 origin, not the CDN; `pages.yml` deploys `web/` on pushes touching `web/` (it also checks out oceanmetrics/platform for the client); `validate-contribution.yml` checks PRs adding `contrib/OM-<ulid>/` (see CONTRIBUTING.md).
+BOEM / NOAA AOA ones moved here from erddap-places); it reads the published catalog from the S3 origin, not the CDN; `pages.yml` deploys `web/` on pushes touching `web/` (npm ci, check, test, build); `validate-contribution.yml` checks PRs adding `contrib/OM-<ulid>/` (see CONTRIBUTING.md).
 
-The client's own `CHANGELOG.md` and version are in oceanmetrics/platform `packages/places` (moved there 2026-10-22; linked
-locally until the npm publish on Day 5, 2026-10-26); add an entry there with any user-facing change. The client's test
-fixtures (`platform/packages/places/test/fixtures/`, made by `make_fixtures.sh`) must mirror the schema that
+The client's own `CHANGELOG.md` and version are in oceanmetrics/platform `packages/places` (moved there 2026-10-22, on npm);
+add an entry there with any user-facing change. The client's test fixtures (oceanmetrics/platform
+`packages/places/test/fixtures/`, made by `make_fixtures.sh`) must mirror the schema that
 `scripts/build_index.py` and `scripts/build_layers_json.py` publish; change them together (two repos, two commits).

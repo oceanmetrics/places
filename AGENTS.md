@@ -52,7 +52,7 @@ Rules for anyone (human or agent) changing this repo. Each rule is guarded by a 
   search and the client's `layers()` drops its row unless called with `{ includeUnlisted: true }`. The row schema is
   `packages/catalog/schemas/places-layers.schema.json` in oceanmetrics/platform (every row has `access`; a vector row with
   Polygon / MultiPolygon geometry has an `h3` URL; points and lines have `h3: null`; a mixed-geometry row that holds polygons, such as `gebco_undersea`, may carry one); a pytest validates the builder's output
-  against it (`$OM_SCHEMAS_DIR`, else `../platform/packages/catalog/schemas`).
+  against it (`$OM_SCHEMAS_DIR`, else `web/node_modules/@oceanmetrics/catalog/schemas` from the web install, else `../platform/packages/catalog/schemas`).
 
 ## Publishing
 

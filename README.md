@@ -73,7 +73,7 @@ WHERE place_id = 'NMS:MBNMS';
 | `R/` | R code that still works as is (`build_places.R`: sanctuaries + MarineRegions + ProtectedSeas) |
 | `catalog/` | the Portolan STAC tree, built here and published to the bucket; builds stage in `catalog/staging/`; H3 membership builds in `catalog/h3/` |
 | `web/` | the website, places.oceanmetrics.io (placeholder) |
-| `@oceanmetrics/places` (JS client) | not in this repo: lives in https://github.com/oceanmetrics/platform `packages/places` since 2026-10-22; `web/` links it locally until the npm publish on Day 5 (2026-10-26) |
+| `@oceanmetrics/places` (JS client) | not in this repo: lives in https://github.com/oceanmetrics/platform `packages/places` since 2026-10-22; on npm as `@oceanmetrics/places`, which `web/` depends on |
 | `tests/` | pytest, one fixture per source rule |
 | `.github/workflows/sync.yml` | weekly change detection, rebuild and publish |
 

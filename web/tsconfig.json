@@ -7,11 +7,7 @@
     "noEmit": true,
     "allowJs": true,
     "checkJs": false,
-    "moduleDetection": "force",
-    "paths": {
-      "@oceanmetrics/places": ["../../platform/packages/places/src/index.ts"],
-      "@oceanmetrics/status": ["../../platform/packages/status/src/index.ts"]
-    }
+    "moduleDetection": "force"
   },
   "include": ["src/**/*.ts", "src/**/*.svelte"]
 }

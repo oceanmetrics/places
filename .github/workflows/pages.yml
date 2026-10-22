@@ -22,42 +22,29 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # until Day 5 (2026-10-26) the client is a file: link to a sibling checkout of oceanmetrics/platform
-      # (web/package.json -> ../../platform/packages/places), so both repos sit side by side in the workspace
+      # the client (@oceanmetrics/places) and @oceanmetrics/status come from npm like any consumer
       - uses: actions/checkout@v4
-        with:
-          path: places
-      - uses: actions/checkout@v4
-        with:
-          repository: oceanmetrics/platform
-          ref: main
-          path: platform
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: |
-            places/web/package-lock.json
-            platform/package-lock.json
-      # web/ imports the client from platform/packages/places/src (vite alias), so the platform's deps must be installed
+          cache-dependency-path: web/package-lock.json
       - run: npm ci
-        working-directory: platform
-      - run: npm ci
-        working-directory: places/web
+        working-directory: web
       - run: npm run check
-        working-directory: places/web
+        working-directory: web
       - run: npm run test
-        working-directory: places/web
+        working-directory: web
       - run: npm run build -- --base=/places/
-        working-directory: places/web
+        working-directory: web
       # SPA fallback: GitHub Pages serves 404.html for unknown paths (/places/p/NMS:PMNM, /places/credits)
-      - run: cp places/web/dist/index.html places/web/dist/404.html
+      - run: cp web/dist/index.html web/dist/404.html
       - uses: actions/configure-pages@v5
         with:
           enablement: true   # first run creates the Pages site (workflow build type)
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: places/web/dist
+          path: web/dist
 
   deploy:
     needs: build

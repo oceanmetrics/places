@@ -1,5 +1,5 @@
 """the layers.json that scripts/build_layers_json.py produces validates against the platform contract
-(oceanmetrics/platform packages/catalog/schemas/places-layers.schema.json): keys, types, the h3 rule, `access`."""
+(`@oceanmetrics/catalog` schemas/places-layers.schema.json, from oceanmetrics/platform packages/catalog): keys, types, the h3 rule, `access`."""
 import copy
 import json
 import os
@@ -12,14 +12,22 @@ from test_layers_json import COLL, REF, RESCINDED, LEDGER, SHA_NEW, bl
 jsonschema = pytest.importorskip("jsonschema")
 
 NAME = "places-layers.schema.json"
-SCHEMAS_DIR = Path(os.environ.get("OM_SCHEMAS_DIR") or Path(__file__).resolve().parent.parent.parent / "platform/packages/catalog/schemas")
+ROOT = Path(__file__).resolve().parent.parent
+# first hit wins: $OM_SCHEMAS_DIR, the npm package the web install brings (web/package.json devDependency), then a sibling
+# checkout of oceanmetrics/platform
+SCHEMAS_CANDIDATES = [
+  *([Path(os.environ["OM_SCHEMAS_DIR"])] if os.environ.get("OM_SCHEMAS_DIR") else []),
+  ROOT / "web/node_modules/@oceanmetrics/catalog/schemas",
+  ROOT.parent / "platform/packages/catalog/schemas",
+]
+SCHEMAS_DIR = next((d for d in SCHEMAS_CANDIDATES if (d / NAME).exists()), SCHEMAS_CANDIDATES[0])
 
 
 @pytest.fixture(scope="module")
 def validator():
   f = SCHEMAS_DIR / NAME
   if not f.exists():
-    pytest.skip(f"{f} not found: set OM_SCHEMAS_DIR or check out oceanmetrics/platform next to this repo")
+    pytest.skip(f"{f} not found: set OM_SCHEMAS_DIR or run `npm install` in web/")
   schema = json.loads(f.read_text())
   jsonschema.Draft202012Validator.check_schema(schema)
   return jsonschema.Draft202012Validator(schema)
