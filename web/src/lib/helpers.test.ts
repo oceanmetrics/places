@@ -8,7 +8,7 @@ import {
 const L = (o: Partial<Layer>): Layer => ({
   slug: 's', title: 'S', collection: 's', pmtiles: '', source_layer: 's', geom_type: 'MultiPolygon', n: null, updated: null,
   version: null, paint: {}, authority: null, place_type: null, bbox: null, attribution: '', attribution_html: '',
-  license: null, license_url: null, citation: '', ...o,
+  license: null, license_url: null, citation: '', access: 'public', ...o,
 })
 
 describe('routes', () => {

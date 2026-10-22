@@ -3,6 +3,7 @@
   import { onMount } from 'svelte'
   import Credit from '../lib/Credit.svelte'
   import CopyButton from '../lib/CopyButton.svelte'
+  import Indicators from '../lib/Indicators.svelte'
   import { BASE, manifest, loadManifest } from '../lib/data.svelte'
   import {
     calcofiLink, derivedLine, erddapLink, fmtValue, geojsonSql, keepsGeometry, layerForPlace, layerPath, parquetUrl, placePath, sanitizeHtml, viaTitle, withBase,
@@ -74,6 +75,8 @@
         <m.default highlight={feature} popups={false} selected={sel} layers={manifest.layers} fit={!feature && row ? row.bbox : null} />
       {/await}
     </div>
+
+    <Indicators placeId={id} {layer} />
 
     {#if copies.length}
       <h2>Same place in other layers</h2>
