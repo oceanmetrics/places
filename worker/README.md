@@ -5,8 +5,10 @@ S3 bucket today). It adds `?key=` access keys with Origin allow-lists, correct R
 DuckDB-WASM and pmtiles-js, per-request metering and monthly byte caps. Design: project plan section 9, decisions D7 and
 D8; client behaviour: `notes/om/plans_todo/2026-10-08_duckdb-wasm-key-spike.md`.
 
-**Status: code and tests only. Nothing is deployed and no Cloudflare account call has been made.** Steps that need the
-account or DNS are marked **BEN-DOES**.
+**Status (2026-10-22): deployed to the workers.dev preview `https://om-gazetteer.ben-f07.workers.dev` on the Ocean Metrics
+Cloudflare account (buckets `oceanmetrics-io-public` and `oceanmetrics-io-unlisted`, KV `KEYS`, Analytics Engine
+`om_gazetteer`); the S3 → R2 mirror runs from the Mac mini with rclone; the production route (`storage.oceanmetrics.io`)
+waits on the DNS cutover.** Steps that need the account or DNS are marked **BEN-DOES**.
 
 ## Behaviour
 

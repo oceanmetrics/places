@@ -19,7 +19,7 @@ Each collection = `places.parquet` (GeoParquet 1.1) + `places.pmtiles` + `collec
 | `build.py` + `gazetteer/` + `sources/` | Python (uv), tippecanoe | build pipeline: YAML config -> staged collection |
 | `scripts/` | Python, bash | catalog-wide artifacts (index, `layers.json`, browse pages), contribution validation, publish |
 | `web/` | Svelte 5 + Vite + MapLibre | the site (live at https://oceanmetrics.io/places/ via GitHub Pages); uses the `@oceanmetrics/places` client from npm (see below) |
-| `worker/` | Cloudflare Worker | future R2 front for storage (keys, Range/CORS, metering); code and tests only, not deployed |
+| `worker/` | Cloudflare Worker | the R2 front for storage (keys, Range/CORS, metering); deployed to the workers.dev preview https://om-gazetteer.ben-f07.workers.dev since 2026-10-22, the production route waits on the DNS cutover |
 
 `R/build_places.R` is a copy that still runs from `oceanmetrics/erddap-places`; edits here are not picked up yet.
 
