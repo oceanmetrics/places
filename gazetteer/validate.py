@@ -13,7 +13,7 @@ from .bbox import geometries_bbox
 from .geom import max_edge_span
 from .lines import max_line_span
 from .mixed import MIXED_TYPE_IDS
-from .table import COMMON, COMMON_ADDED
+from .table import COMMON, COMMON_ADDED, auto_row_group_size
 from .tiles import read_pmtiles
 
 
@@ -23,6 +23,13 @@ def check_parquet(path: Path, cfg: dict) -> list[str]:
   f = pq.ParquetFile(path)
   t = f.read()
   names = t.column_names
+  # small row groups make a place lookup a range read (auto_row_group_size). a file written before that rule reads whole
+  # for one place: the mr_* of 2026-10-08, one 164 MB group, were only ever restac'd since
+  want = cfg.get("row_group_size") or auto_row_group_size(t)
+  have = max((f.metadata.row_group(i).num_rows for i in range(f.metadata.num_row_groups)), default=0)
+  if have > want:
+    problems.append(f"row groups of up to {have} rows where the writer makes {want}: rewrite offline with "
+                    f"`uv run build.py repack --slug {cfg['slug']}`")
   for c in [c for c in COMMON if c not in COMMON_ADDED] + ["bbox", "geometry"]:
     if c not in names:
       problems.append(f"missing column {c}")

@@ -30,6 +30,9 @@ source_page: https://www.marineregions.org/downloads.php
 source_title: Marine Regions (VLIZ)
 source_home: https://www.marineregions.org/
 place_url: "https://www.marineregions.org/gazetteer.php?p=details&id={mrgid}"
+# neighbouring zones share borders: simplify each shared edge once, so they meet without slivers at low zooms
+# (mr_eez z3 over Europe: 31 overlapping neighbour pairs -> 10, the same archive size; 2026-10-21)
+tile_args: ["--detect-shared-borders"]
 # reference collection: VLIZ asked us not to republish the products as-is and to refer to marineregions.org (Bart
 # Vanhoorne, 2026-10-16 12:40), then agreed to map display from their GeoWebCache tiles, single-feature WFS on demand,
 # a public index and derived tables ("All fine", 2026-10-16 22:49; always use the cached tiles, not plain WMS). the

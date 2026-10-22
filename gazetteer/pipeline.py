@@ -116,6 +116,33 @@ def restac_layer(cfg: dict, staging: Path, version: str | None = None) -> dict:
   return {"slug": cfg["slug"], "reference": bool(coll.get("gazetteer:reference")), "assets": sorted(coll["assets"])}
 
 
+def repack_layer(cfg: dict, staging: Path) -> dict:
+  """rewrite a staged collection's places.parquet and PMTiles from its staged rows with the current writer and tile
+  settings, without fetching: for a writer change (small row groups, so one place is a range read: the mr_* of
+  2026-10-08 were one 164 MB group) or a tile setting change (`tile_args`), where a rebuild would re-download the layer
+  (Marine Regions from VLIZ). the rows, provenance and build time stay; the metadata is rewritten as restac_layer does."""
+  slug = cfg["slug"]
+  out = staging / slug
+  pf = pq.ParquetFile(out / "places.parquet")
+  prov = json.loads(pf.schema_arrow.metadata[b"gazetteer:provenance"])
+  table = pf.read().replace_schema_metadata(None)
+  tmp = out / "places.parquet.tmp"
+  write_geoparquet(table, tmp, prov, cfg.get("row_group_size"))
+  tmp.replace(out / "places.parquet")
+  if not cfg.get("display"):
+    tiles.build_pmtiles(out / "places.parquet", out / "places.pmtiles", slug, cfg["title"],
+                        cfg["description"], cfg["attribution"], cfg.get("tile_properties"), cfg.get("tile_maxzoom"),
+                        bool(cfg.get("tile_keep_all")), cfg.get("tile_args"))
+  restac_layer(cfg, staging)
+  problems = check_parquet(out / "places.parquet", cfg) + ([] if cfg.get("display") else check_pmtiles(out / "places.pmtiles", slug))
+  if problems:
+    raise RuntimeError(f"{slug}: " + "; ".join(problems))
+  md = pq.ParquetFile(out / "places.parquet").metadata
+  return {"slug": slug, "features": md.num_rows, "row_groups": md.num_row_groups,
+          "parquet_bytes": (out / "places.parquet").stat().st_size,
+          "pmtiles_bytes": (out / "places.pmtiles").stat().st_size if (out / "places.pmtiles").exists() else 0}
+
+
 class _SchemaRows:
   """what stac.build_collection / readme read from a table (schema and row count), without loading the geometry."""
   def __init__(self, pf):

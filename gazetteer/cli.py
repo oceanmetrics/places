@@ -1,4 +1,4 @@
-"""command line: build | restac | detect | check."""
+"""command line: build | restac | repack | detect | check."""
 from __future__ import annotations
 
 import argparse
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from .config import load_all
-from .pipeline import build_layer, detect_all, next_version, restac_layer
+from .pipeline import build_layer, detect_all, next_version, repack_layer, restac_layer
 from .validate import check_parquet, check_pmtiles
 
 ROOT = Path(__file__).resolve().parent.parent  # the repo root
@@ -18,7 +18,7 @@ PUBLISHED = "https://storage.oceanmetrics.io/gazetteer"
 def main(argv: list[str] | None = None) -> int:
   ap = argparse.ArgumentParser(prog="build_gazetteer", description=__doc__)
   sub = ap.add_subparsers(dest="cmd", required=True)
-  for name in ("build", "restac", "detect", "check", "next-version"):
+  for name in ("build", "restac", "repack", "detect", "check", "next-version"):
     p = sub.add_parser(name)
     p.add_argument("--slug", action="append", help="only this collection (repeatable); default every one")
     p.add_argument("--sources", type=Path, default=ROOT / "sources")
@@ -47,6 +47,10 @@ def main(argv: list[str] | None = None) -> int:
   if a.cmd == "restac":
     for slug in slugs:
       print(json.dumps(restac_layer(cfgs[slug], a.staging, a.version)))
+    return 0
+  if a.cmd == "repack":
+    for slug in slugs:
+      print(json.dumps(repack_layer(cfgs[slug], a.staging)))
     return 0
   if a.cmd == "detect":
     res = detect_all([cfgs[s] for s in slugs], a.published_base)

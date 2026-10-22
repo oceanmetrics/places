@@ -138,6 +138,20 @@ def test_written_row_groups_prune_a_place_id_lookup(tmp_path):
   assert not md.row_group(0).column(1).is_stats_set
 
 
+def test_check_parquet_flags_row_groups_larger_than_the_writer_makes(tmp_path):
+  """regression: the staged mr_* of 2026-10-08 (mr_eez: 285 EEZs in one 164 MB group) predate auto_row_group_size and
+  were only restac'd since, so reading one EEZ read the whole file; nothing flagged it."""
+  t = _wide_table(300, payload=50_000)
+  write_geoparquet(t, tmp_path / "old.parquet", {}, row_group_size=300)
+  write_geoparquet(t, tmp_path / "new.parquet", {})
+  cfg = {"slug": "mr_x", "license": "CC-BY-4.0"}
+  rg = [p for p in check_parquet(tmp_path / "old.parquet", cfg) if "row groups" in p]
+  assert rg == ["row groups of up to 300 rows where the writer makes 1: rewrite offline with `uv run build.py repack --slug mr_x`"]
+  assert not [p for p in check_parquet(tmp_path / "new.parquet", cfg) if "row groups" in p]
+  # a config's own row_group_size is the writer's rule for that collection
+  assert not [p for p in check_parquet(tmp_path / "old.parquet", {**cfg, "row_group_size": 300}) if "row groups" in p]
+
+
 def test_geo_bbox_crosses_the_antimeridian_while_the_row_bbox_stays_plain(tmp_path):
   """regression: the file bbox (and so the STAC extent) of a layer with a place cut at +/-180 was -180..180."""
   wrapped = Polygon([(170, 50), (-170, 50), (-170, 60), (170, 60), (170, 50)])

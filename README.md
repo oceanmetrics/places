@@ -60,7 +60,7 @@ WHERE place_id = 'NMS:MBNMS';
 |---|---|
 | `sources/<authority>/<layer>.yml` | one config per source layer: endpoint, paging, field map, `place_type`, licence, attribution, cadence, status (event log, upstream code, layer status) |
 | `gazetteer/` | the Python package: fetch -> normalise -> validate -> GeoParquet -> PMTiles -> STAC (the plan's `build/` stage) |
-| `build.py` | CLI entry point: `build`, `detect`, `next-version`, `check` |
+| `build.py` | CLI entry point: `build`, `restac`, `repack`, `detect`, `next-version`, `check` |
 | `R/` | R code that still works as is (`build_places.R`: sanctuaries + MarineRegions + ProtectedSeas) |
 | `catalog/` | the Portolan STAC tree, built here and published to the bucket; builds stage in `catalog/staging/`; H3 membership builds in `catalog/h3/` |
 | `web/` | the website, places.oceanmetrics.io (placeholder) |
@@ -77,6 +77,7 @@ uv run --group dev pytest -q                 # unit tests (staged-artifact tests
 uv run build.py detect                       # which collections changed upstream vs. the published copy
 uv run build.py build --slug boem_wind_leases --version 1.0.0
 uv run build.py check                        # parquet + PMTiles checks; 'not built' for absent collections
+uv run build.py repack --slug mr_eez          # rewrite the staged parquet + PMTiles with the current writer (small row groups) and tile_args; no fetch
 ```
 
 ## Licence

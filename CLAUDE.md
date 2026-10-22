@@ -35,6 +35,7 @@ uv run --group dev pytest -q tests/test_ids.py -k lease   # one test by name
 uv run --group dev pytest -q -m "not network"             # skip live-service tests (markers: network, tippecanoe)
 uv run build.py build --slug boem_wind_leases [--version 1.0.1]   # -> catalog/staging/<slug>/
 uv run build.py check [--slug ...]                        # parquet + PMTiles checks on staged builds
+uv run build.py repack --slug ...                        # rewrite staged parquet + PMTiles with the current writer and tile_args, no fetch
 uv run build.py detect                                    # upstream change vs. published provenance.json
 uv run build.py next-version --slug ...                   # published current_version, patch bumped
 uv run scripts/build_index.py                             # index/places_index.parquet + crosswalk.parquet
