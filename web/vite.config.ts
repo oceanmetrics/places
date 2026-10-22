@@ -11,7 +11,5 @@ export default defineConfig({
   },
   build : { target: 'es2022', chunkSizeWarningLimit: 1200 },
   server: { port: 5180, strictPort: true, fs: { allow: ['..'] } },
-  // @oceanmetrics/places 0.5.1 ships dist/ with extensionless relative imports (`./client`), which Node's ESM loader rejects; inline it so
-  // vitest resolves it through vite like the bundler does (drop this once the client emits `.js` specifiers)
-  test  : { environment: 'node', include: ['src/**/*.test.ts'], server: { deps: { inline: ['@oceanmetrics/places'] } } },
+  test  : { environment: 'node', include: ['src/**/*.test.ts'] },
 })
