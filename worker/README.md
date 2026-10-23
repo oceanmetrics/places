@@ -10,8 +10,9 @@ D8; client behaviour: `notes/om/plans_todo/2026-10-08_duckdb-wasm-key-spike.md`.
 **Status (2026-10-22): deployed to the workers.dev preview `https://om-gazetteer.ben-f07.workers.dev` on the Ocean Metrics
 Cloudflare account (buckets `oceanmetrics-io-public-enam` and `oceanmetrics-io-unlisted-enam`, US location ENAM since
 2026-10-23, KV `KEYS`, Analytics Engine
-`om_gazetteer`); the S3 → R2 mirror runs from the Mac mini with rclone; the production route (`storage.oceanmetrics.io`)
-waits on the DNS cutover.** Steps that need the account or DNS are marked **BEN-DOES**.
+`om_gazetteer`); the S3 → R2 mirror runs from the Mac mini with rclone; since the DNS cutover of 2026-10-23 (17:55 PT)
+`storage.oceanmetrics.io` is the Worker's custom domain and serves production (the preview stays).** Steps that need the
+account or DNS are marked **BEN-DOES**.
 
 ## Behaviour
 
