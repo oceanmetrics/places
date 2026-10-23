@@ -16,6 +16,7 @@
   import type { ErddapLayer } from '../lib/map/gridLayer'
   import { parseView } from '../lib/grammar'
   import { loc } from '../lib/router.svelte'
+  import { placeTitle } from '../../scripts/shell-lib.mjs'
   import { BASE, manifest, loadManifest } from '../lib/data.svelte'
   import {
     calcofiLink, derivedLine, erddapLink, fmtValue, geojsonSql, keepsGeometry, layerForPlace, layerPath, parquetUrl, placePath, sanitizeHtml, viaTitle, withBase,
@@ -60,6 +61,8 @@
   const servedBy = $derived(feature?.served_by ? new URL(feature.served_by).host : '')
   const sel = $derived(isRef && layer ? [{ slug: layer.slug, colour: null, opacity: null, width: null }] : [])
   const name = $derived(String(attrs.name ?? id))
+  // the same title the prerendered shell carries (scripts/prerender-shells.mjs), the id until the place is read
+  $effect(() => { document.title = placeTitle(status === 'ok' ? name : id) })
   const rows = $derived(Object.entries(attrs).filter(([k, v]) => k !== 'name' && k !== 'place_id' && v !== undefined))
   const sql = $derived(url ? geojsonSql(url, id) : '')
   const geojsonHref = $derived(feature && !isRef ? URL.createObjectURL(new Blob([JSON.stringify(feature)], { type: 'application/geo+json' })) : '')

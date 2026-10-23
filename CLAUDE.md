@@ -18,7 +18,7 @@ Each collection = `places.parquet` (GeoParquet 1.1) + `places.pmtiles` + `collec
 |---|---|---|
 | `build.py` + `gazetteer/` + `sources/` | Python (uv), tippecanoe | build pipeline: YAML config -> staged collection |
 | `scripts/` | Python, bash | catalog-wide artifacts (index, `layers.json`, browse pages), contribution validation, publish |
-| `web/` | Svelte 5 + Vite + MapLibre 6 | the site (live at https://oceanmetrics.io/places/ via GitHub Pages); uses the `@oceanmetrics/places` client, `@oceanmetrics/map`, `@oceanmetrics/engine` and `@oceanmetrics/catalog` from npm (see below); `/p/<id>` is the Place page (web/README "The Place page") |
+| `web/` | Svelte 5 + Vite + MapLibre 6 | the site (live at https://oceanmetrics.io/places/ via GitHub Pages); uses the `@oceanmetrics/places` client, `@oceanmetrics/map`, `@oceanmetrics/engine` and `@oceanmetrics/catalog` from npm (see below); `/p/<id>` is the Place page (web/README "The Place page"); `npm run build` also writes 200-status shells with link-preview tags for the sanctuaries and layers (`scripts/prerender-shells.mjs`, web/README "Deep links and link previews") |
 | `worker/` | Cloudflare Worker | the R2 front for storage (keys, Range/CORS, metering); deployed to the workers.dev preview https://om-gazetteer.ben-f07.workers.dev since 2026-10-22, the production route waits on the DNS cutover |
 
 `R/build_places.R` is a copy that still runs from `oceanmetrics/erddap-places`; edits here are not picked up yet.

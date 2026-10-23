@@ -142,6 +142,39 @@ renders (search falls back to filtering the layer list; a layer whose tiles are 
 unreadable indicators catalog is a notice in the Indicators section).
 `attribution_html` is sanitised (inline tags and http(s) links only) because the base URL can be overridden.
 
+## Deep links and link previews
+
+GitHub Pages answers a path it has no file for with `404.html` (`pages.yml` copies `index.html` there), so a deep link that only
+exists in the router has the status 404, one shared `<title>`, and nothing for a crawler or a chat link preview to read.
+`npm run build` therefore ends with `scripts/prerender-shells.mjs` (npm's `postbuild`, so `npm run build -- --base=/places/` in
+`pages.yml` runs it too): it writes `dist/<route>/index.html` for a chosen set of pages, each the built `index.html` with the
+page's own head, and the app mounts over it as usual. A folder with an `index.html` answers 200 (Pages redirects `/p/NMS:CINMS` to
+`/p/NMS:CINMS/`; `matchRoute` takes the trailing slash, and the built asset urls are absolute under the base, so they resolve from
+the deeper path). Every other place still goes through `404.html`.
+
+Each shell has `<title>` ("<name> · Places · Ocean Metrics"), `<meta name="description">`, `<link rel="canonical">`, Open Graph
+(`og:title`, `og:description`, `og:url`, `og:type` website, `og:image`, `og:site_name`), the Twitter card and a JSON-LD
+schema.org `Place` (`name`, `identifier`, `url`, `geo` as a `GeoShape` box from the index bbox, south west north east). The
+description is the place's layer title, its authority and what it is (`placeDescription`). `og:image` is `favicon.svg`, the only
+image in `public/`; most chat apps do not draw an SVG preview image, so a 1200x630 PNG in `public/` and the `image` constant in
+the script is the next step. The app sets the same title once it has mounted (`Place.svelte`, `LayerPage.svelte`).
+
+| shell | pages | from |
+|---|---|---|
+| `/p/<id>/` | the 18 `NMS:*` sanctuaries (`NMSAS`, `HIHWNMS`, `FGBNMS`, `OCNMS`, `MBNMS`, `CBNMS`, `GFNMS`, `CHNMS`, `CINMS`, `MNMS`, `MBPR`, `SBNMS`, `LONMS`, `WSCNMS`, `TBNMS`, `PMNM`, `GRNMS`, `FKNMS`), plus any you add | the published index (`places_index.parquet`) read with the `@oceanmetrics/places` client |
+| `/l/<slug>/` | every public layer (52 on 2026-10-23); JSON-LD `Dataset` | `layers.json` |
+| `/credits/`, `/docs/` | the two static pages | the script |
+
+The home page is `index.html` itself. The pure parts (titles, descriptions, escaping, JSON-LD, the head rewrite) are
+`scripts/shell-lib.mjs`, tested in `src/lib/shells.test.ts`.
+
+To add places: `PRERENDER_IDS="MPAINV:NMS9 <more ids>" npm run build`, or `node scripts/prerender-shells.mjs --ids=MPAINV:NMS9,<more ids>`
+on a built `dist/`; for a standing addition put the id in the `pages.yml` build step's `env: PRERENDER_IDS`. An id that is not
+in the index is skipped with a warning; the build fails if the set is over `--limit` (default 100, raise it on purpose) or the
+index has no `NMS:` place. Other flags and env: `--data` / `PRERENDER_BASE` (the gazetteer url; default the S3 path-style url, as the
+Place page's basemap), `--origin` / `PRERENDER_ORIGIN` (default `https://oceanmetrics.io`), `--dist`, `PRERENDER_SKIP=1` to build
+offline with no shells. The shells are written at build time, so a renamed place shows its old name until the next deploy.
+
 ## Size budget
 
 `scripts/size-budget.mjs` (`npm run size`, in `pages.yml` after the build) sums the gzip (level 9) of the built JS and CSS

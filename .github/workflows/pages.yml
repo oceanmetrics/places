@@ -40,7 +40,9 @@ jobs:
       # the size budget (web/README "Size budget"): entry, map, engine and the other lazy chunks, gzip
       - run: npm run size
         working-directory: web
-      # SPA fallback: GitHub Pages serves 404.html for unknown paths (/places/p/NMS:PMNM, /places/credits)
+      # `npm run build` ends with scripts/prerender-shells.mjs (postbuild): dist/p/NMS:*/, dist/l/<slug>/, dist/credits/, dist/docs/ answer 200
+      # with their own title and link-preview tags (web/README "Deep links and link previews"; PRERENDER_IDS adds places).
+      # SPA fallback for every other path: GitHub Pages serves 404.html for unknown paths (/places/p/MPAINV:X)
       - run: cp web/dist/index.html web/dist/404.html
       - uses: actions/configure-pages@v5
         with:

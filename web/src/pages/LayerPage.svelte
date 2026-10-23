@@ -3,12 +3,14 @@
   import Credit from '../lib/Credit.svelte'
   import { BASE, loadManifest, manifest } from '../lib/data.svelte'
   import { layerLabel } from '@oceanmetrics/places'
+  import { layerPageTitle } from '../../scripts/shell-lib.mjs'
   import { calcofiLink, collectionDir, collectionUrl, derivedLine, drawable, fmtDate, fmtN, layerPath, parquetUrl, viaTitle, withBase } from '../lib/helpers'
 
   let { slug }: { slug: string } = $props()
   onMount(() => { loadManifest() })
 
   const layer = $derived(manifest.layers.find((l) => l.slug === slug))
+  $effect(() => { document.title = layerPageTitle(layer ? layer.title : slug) })
   const sel = $derived([{ slug, colour: null, opacity: null, width: null }])
   const tileHost = (u: string | undefined) => { try { return u ? new URL(u.replace(/[{}]/g, '')).host : '–' } catch { return '–' } }
 </script>

@@ -21,8 +21,10 @@
   ]
   const here = $derived(r.name === 'place' || r.name === 'layer' ? 'home' : r.name)
 
+  // the place and layer pages set their own title (the prerendered shell already carries it, scripts/shell-lib.mjs)
   $effect(() => {
-    const t = { home: 'Places', place: 'Place', layer: 'Layer', credits: 'Credits', docs: 'Docs', notfound: 'Not found' }[r.name]
+    if (r.name === 'place' || r.name === 'layer') return
+    const t = { home: 'Places', credits: 'Credits', docs: 'Docs', notfound: 'Not found' }[r.name]
     document.title = `${t} · Ocean Metrics marine gazetteer`
   })
 </script>
