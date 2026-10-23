@@ -1,7 +1,8 @@
 # web/
 
 The website at places.oceanmetrics.io: search the places index, browse layers on a map, and read the licence and
-citation of everything on screen. Svelte 5 + Vite + TypeScript + MapLibre GL + pmtiles, a static SPA with
+citation of everything on screen; each place's page is the Place page of the Ocean Metrics vision (one URL per
+gazetteer id). Svelte 5 + Vite + TypeScript + MapLibre GL 6 through `@oceanmetrics/map`, a static SPA with
 client-side routing. Data comes from the `@oceanmetrics/places` client (since 2026-10-22 in
 [oceanmetrics/platform `packages/places`](https://github.com/oceanmetrics/platform/tree/main/packages/places), installed from npm;
 a client change is made and released there, then the range in `package.json` is bumped here), which reads `layers.json`, the places index, GeoParquet and PMTiles straight from object storage.
@@ -9,7 +10,7 @@ a client change is made and released there, then the range in `package.json` is 
 | route | page |
 |---|---|
 | `/` | search + browse map with layer toggles; reads and writes `?layers=slug[:colour][:opacity][:width],…&place=<place_id>` |
-| `/p/<place_id>` | place page: geometry, indicators, metadata, licence + attribution + citation, "use in" links, downloads |
+| `/p/<place_id>` | the Place page: map with the layer under it, indicators, species, layers, reports, same place in other layers, metadata, licence, "use in", downloads; reads `?layer=<kind>:<id>[:<variable>]&t=<period>` |
 | `/l/<slug>` | layer page: n, version, updated, licence, attribution, citation, README, "Add to map" |
 | `/credits` | every layer's attribution and citation, grouped by authority |
 | `/docs` | STAC root, the `layers.json` contract, DuckDB / Python / R recipes |
@@ -20,24 +21,90 @@ a client change is made and released there, then the range in `package.json` is 
 cd web
 npm install          # @oceanmetrics/places and @oceanmetrics/catalog from npm (their built dist/); no sibling checkout
 npm run dev          # http://localhost:5180
-npm test             # vitest: URL grammar codec (round trips), pure helpers, the indicators slot (synthetic fixtures, no network)
+npm test             # vitest: URL grammar, helpers, the indicators slot, the map rules, layers, species, reports, downloads (synthetic fixtures, no network)
 npm run check        # svelte-check
 npm run build        # dist/
+npm run size         # the size budget over dist/ (below); pages.yml runs it after the build
 node scripts/shoot.mjs [--url http://localhost:5180/] [--only NMS:CINMS]   # place page screenshots -> docs/shots/; look at them
 ```
 
 `scripts/shoot.mjs` (Playwright, headless Google Chrome through `channel: "chrome"`, else Playwright's chromium after
-`npx playwright install chromium`) serves `dist/` with `vite preview` unless `--url` names a running server, opens
-`/p/NMS:CINMS` (a sanctuary with status cards) and `/p/MRGID:8439` (an EEZ with OBIS series and SDG) at 390 px and 1280 px
-in light and dark (the theme is set as `localStorage` `om-theme` before load), and saves the page from the top to the end
-of the Indicators section as `docs/shots/place_<id>_<width>_<theme>.png`. It reads the live catalogs and warns when a page
-is wider than the window.
+`npx playwright install chromium`) serves `dist/` with `vite preview` unless `--url` names a running server, opens the CPO
+task force's two sanctuaries, `/p/NMS:CINMS?layer=grid:jplMURSST41mday:sst&t=2024-07` (with the MUR SST slice of July
+2024 under the map) and `/p/NMS:FGBNMS`, at 390 px and 1280 px in light and dark (the theme is set as `localStorage`
+`om-theme` before load), waits until no section is loading and the slice is in, and saves two parts:
+`docs/shots/place_<id>_<width>_<theme>.png` (the top: title, map, layer, the first indicator cards) and
+`..._sections.png` (Species, Layers, Reports). It reads the live catalogs and warns when a page is wider than the window.
+The committed shots were made small with a palette (sharp `png({ palette: true, quality: 80 })`, run from a scratch
+folder, about a quarter of the size).
 
 If vitest cannot create its temp dir in a sandbox, set `TMPDIR` to a writable directory.
 
 Data base URL: `https://storage.oceanmetrics.io/gazetteer/` by default; override at build time with
 `VITE_PLACES_BASE=https://…/` or at run time with `?base=https://…/` (internal links keep it). To develop offline, serve
 the client repo's `packages/places/test/fixtures/` (oceanmetrics/platform) with CORS and Range support and use `?base=http://127.0.0.1:<port>/`.
+
+## The Place page
+
+`/p/<place_id>` (`src/pages/Place.svelte`) is the front door of the vision ("The Place page as the front door"): one URL
+per gazetteer id, the sections in this order, each a component that only draws, with its rules in a plain tested `.ts`:
+
+1. **Title** and the source link.
+2. **The map** (`src/lib/PlacesMap.svelte`, shared with the home and layer pages): MapLibre 6 through `@oceanmetrics/map`
+   `setupMapLibre`, once a page (`src/lib/map/setup.ts`; the worker chunk is `.mjs`, `vite.config.ts` `worker`), the style
+   `composeStyle` builds (`src/lib/map/basemap.ts`): CARTO's positron or dark-matter with the GEBCO 2025 sea floor,
+   isobaths, the OSM land mask and the GEBCO undersea names, both themes. It boots on CARTO's own style and turns the
+   tiers on at `load`; the tiers are read from the bucket's path-style url `BASEMAP_BUCKET`
+   (`https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/basemap/`) because `storage.oceanmetrics.io/basemap/`
+   answers 404 until the DNS cutover: set `BASEMAP_BUCKET` to the package's `BASEMAP_URL` then. A theme flip is
+   `setStyle(..., { diff: true, transformStyle: carryLayers(id => !basemap.has(id)) })` with `basemapLayerIds` of the style
+   set; the place layers go back under the names (`placesBeforeId`), the highlight is redrawn, and the layer under the map
+   stays under the land mask (`seaSurfaceId`).
+   **The layer under the map**: `?layer=grid:<dataset>:<variable>&t=<period>` (`src/lib/grammar.ts`; `t` is a year, month
+   or day, absent = the latest; both are carried from page to page like `proj`). The "Layer under the map" select lists
+   every variable of the gridded ERDDAP collections of the gazetteer's STAC catalog (`erddap/<id>/collection.json`,
+   `src/lib/map/gridLayer.ts` `layerChoices`; masks, counts and error bands left out), with a month and the legend line
+   (`legendLine`: title, period, how it is drawn, the range). The slot is `@oceanmetrics/map` `gridSlot` over
+   `@oceanmetrics/engine` `sliceSource` of the place's own lobes (`placeLobes` on the polygon as published, split at ±180;
+   `lobeAxes`, `lobeMasks`, `fetchTimeExtent`), registered with `registerSlotKind('grid', gridKind(placeId))`
+   (`src/lib/map/gridKind.ts`). The engine and DuckDB-WASM 1.32 (self-hosted mvp and eh bundles, `?url`) are the lazy
+   chunk `src/lib/map/gridSource.ts`, loaded on the first slice. A place over the cell budget (250,000 cells a request,
+   600,000 a step) says so. The ERDDAP mirror at erddap.oceanmetrics.io answered the same url 404 and 200 by turns on
+   2026-10-23, so every slice request goes through `patientFetch` (asks again after a 404 or a 5xx, six tries).
+3. **Indicators** (below): led by the roll-up line (`src/lib/reports.ts` `summaryLine` over `@oceanmetrics/catalog`
+   `rollups`): "N indicators with a value: a above, w within, b below the place's own record, n without a status; latest
+   <period>".
+4. **Species** (`src/lib/species.ts`, the reads in the lazy `speciesRead.ts`):
+   - *OBIS records in the place*: the obis-h3 release (`obis-h3/latest.json` -> `place_exact/coll=<coll>/indicators.parquet`,
+     the place's own collection first, then its copies'), the `eov='all'` rows: records `n`, species `sp` and ES(50) `es`
+     for every year and by decade, the latest decade in the line, species by EOV group, with Reproduce (the file and a
+     DuckDB query). They are counted point-in-polygon on the place itself. The per-species list is not in the release: the
+     section links the OBIS mapper and the OBIS checklist API (JSON) for the place's box (`bboxWkt`, two boxes across ±180).
+   - *Species from AquaMaps*: the atlas collection `aquamaps_eov` declares `atlas:cell_species`, a cell -> species table in
+     5° tiles of the 0.05° grid (not H3). The place's cells are the cells whose centre falls in its polygon (exact on the
+     native grid; a part too small for a centre keeps the cell under it: `placeCells`), only the tiles' row groups whose
+     `cell_id` range holds one are read (`groupsHolding`), joined with `species.parquet` (`sdmSpecies`: most cells first,
+     then the mean suitability). CINMS: 152 cells in 2 tiles, 920 species; FGBNMS: 26 cells, 1,320 species (2026-10-23). A
+     table of the first 20, "Show all", a CSV (`sdmCsv`) and the atlas link; the AquaMaps EOV citation and its licence (CC
+     BY-NC 3.0). The place's H3 membership is not a step here: the tiles are keyed on the 0.05° grid, so the exact mask is
+     both simpler and the record.
+5. **Layers that cover this place** (`src/lib/layers.ts` `layersCovering`): the atlas collections
+   (`atlas/catalog.json`, its MarineSensitivity children by reference) and the gazetteer's ERDDAP layers whose extent meets
+   the place's box (either may cross ±180 or be unwrapped), regional ones listed, the global ones folded with the line
+   saying how many are global, since a box says little about where a global layer has data; a check by data cell waits
+   on the atlas collections' H3 cells. Atlas links open the collection with the place by reference:
+   `https://oceanmetrics.io/atlas/?c=<collection>#pl=<p. token>` (`placeToken`, the `g1` encoding of atlas
+   `docs/gazetteer-places.md`, escaped once more for the atlas's `URLSearchParams`); gridded ERDDAP layers open under this
+   page's map.
+6. **Reports** (`src/lib/reports.ts`): the indicators app's Report view (`#view=report&pi=<id>`) for the place alone, the
+   default selection (`coll:places`, the sanctuaries) when the place's values are there, each manifest `place_sets` entry
+   whose groups hold one of the place's collections (`set:political` for an EEZ or a high-seas area), and for an `NMS:*`
+   place the SanctuaryWatch bundle, which the Report view builds (Export, "SanctuaryWatch bundle (zip)").
+7. **Same place in other layers**, **Metadata**, **Licence, attribution and citation**, **Use in**.
+8. **Downloads**: *Values of this place's indicators* as CSV or Parquet (`src/lib/downloads.ts` `downloadValues`, a lazy
+   chunk: every values file the place's coverage rows list, read whole with one fetch each, filtered to the place,
+   concatenated with a `source` column; Parquet by hyparquet-writer with `time` as an ISO date string; FGBNMS: 13,458 values
+   from 80 files), then the boundary as before (the collection's GeoParquet, the place's GeoJSON, the DuckDB SQL).
 
 ## Indicators on the place page
 
@@ -59,7 +126,8 @@ view (`https://oceanmetrics.io/indicators/#view=place&place=<id>&coll=<coll>&ind
 section says which absence applies: **no data here** (the catalog covers the place's layer but has no value for it) or
 **not computed yet** (nobody computed the place, whatever its layer: indicators for every gazetteer place arrive in
 build week 3, 2026-11-13 to 11-19, a sentence this site passes to the package; until then the link goes to ERDDAP
-Places). The full Place page is build week 3.
+Places). `readCatalog()` (`src/lib/indicators.ts`) reads the two files once a page for every section that needs them
+(Indicators, Reports, Downloads).
 
 Catalog base: `https://storage.oceanmetrics.io/indicators/` by default; override at build time with
 `VITE_INDICATORS_BASE=https://…/` or at run time with `?indicators=https://…/` (for example a local `catalog/` of the
@@ -73,6 +141,25 @@ Everything degrades: when `index/layers.json` or the places index is not publish
 renders (search falls back to filtering the layer list; a layer whose tiles are missing is flagged, not fatal; an
 unreadable indicators catalog is a notice in the Indicators section).
 `attribution_html` is sanitised (inline tags and http(s) links only) because the base URL can be overridden.
+
+## Size budget
+
+`scripts/size-budget.mjs` (`npm run size`, in `pages.yml` after the build) sums the gzip (level 9) of the built JS and CSS
+by when they load, told apart by Vite's manifest; a line over its budget fails the job. Raise a line only with the reason
+written here. Set on 2026-10-23 from a measurement, with about 10 % headroom:
+
+| line | what | measured | budget |
+|---|---|--:|--:|
+| entry JS | what `index.html` loads up front: router, pages, the places client with hyparquet and its codecs, the indicator cards | 155.8 kB | 172 kB |
+| map JS | `PlacesMap.svelte`'s chunk: MapLibre 6, `@oceanmetrics/map`, the basemap and the slot | 299.3 kB | 330 kB |
+| engine JS | `map/gridSource.ts`: `@oceanmetrics/engine`, Apache Arrow, the mask, DuckDB-WASM's JS API (on the first slice) | 63.2 kB | 70 kB |
+| rest JS | the other lazy chunks: the species reader, the values download (hyparquet-writer) | 17.8 kB | 24 kB |
+| CSS | the site's styles | 3.5 kB | 5 kB |
+| map CSS | MapLibre's stylesheet and the map's | 10.4 kB | 12 kB |
+
+Not budgeted, and printed: DuckDB-WASM's worker scripts (381 kB) and wasm (eh 7.6 MB, mvp 8.7 MB gzip, fetched by the
+engine's worker on the first slice), MapLibre's worker module (147 kB), and geotiff's decoders that the map package's COG
+protocol would import (never requested: no `cog` slot here).
 
 ## Deploy
 

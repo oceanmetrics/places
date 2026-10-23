@@ -18,7 +18,7 @@ Each collection = `places.parquet` (GeoParquet 1.1) + `places.pmtiles` + `collec
 |---|---|---|
 | `build.py` + `gazetteer/` + `sources/` | Python (uv), tippecanoe | build pipeline: YAML config -> staged collection |
 | `scripts/` | Python, bash | catalog-wide artifacts (index, `layers.json`, browse pages), contribution validation, publish |
-| `web/` | Svelte 5 + Vite + MapLibre | the site (live at https://oceanmetrics.io/places/ via GitHub Pages); uses the `@oceanmetrics/places` client from npm (see below) |
+| `web/` | Svelte 5 + Vite + MapLibre 6 | the site (live at https://oceanmetrics.io/places/ via GitHub Pages); uses the `@oceanmetrics/places` client, `@oceanmetrics/map`, `@oceanmetrics/engine` and `@oceanmetrics/catalog` from npm (see below); `/p/<id>` is the Place page (web/README "The Place page") |
 | `worker/` | Cloudflare Worker | the R2 front for storage (keys, Range/CORS, metering); deployed to the workers.dev preview https://om-gazetteer.ben-f07.workers.dev since 2026-10-22, the production route waits on the DNS cutover |
 
 `R/build_places.R` is a copy that still runs from `oceanmetrics/erddap-places`; edits here are not picked up yet.
@@ -52,10 +52,16 @@ made in oceanmetrics/platform `packages/places` and released there (version, `CH
 in `web/package.json` here. `@oceanmetrics/catalog` 0.3.0 holds the indicator cards (`@oceanmetrics/catalog/indicators`, shared
 with the indicators viewer; `web/src/lib/indicators.ts` only wires it) and brings the JSON schemas that
 `tests/test_layers_schema.py` validates against; it comes from npm (`^0.3.0`) like the client, with no sibling checkout.
+`@oceanmetrics/map` ^0.2.2 is the map stack (MapLibre 6 setup, `composeStyle` and the GEBCO basemap, the `grid` slot; its tiers
+are read from the bucket's path-style url until the DNS cutover: `web/src/lib/map/basemap.ts` `BASEMAP_BUCKET`) and
+`@oceanmetrics/engine` ^0.1.1 the grid slice in DuckDB-WASM 1.32 (pinned exactly; a lazy chunk). The Place page's rules are
+plain tested modules in `web/src/lib/` (`map/gridLayer.ts`, `layers.ts`, `species.ts`, `reports.ts`, `downloads.ts`); the
+components only draw them.
 
 ```sh
 # the client is tested in its own repo (oceanmetrics/platform: npm test && npm run typecheck)
-cd web && npm run dev      # http://localhost:5180; also: npm test, npm run check (svelte-check), npm run build
+cd web && npm run dev      # http://localhost:5180; also: npm test, npm run check (svelte-check), npm run build, npm run size
+node scripts/shoot.mjs     # (in web/, after a build) the Place page shots at 390 and 1280 px in both themes -> web/docs/shots/; look at them
 cd worker && npm test && npm run typecheck
 ```
 
@@ -105,7 +111,7 @@ the `rashid check` gate. Read `catalog/staging/RUNBOOK_PUBLISH.md` first: it has
 must not be published yet (e.g. `noaa_esa_critical_habitat`) and the reference collections (`mr_*`, metadata only). `.github/workflows/sync.yml` is the weekly detect ->
 rebuild -> publish (through `publish_collections.sh --republish`) -> H3 / index / layers.json job on the self-hosted
 `macmini` runner (Mondays 07:43 UTC; this repo is the only publisher of the place collections since 2026-10-16, when the
-BOEM / NOAA AOA ones moved here from erddap-places); it reads the published catalog from the S3 origin, not the CDN; `pages.yml` deploys `web/` on pushes touching `web/` (npm ci, check, test, build); `validate-contribution.yml` checks PRs adding `contrib/OM-<ulid>/` (see CONTRIBUTING.md).
+BOEM / NOAA AOA ones moved here from erddap-places); it reads the published catalog from the S3 origin, not the CDN; `pages.yml` deploys `web/` on pushes touching `web/` (npm ci, check, test, build, the size budget `npm run size`); `validate-contribution.yml` checks PRs adding `contrib/OM-<ulid>/` (see CONTRIBUTING.md).
 
 The client's own `CHANGELOG.md` and version are in oceanmetrics/platform `packages/places` (moved there 2026-10-22, on npm);
 add an entry there with any user-facing change. The client's test fixtures (oceanmetrics/platform
