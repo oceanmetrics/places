@@ -13,12 +13,19 @@ export const UNLISTED_PARQUET = new Uint8Array(30_000).map((_, i) => (i * 11 + 5
 
 export interface Point { indexes: string[], blobs: string[], doubles: number[] }
 
-export interface Rig { env: Env, points: Point[], limited: { anon: string[], key: string[] } }
+export interface Rig { env: Env, points: Point[], limited: { anon: string[], key: string[], full: string[] } }
+
+/** a fake rate-limit binding: `limit` calls per key are allowed, the next ones fail (no window reset inside a test) */
+export function counting(limit: number, log: string[] = []) {
+  const n = new Map<string, number>()
+  return { limit: async ({ key }: { key: string }) => {
+    log.push(key); const c = (n.get(key) ?? 0) + 1; n.set(key, c); return { success: c <= limit } } }
+}
 
 /** a worker env over the real (miniflare) R2 + KV with fake metrics and limiters */
 export function rig(over: Partial<Env> & { anonOk?: boolean } = {}): Rig {
   const points: Point[] = []
-  const limited = { anon: [] as string[], key: [] as string[] }
+  const limited = { anon: [] as string[], key: [] as string[], full: [] as string[] }
   const { anonOk = true, ...rest } = over
   const e = {
     BUCKET:  env.BUCKET,
@@ -26,6 +33,7 @@ export function rig(over: Partial<Env> & { anonOk?: boolean } = {}): Rig {
     KEYS:    env.KEYS,
     METRICS: { writeDataPoint: (p: Point) => { points.push(p) } },
     ANON_LIMITER: { limit: async ({ key }: { key: string }) => { limited.anon.push(key); return { success: anonOk } } },
+    ANON_FULLFILE_LIMITER: { limit: async ({ key }: { key: string }) => { limited.full.push(key); return { success: true } } },
     KEY_LIMITER:  { limit: async ({ key }: { key: string }) => { limited.key.push(key); return { success: true } } },
     ...rest,
   } as unknown as Env

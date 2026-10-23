@@ -31,7 +31,8 @@ How a served public path is gated, by type, not by prefix (`classify()`):
 |---|---|
 | `*.json` (STAC, `catalog.json`, `layers.json`, `indicators.json`, `latest.json`, `versions.json`), `*.md`, `*.html`, `*.png`, `*.jpg`/`*.jpeg`, `*.txt`, `*.csv`, `*.svg`, `*.atom`/`*.xml` (the indicators Atom feeds, `indicators/feeds/`: `application/atom+xml` as stored, else the extension's type), `credits`, anything under `gazetteer/index/` | keyless. A `?key=` is used only for attribution; a wrong or stale one is ignored, never a 403. Class `stac` for json, else `other` |
 | data: `*.parquet`, `*.pmtiles`, `*.tif`/`*.tiff`, `*.duckdb`, `*.zip`, `*.gz`, `*.fgb`, and any extension not in the keyless list, with a valid `?key=` | served; Origin must match the key's allow-list (no Origin header, as from curl/R/QGIS, passes). Class `parquet`, `pmtiles`, `tif`, else `data` |
-| same, no key | **anonymous tier**: served, but through the `ANON_LIMITER` rate-limit binding (per client IP); over the limit is a 429, not a 403 |
+| same, no key | **anonymous tier**: served, but through the `ANON_LIMITER` rate-limit binding (1,200 requests a minute per client IP, every keyless data request counts, so a map session of several Place page views is never throttled); over the limit is a 429, not a 403 |
+| same, no key, un-ranged GET of a parquet over `FULLFILE_BYTES` | also counts against `ANON_FULLFILE_LIMITER`, a separate budget of 60 a minute per client IP; the 61st in a minute is a 429 (same body and `Retry-After: 60`), so a bulk download is throttled while ranged reads are not. Keyed tiers are unchanged |
 | same, unknown/malformed/disabled key, or wrong Origin | 403 JSON (`invalid_key`, `origin_not_allowed`) |
 | key at or over its monthly byte cap | 429 JSON `{error:"monthly_cap_exceeded", key, cap_bytes, used_bytes}`, `Retry-After` to the start of next UTC month |
 | key at or over `soft_pct` (default 80 %) of its cap | served, with `X-OM-Usage: used=...; cap=...; pct=...; state=soft` |
@@ -110,10 +111,11 @@ where the default temp dir is read-only, run with `TMPDIR=<writable dir> npm tes
    `wrangler.toml`.
 5. **BEN-DOES** Analytics Engine: enable it for the account (dashboard, Workers > Analytics Engine); the dataset
    `om_gazetteer` is created on first write.
-6. **BEN-DOES** Rate-limit bindings: nothing to create, they are declared in `wrangler.toml` (`ANON_LIMITER` 120 requests per
-   60 s per IP; `KEY_LIMITER` 1200 per 60 s per key). `namespace_id` values are arbitrary numbers unique in the account.
-   The anonymous number is a guess: one DuckDB query on an archive is 5 to 30+ requests (see the spike), so tune it from
-   `blob5 = 'anonymous'` rows.
+6. **BEN-DOES** Rate-limit bindings: nothing to create, they are declared in `wrangler.toml` (`ANON_LIMITER` 1200 requests per
+   60 s per IP; `ANON_FULLFILE_LIMITER` 60 full-file reads per 60 s per IP; `KEY_LIMITER` 1200 per 60 s per key).
+   `namespace_id` values are arbitrary numbers unique in the account. The anonymous numbers are sized from a measured
+   Place page load (about 108 requests: gazetteer, layer tiles, GEBCO basemap ranges, values; one DuckDB query on an
+   archive is 5 to 30+ requests, see the spike), so tune them from `blob5 = 'anonymous'` rows.
 7. **BEN-DOES** Rollup (optional until you want caps): `npx wrangler secret put CF_API_TOKEN` (token with Account >
    Account Analytics > Read) and uncomment/set `CF_ACCOUNT_ID` in `[vars]`.
 8. **BEN-DOES** `npx wrangler deploy` (stages on the `*.workers.dev` URL; check `curl -I <url>/gazetteer/catalog.json`).

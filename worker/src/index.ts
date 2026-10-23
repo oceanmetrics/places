@@ -131,6 +131,17 @@ export async function handle(request: Request, env: Env, now: Date = new Date())
 
   // object (serve() reclassifies m.cls to `fullfile` for a flagged un-ranged parquet read) ----
   const served = await serve(request, bucket, objKey, m, env, await linkP)
+  // anonymous full-file reads (flagged by serve) draw on their own, lower budget on top of the general one
+  if (m.tier === 'anonymous' && (m.cls as string) === 'fullfile' && env.ANON_FULLFILE_LIMITER) {
+    const ip = request.headers.get('cf-connecting-ip') ?? 'unknown'
+    const { success } = await env.ANON_FULLFILE_LIMITER.limit({ key: ip })
+    if (!success) {
+      await served.res.body?.cancel()
+      return err(429, { error: 'rate_limited', tier: 'anonymous',
+        message: 'anonymous full-file reads are rate limited; send a Range header or add ?key=<your key> (see https://storage.oceanmetrics.io/gazetteer/credits)' },
+        { 'retry-after': '60' })
+    }
+  }
   if (usageHeader) served.res.headers.set('x-om-usage', usageHeader)
   return finish(served.res, served.bytes)
 

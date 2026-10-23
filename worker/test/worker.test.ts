@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { env } from 'cloudflare:test'
 import { handle } from '../src/index'
 import { rollupUsage } from '../src/meter'
-import { CAP_KEY, GOOD_KEY, ORIGIN, PARQUET, PMTILES, UNLISTED_PARQUET, get, now, rig, seed } from './helpers'
+import { CAP_KEY, GOOD_KEY, ORIGIN, PARQUET, PMTILES, UNLISTED_PARQUET, counting, get, now, rig, seed } from './helpers'
 
 const LICENSE = '<https://storage.oceanmetrics.io/gazetteer/credits>; rel="license"'
 const run = (r: ReturnType<typeof rig>, req: Request) => handle(req, r.env, now)
@@ -122,6 +122,56 @@ describe('anonymous tier', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('*')
     expect(res.headers.get('retry-after')).toBe('60')
     expect((await res.json() as { error: string }).error).toBe('rate_limited')
+  })
+})
+
+describe('anonymous budgets: 1200 a minute for ranged reads, 60 a minute for full-file reads', () => {
+  const ip = { 'cf-connecting-ip': '203.0.113.20' }
+
+  it('a burst of 200 small ranged GETs (one Place page is about 108) passes the general budget', async () => {
+    const r = rig({ ANON_LIMITER: counting(1200) as never, ANON_FULLFILE_LIMITER: counting(60) as never })
+    for (let i = 0; i < 200; i++) {
+      const res = await run(r, get('/gazetteer/mpa/places.parquet', { headers: { range: `bytes=${i}-${i + 99}`, ...ip } }))
+      expect(res.status, `request ${i + 1}`).toBe(206)
+      await res.arrayBuffer()
+    }
+  })
+
+  it('the 1201st keyless request in the window is a 429', async () => {
+    const r = rig({ ANON_LIMITER: counting(1200) as never })
+    let last = 0
+    for (let i = 0; i < 1201; i++) {
+      const res = await run(r, get('/gazetteer/mpa/places.pmtiles', { headers: { range: 'bytes=0-9', ...ip } }))
+      last = res.status
+      await res.arrayBuffer()
+      if (i < 1200) expect(res.status, `request ${i + 1}`).toBe(206)
+    }
+    expect(last).toBe(429)
+  })
+
+  it('the 61st full-file GET in a minute is a 429 with the same body and Retry-After; ranged reads still pass', async () => {
+    const r = rig({ FULLFILE_BYTES: '10000', ANON_LIMITER: counting(1200) as never, ANON_FULLFILE_LIMITER: counting(60) as never })
+    for (let i = 0; i < 60; i++) {
+      const res = await run(r, get('/gazetteer/mpa/places.parquet', { headers: ip }))
+      expect(res.status, `full-file ${i + 1}`).toBe(200)
+      await res.arrayBuffer()
+    }
+    const over = await run(r, get('/gazetteer/mpa/places.parquet', { headers: { ...ip, origin: ORIGIN } }))
+    expect(over.status).toBe(429)
+    expect(over.headers.get('access-control-allow-origin')).toBe('*')
+    expect(over.headers.get('retry-after')).toBe('60')
+    expect((await over.json() as { error: string, tier: string }).error).toBe('rate_limited')
+    const ranged = await run(r, get('/gazetteer/mpa/places.parquet', { headers: { range: 'bytes=0-99', ...ip } }))
+    expect(ranged.status).toBe(206)
+  })
+
+  it('a small un-ranged parquet and a keyed full-file read never touch the full-file budget', async () => {
+    const r = rig({ FULLFILE_BYTES: '100000' })
+    await (await run(r, get('/gazetteer/mpa/places.parquet', { headers: ip }))).arrayBuffer()
+    const big = rig({ FULLFILE_BYTES: '10' })
+    await (await run(big, get(`/gazetteer/mpa/places.parquet?key=${GOOD_KEY}`))).arrayBuffer()
+    expect(r.limited.full).toEqual([])
+    expect(big.limited.full).toEqual([])
   })
 })
 

@@ -12,6 +12,9 @@ export interface Env {
   METRICS: AnalyticsEngineDataset
   /** Workers rate-limit binding for keyless archive reads (keyed by client ip) */
   ANON_LIMITER: RateLimit
+  /** Workers rate-limit binding for keyless full-file reads (un-ranged parquet over FULLFILE_BYTES), keyed by client ip;
+   *  a separate, lower budget than ANON_LIMITER, which counts every keyless request */
+  ANON_FULLFILE_LIMITER?: RateLimit
   /** optional rate-limit binding applied per key id to keyed archive reads */
   KEY_LIMITER?: RateLimit
   /** un-ranged GET of a parquet larger than this many bytes is flagged `fullfile` (default 16 MiB) */

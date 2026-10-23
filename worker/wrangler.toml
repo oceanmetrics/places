@@ -34,11 +34,19 @@ id      = "46f26ef9bf444bff9b220a3b9fe6bff8"
 binding = "METRICS"
 dataset = "om_gazetteer"
 
-# keyless parquet/pmtiles: roughly one duckdb query's worth of ranged reads per ip per minute, tune from logs
+# keyless data reads (parquet/pmtiles/tif/...): every request counts. One Place page load is ~108 requests, so 1200 a
+# minute per ip lets a session of several page views through; tune from `blob5 = 'anonymous'` rows
 [[ratelimits]]
 name         = "ANON_LIMITER"
 namespace_id = "1001"
-simple       = { limit = 120, period = 60 }
+simple       = { limit = 1200, period = 60 }
+
+# keyless full-file reads (un-ranged parquet over FULLFILE_BYTES, class `fullfile`): a separate, lower budget so a
+# bulk download is throttled long before the general one
+[[ratelimits]]
+name         = "ANON_FULLFILE_LIMITER"
+namespace_id = "1003"
+simple       = { limit = 60, period = 60 }
 
 # per-key request rate; the byte cap is the real budget (KV usage totals)
 [[ratelimits]]
