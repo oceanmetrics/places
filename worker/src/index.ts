@@ -1,18 +1,46 @@
-// gazetteer front: keys, CORS, ranges, metering over the R2 bucket ----
+// storage front: keys, CORS, ranges, metering over the R2 buckets ----
 import type { Env, KeyConfig } from './env'
 import { applyCors, originAllowed } from './cors'
-import { classify, guessContentType, LICENSE_LINK, target } from './paths'
+import { classify, creditsKey, GENERIC_TYPES, guessContentType, LICENSE_LINK, SERVED_MESSAGE, target } from './paths'
 import { parseRange, preconditionStatus, resolveRange, type ByteRange } from './range'
 import { evaluateCap, getUsage, rollupUsage, secondsToNextMonth, writeMetric, type Metric } from './meter'
 
 const KEY_RE        = /^[A-Za-z0-9_-]{8,64}$/
 const FULLFILE_DEFAULT = 16 * 1024 * 1024
+const CREDITS_TTL_MS   = 10 * 60 * 1000
+
+/** per-isolate cache: does `<prefix>/index/credits` exist (so its data carries a `Link` header)? */
+const creditsSeen = new Map<string, { link: string | null, at: number }>()
+
+/** the `Link` header for a resolved path: the gazetteer credits for gazetteer (public and unlisted); for any other
+ *  prefix only when `<prefix>/index/credits` exists in the public bucket (looked up once per isolate per 10 min) */
+async function licenseLink(env: Env, store: 'public' | 'unlisted', prefix: string, now: number): Promise<string | null> {
+  if (store === 'unlisted' || prefix === 'gazetteer') return LICENSE_LINK
+  if (prefix === 'root') return null
+  const hit = creditsSeen.get(prefix)
+  if (hit && now - hit.at < CREDITS_TTL_MS) return hit.link
+  let link: string | null = null
+  try {
+    const k = creditsKey(prefix)
+    if (await env.BUCKET.head(k)) link = `<https://storage.oceanmetrics.io/${k}>; rel="license"`
+  } catch { /* a failed lookup only drops the header */ }
+  creditsSeen.set(prefix, { link, at: now })
+  return link
+}
+
+/** first segment of a request path, for the metric prefix of a path that resolved to nothing */
+function firstSegment(pathname: string): string {
+  let p = pathname
+  try { p = decodeURIComponent(pathname) } catch { /* keep raw */ }
+  return p.replace(/^\/+/, '').split('/')[0].slice(0, 64)
+}
 
 /** the whole request flow; `now` is injectable for tests */
 export async function handle(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
   const url    = new URL(request.url)
   const origin = request.headers.get('origin') ?? ''
-  const m: Metric = { key: '', app: '', cls: 'other', origin, tier: 'open', method: request.method, path: url.pathname, status: 0, bytes: 0 }
+  const m: Metric = { key: '', app: '', cls: 'other', origin, tier: 'open', method: request.method, path: url.pathname, status: 0, bytes: 0,
+    prefix: firstSegment(url.pathname) }
   let allowOrigin = '*'
 
   // finish a response: CORS on every response, one metric row
@@ -36,10 +64,12 @@ export async function handle(request: Request, env: Env, now: Date = new Date())
   }
 
   const t = target(url.pathname)
-  if (!t) return err(404, { error: 'not_found', message: 'paths are served under /gazetteer/' })
+  if (!t) return err(404, { error: 'not_found', message: SERVED_MESSAGE })
   const objKey = t.key
   const bucket = t.store === 'unlisted' ? env.UNLISTED : env.BUCKET
-  m.path = t.store === 'unlisted' ? `unlisted/${objKey}` : objKey
+  m.path   = t.store === 'unlisted' ? `unlisted/${objKey}` : objKey
+  m.prefix = t.prefix
+  const linkP  = licenseLink(env, t.store, t.prefix, now.getTime())   // cached; runs alongside the key lookup
   if (!bucket) return err(404, { error: 'not_found' })
 
   const { cls, gate } = classify(objKey, t.store)
@@ -100,7 +130,7 @@ export async function handle(request: Request, env: Env, now: Date = new Date())
   }
 
   // object (serve() reclassifies m.cls to `fullfile` for a flagged un-ranged parquet read) ----
-  const served = await serve(request, bucket, objKey, m, env)
+  const served = await serve(request, bucket, objKey, m, env, await linkP)
   if (usageHeader) served.res.headers.set('x-om-usage', usageHeader)
   return finish(served.res, served.bytes)
 
@@ -108,15 +138,17 @@ export async function handle(request: Request, env: Env, now: Date = new Date())
 
 interface Served { res: Response, bytes: number }
 
-function baseHeaders(obj: R2Object, objKey: string): Headers {
+function baseHeaders(obj: R2Object, objKey: string, link: string | null): Headers {
   const h = new Headers()
   obj.writeHttpMetadata(h)
-  if (!h.has('content-type')) h.set('content-type', guessContentType(objKey))
-  if (!h.has('cache-control')) h.set('cache-control', objKey.endsWith('.json') ? 'public, max-age=60' : 'public, max-age=300')
+  // a missing or generic stored type (rclone's octet-stream) gives way to the extension guess
+  const stored = (h.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
+  if (!stored || GENERIC_TYPES.has(stored)) h.set('content-type', guessContentType(objKey))
+  if (!h.has('cache-control')) h.set('cache-control', /\.(json|html)$/i.test(objKey) ? 'public, max-age=60' : 'public, max-age=300')
   h.set('etag', obj.httpEtag)
   h.set('accept-ranges', 'bytes')
   h.set('last-modified', obj.uploaded.toUTCString())
-  h.set('link', LICENSE_LINK)
+  if (link) h.set('link', link)
   return h
 }
 
@@ -131,14 +163,14 @@ function unsatisfiable(size: number): Served {
   return { res: new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}`, 'accept-ranges': 'bytes' } }), bytes: 0 }
 }
 
-async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metric, env: Env): Promise<Served> {
+async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metric, env: Env, link: string | null): Promise<Served> {
   const isHead = request.method === 'HEAD'
   const range  = parseRange(request.headers.get('range'))
 
   if (isHead) {
     const obj = await bucket.head(objKey)
     if (!obj) return notFound()
-    const h = baseHeaders(obj, objKey)
+    const h = baseHeaders(obj, objKey, link)
     const pre = preconditionStatus(request.headers, obj.httpEtag)
     if (pre) return { res: new Response(null, { status: pre, headers: h }), bytes: 0 }
     if (range) {
@@ -163,7 +195,7 @@ async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metr
   }
   if (!obj) return notFound()
 
-  const h = baseHeaders(obj, objKey)
+  const h = baseHeaders(obj, objKey, link)
   if (!('body' in obj)) {
     // precondition failed inside R2: say which one
     const pre = preconditionStatus(request.headers, obj.httpEtag) ?? 304

@@ -1,6 +1,9 @@
 // path handling and classification ----
 
-export type PathClass = 'stac' | 'parquet' | 'pmtiles' | 'other' | 'unlisted'
+/** metric class (blob3): `stac` any json; `parquet`, `pmtiles`, `tif` by extension; `data` other data files
+ *  (duckdb, zip, gz, fgb, unknown extensions); `other` keyless metadata (md, html, images, txt, csv, `credits`);
+ *  `unlisted` the unlisted bucket and `atlas-restricted/` */
+export type PathClass = 'stac' | 'parquet' | 'pmtiles' | 'tif' | 'data' | 'other' | 'unlisted'
 
 /** which R2 bucket a path reads: `BUCKET` (the public catalog) or `UNLISTED` (copies kept out of the catalog) */
 export type Store = 'public' | 'unlisted'
@@ -13,17 +16,43 @@ export const LICENSE_LINK = '<https://storage.oceanmetrics.io/gazetteer/credits>
 /** request path prefix of the unlisted bucket: `/unlisted/gazetteer/<slug>/...` reads `gazetteer/<slug>/...` from UNLISTED */
 export const UNLISTED_PREFIX = 'unlisted/'
 
-/** bucket and R2 object key for a request path, or null when the path is not under `gazetteer/` (or
- *  `unlisted/gazetteer/`) or is unsafe. Both buckets use the same `gazetteer/...` key layout. */
-export function target(pathname: string): { store: Store, key: string } | null {
+/** first path segments served from the public bucket (keyless metadata, data through the key tiers) */
+export const PUBLIC_PREFIXES: readonly string[] = ['gazetteer', 'indicators', 'atlas', 'obis-h3', 'basemap', 'marine-atlas', 'issues']
+
+/** first path segments in the public bucket that need a key for every file (served like `/unlisted/`, class `unlisted`) */
+export const RESTRICTED_PREFIXES: readonly string[] = ['atlas-restricted']
+
+/** objects at the bucket root that are served; every other root object (and `backups/`) is a 404 */
+export const ROOT_FILES: readonly string[] = ['index.html', 'README.md']
+
+/** the 404 message for a path outside the served prefixes */
+export const SERVED_MESSAGE = 'served prefixes: ' +
+  [...PUBLIC_PREFIXES.map(p => `/${p}/`), '/unlisted/gazetteer/ (key)', ...RESTRICTED_PREFIXES.map(p => `/${p}/ (key)`),
+    ...ROOT_FILES.map(f => `/${f}`)].join(', ')
+
+/** a resolved request path: bucket, R2 object key and the metric prefix (first segment, `root` for root files) */
+export interface Target { store: Store, key: string, prefix: string }
+
+/** bucket and R2 object key for a request path, or null when the path is outside the served prefixes or is unsafe.
+ *  A folder URL (ending in `/`, or the bare `/`) reads `index.html` under it (the old Caddy's `/marine-atlas/` rewrite);
+ *  it is a 404 later when that object does not exist. Both buckets use the same `gazetteer/...` key layout. */
+export function target(pathname: string): Target | null {
   let p: string
   try { p = decodeURIComponent(pathname) } catch { return null }
   p = p.replace(/^\/+/, '')
   let store: Store = 'public'
-  if (p.startsWith(UNLISTED_PREFIX)) { store = 'unlisted'; p = p.slice(UNLISTED_PREFIX.length) }
-  if (!p.startsWith('gazetteer/') || p.endsWith('/')) return null
-  if (p.split('/').some(seg => seg === '..' || seg === '.' || seg === '')) return null
-  return { store, key: p }
+  if (p.startsWith(UNLISTED_PREFIX)) {
+    store = 'unlisted'; p = p.slice(UNLISTED_PREFIX.length)
+    if (!p.startsWith('gazetteer/')) return null
+  }
+  if (p === '' || p.endsWith('/')) p += 'index.html'
+  const segs = p.split('/')
+  if (segs.some(seg => seg === '..' || seg === '.' || seg === '')) return null
+  if (segs.length === 1) return store === 'public' && ROOT_FILES.includes(p) ? { store, key: p, prefix: 'root' } : null
+  const first = segs[0]
+  if (store === 'unlisted') return { store, key: p, prefix: 'unlisted' }
+  if (!PUBLIC_PREFIXES.includes(first) && !RESTRICTED_PREFIXES.includes(first)) return null
+  return { store, key: p, prefix: first }
 }
 
 /** R2 object key for a public request path (see `target`), or null. */
@@ -32,33 +61,59 @@ export function objectKey(pathname: string): string | null {
   return t && t.store === 'public' ? t.key : null
 }
 
-/** path class and gate. Public: by extension, and only `.parquet` / `.pmtiles` outside `gazetteer/index/` fall to the
- *  anonymous tier without a key; everything else is open. Unlisted: class `unlisted`, every path needs a valid key
- *  except `gazetteer/index/` (the small `unlisted.json` listing), which is open like the public index. */
+/** keyless by type everywhere public: catalogs, manifests, pages, thumbnails */
+const KEYLESS_EXT = new Set(['json', 'md', 'html', 'png', 'jpg', 'jpeg', 'txt', 'csv', 'svg'])
+/** data by type (key tiers and the anonymous limiter); any extension not listed in either set is data too */
+const DATA_EXT: Record<string, PathClass> = {
+  parquet: 'parquet', pmtiles: 'pmtiles', tif: 'tif', tiff: 'tif', duckdb: 'data', zip: 'data', gz: 'data', fgb: 'data',
+}
+
+/** lower-cased extension of the last path segment, '' when it has none */
+export function extOf(key: string): string {
+  const base = key.slice(key.lastIndexOf('/') + 1).toLowerCase()
+  const i = base.lastIndexOf('.')
+  return i > 0 ? base.slice(i + 1) : ''
+}
+
+/** path class and gate. Public: by type, not prefix: json/md/html/png/jpg/txt/csv/svg (and an extensionless `credits`)
+ *  are open; parquet/pmtiles/tif/duckdb/zip/gz/fgb and unknown extensions are data, which falls to the anonymous tier
+ *  without a key, except under `gazetteer/index/` (open). `atlas-restricted/...`: class `unlisted`, every file needs a key.
+ *  Unlisted bucket: class `unlisted`, every path needs a key except `gazetteer/index/` (the `unlisted.json` listing). */
 export function classify(key: string, store: Store = 'public'): { cls: PathClass, gate: Gate } {
   const lower = key.toLowerCase()
   const index = lower.startsWith('gazetteer/index/')
   if (store === 'unlisted') return { cls: 'unlisted', gate: index ? 'open' : 'key' }
-  const archive: Gate = index ? 'open' : 'anonymous'
-  if (lower.endsWith('.parquet')) return { cls: 'parquet', gate: archive }
-  if (lower.endsWith('.pmtiles')) return { cls: 'pmtiles', gate: archive }
-  if (lower.endsWith('.json'))    return { cls: 'stac',    gate: 'open' }
-  return { cls: 'other', gate: 'open' }
+  if (RESTRICTED_PREFIXES.some(p => lower.startsWith(`${p}/`))) return { cls: 'unlisted', gate: 'key' }
+  const ext = extOf(lower)
+  if (ext === 'json') return { cls: 'stac', gate: 'open' }
+  if (KEYLESS_EXT.has(ext) || lower.endsWith('/credits')) return { cls: 'other', gate: 'open' }
+  return { cls: DATA_EXT[ext] ?? 'data', gate: index ? 'open' : 'anonymous' }
 }
+
+/** object key of the licence/credits page whose existence turns on the `Link` header for a prefix other than gazetteer */
+export const creditsKey = (prefix: string): string => `${prefix}/index/credits`
 
 const TYPES: Record<string, string> = {
   json:    'application/json',
   parquet: 'application/vnd.apache.parquet',
-  pmtiles: 'application/octet-stream',
+  pmtiles: 'application/vnd.pmtiles',
+  tif:     'image/tiff',
+  tiff:    'image/tiff',
+  csv:     'text/csv; charset=utf-8',
   md:      'text/markdown; charset=utf-8',
   txt:     'text/plain; charset=utf-8',
   html:    'text/html; charset=utf-8',
   jpg:     'image/jpeg',
   jpeg:    'image/jpeg',
   png:     'image/png',
+  svg:     'image/svg+xml',
+  zip:     'application/zip',
+  gz:      'application/gzip',
 }
 
 export function guessContentType(key: string): string {
-  const ext = key.split('.').pop()?.toLowerCase() ?? ''
-  return TYPES[ext] ?? 'application/octet-stream'
+  return TYPES[extOf(key)] ?? 'application/octet-stream'
 }
+
+/** stored content types that say nothing; the extension guess replaces them */
+export const GENERIC_TYPES = new Set(['application/octet-stream', 'binary/octet-stream'])

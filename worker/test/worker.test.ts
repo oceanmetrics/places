@@ -157,7 +157,7 @@ describe('unlisted copies (/unlisted/gazetteer/..., UNLISTED bucket)', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe(ORIGIN)
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(UNLISTED_PARQUET.slice(0, 1024))
     expect(r.points[0].indexes).toEqual([GOOD_KEY])
-    expect(r.points[0].blobs).toEqual([GOOD_KEY, 'erddap-places', 'unlisted', ORIGIN, 'free', 'GET', 'unlisted/gazetteer/mr_eez/places.parquet'])
+    expect(r.points[0].blobs).toEqual([GOOD_KEY, 'erddap-places', 'unlisted', ORIGIN, 'free', 'GET', 'unlisted/gazetteer/mr_eez/places.parquet', 'unlisted'])
     expect(r.points[0].doubles).toEqual([1024, 206])
   })
 

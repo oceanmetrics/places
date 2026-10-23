@@ -1,7 +1,9 @@
 # om-gazetteer Worker
 
-Cloudflare Worker that fronts `https://storage.oceanmetrics.io/gazetteer/*` from an R2 bucket (same key layout as the
-S3 bucket today). It adds `?key=` access keys with Origin allow-lists, correct Range/HEAD/ETag/CORS behaviour for
+Cloudflare Worker that fronts `https://storage.oceanmetrics.io/*` from an R2 bucket (same key layout as the S3 bucket
+`oceanmetrics.io-public` today): every published prefix (`gazetteer`, `indicators`, `atlas`, `obis-h3`, `basemap`,
+`marine-atlas`, `issues`, the root `index.html` and `README.md`), the key-only `atlas-restricted/` and the unlisted bucket at
+`/unlisted/gazetteer/`. `backups/` and everything else is a 404. It adds `?key=` access keys with Origin allow-lists, correct Range/HEAD/ETag/CORS behaviour for
 DuckDB-WASM and pmtiles-js, per-request metering and monthly byte caps. Design: project plan section 9, decisions D7 and
 D8; client behaviour: `notes/om/plans_todo/2026-10-08_duckdb-wasm-key-spike.md`.
 
@@ -12,15 +14,28 @@ waits on the DNS cutover.** Steps that need the account or DNS are marked **BEN-
 
 ## Behaviour
 
+Which paths are served (`target()` in `src/paths.ts`):
+
+| Request path | Result |
+|---|---|
+| `/gazetteer/...`, `/indicators/...`, `/atlas/...`, `/obis-h3/...`, `/basemap/...`, `/marine-atlas/...`, `/issues/...` | served from `BUCKET` (`oceanmetrics-io-public`), gated by type (next table) |
+| `/index.html`, `/README.md` (and `/`, which reads `index.html`) | served, keyless; every other root object (`nc.parquet`, `indicators.pmtiles`) is a 404 |
+| a folder URL ending in `/` (`/marine-atlas/`, `/marine-atlas/cog/`) | serves `index.html` under it when that object exists, else 404 (the old Caddy's `/marine-atlas/` rewrite) |
+| `/atlas-restricted/...` (restricted atlas collections, not linked from `catalog.json`) | served from `BUCKET` like `/unlisted/`: every file (json included) needs a valid key, **no anonymous tier**, metric class `unlisted`; keyless is 403 `key_required` |
+| `/unlisted/gazetteer/...` | served from `UNLISTED` (below) |
+| `/backups/...` and anything else | 404 JSON `{error:"not_found", message:"served prefixes: ..."}`, key or not (the multi-GB database dump must never be reachable: this is the old Caddy's allow-list) |
+
+How a served public path is gated, by type, not by prefix (`classify()`):
+
 | Request | Result |
 |---|---|
-| `*.json` (STAC, `layers.json`, `versions.json`), README/AGENTS md, thumbnails, `credits`, anything under `gazetteer/index/` | keyless. A `?key=` is used only for attribution; a wrong or stale one is ignored, never a 403 |
-| `*.parquet`, `*.pmtiles` with a valid `?key=` | served; Origin must match the key's allow-list (no Origin header, as from curl/R/QGIS, passes) |
+| `*.json` (STAC, `catalog.json`, `layers.json`, `indicators.json`, `latest.json`, `versions.json`), `*.md`, `*.html`, `*.png`, `*.jpg`/`*.jpeg`, `*.txt`, `*.csv`, `*.svg`, `credits`, anything under `gazetteer/index/` | keyless. A `?key=` is used only for attribution; a wrong or stale one is ignored, never a 403. Class `stac` for json, else `other` |
+| data: `*.parquet`, `*.pmtiles`, `*.tif`/`*.tiff`, `*.duckdb`, `*.zip`, `*.gz`, `*.fgb`, and any extension not in the keyless list, with a valid `?key=` | served; Origin must match the key's allow-list (no Origin header, as from curl/R/QGIS, passes). Class `parquet`, `pmtiles`, `tif`, else `data` |
 | same, no key | **anonymous tier**: served, but through the `ANON_LIMITER` rate-limit binding (per client IP); over the limit is a 429, not a 403 |
 | same, unknown/malformed/disabled key, or wrong Origin | 403 JSON (`invalid_key`, `origin_not_allowed`) |
 | key at or over its monthly byte cap | 429 JSON `{error:"monthly_cap_exceeded", key, cap_bytes, used_bytes}`, `Retry-After` to the start of next UTC month |
 | key at or over `soft_pct` (default 80 %) of its cap | served, with `X-OM-Usage: used=...; cap=...; pct=...; state=soft` |
-| un-ranged GET of a parquet over `FULLFILE_BYTES` (16 MiB) | 200 (not blocked), metric class `fullfile`, `X-OM-Warn: full-file-read ...` |
+| un-ranged GET of a parquet over `FULLFILE_BYTES` (16 MiB), any prefix | 200 (not blocked), metric class `fullfile`, `X-OM-Warn: full-file-read ...` |
 | `/unlisted/gazetteer/<slug>/...` (any file) with a valid `?key=` | served from the `UNLISTED` bucket (`oceanmetrics-io-unlisted`, same `gazetteer/...` key layout) with the same key, Origin, cap, Range/HEAD/ETag/CORS and `Link` rules as the public archives; metric class `unlisted`, object path `unlisted/gazetteer/...` |
 | same, no key | **no anonymous tier**: 403 JSON `key_required` (with CORS) |
 | same, wrong key or Origin | 403 `invalid_key` / `origin_not_allowed`, as above |
@@ -32,8 +47,13 @@ multi-range and malformed `Range` are ignored per RFC 9110, giving a 200); suffi
 duckdb-wasm's reliable-HEAD check needs); `ETag` passthrough, `If-Match` (412) and `If-None-Match` (304). CORS is on every
 response including 403/429/404/416: `Access-Control-Allow-Origin` is the request Origin when a valid key's allow-list matches
 (with `Vary: Origin`), otherwise `*`; allows `range, if-match, if-none-match`; exposes
-`etag, content-range, accept-ranges, content-length, link, retry-after, x-om-usage, x-om-warn`. Data responses carry
-`Link: <https://storage.oceanmetrics.io/gazetteer/credits>; rel="license"` (upload an object at `gazetteer/credits`).
+`etag, content-range, accept-ranges, content-length, link, retry-after, x-om-usage, x-om-warn`. Gazetteer responses
+(public and unlisted) carry `Link: <https://storage.oceanmetrics.io/gazetteer/credits>; rel="license"` (upload an object at
+`gazetteer/credits`); another prefix carries `Link: <.../<prefix>/index/credits>` only when that object exists (looked up
+once per isolate per 10 minutes), and the root files none. `Content-Type` is the stored one unless it is missing or generic
+(`application/octet-stream`, `binary/octet-stream`), then the extension guess (`.pmtiles` is `application/vnd.pmtiles`,
+`.tif` `image/tiff`, `.parquet` `application/vnd.apache.parquet`). `Cache-Control` defaults to 60 s for json and html,
+300 s otherwise.
 `If-Range` is not implemented (neither client sends it).
 
 Keys are low-grade, rotatable attribution keys, not secrets: they sit in URLs, history and logs.
@@ -45,7 +65,8 @@ One Analytics Engine data point per request (every response, errors included):
 | field | content |
 |---|---|
 | `index1` | key id, or `anon` |
-| `blob1`..`blob7` | key id (`''` if keyless), app, class (`stac`/`parquet`/`pmtiles`/`other`/`fullfile`/`unlisted`), Origin, tier (`anonymous`, `open` for keyless content, else the key's tier), method, object path (prefixed `unlisted/` for the unlisted bucket) |
+| `blob1`..`blob7` | key id (`''` if keyless), app, class (`stac`/`parquet`/`pmtiles`/`tif`/`data`/`other`/`fullfile`/`unlisted`), Origin, tier (`anonymous`, `open` for keyless content, else the key's tier), method, object path (prefixed `unlisted/` for the unlisted bucket) |
+| `blob8` | prefix, so usage reads per catalog: the first segment of the object path (`gazetteer`, `indicators`, `atlas`, `obis-h3`, `basemap`, `marine-atlas`, `issues`, `atlas-restricted`, `unlisted`), `root` for the root files, or the request path's first segment when the path is not served (`backups` shows probing) |
 | `double1`, `double2` | response bytes (the declared body length: a ranged GET is its range, HEAD/304/errors are 0), HTTP status |
 
 Bytes are charged when the response starts, not when the body finishes, so an aborted download over-counts slightly.
@@ -61,11 +82,13 @@ Consequence: a cap is enforced with up to ~15 minutes of lag, and it is a billin
 ```sh
 cd worker
 npm install
-npm test            # vitest + @cloudflare/vitest-plugin (workerd via miniflare), 40 tests
+npm test            # vitest + @cloudflare/vitest-plugin (workerd via miniflare), 139 tests
 npm run typecheck
 ```
 
-Tests use the real local R2 and KV from `wrangler.toml` with fake Analytics Engine and rate-limit bindings. In a sandbox
+Tests use the real local R2 and KV from `wrangler.toml` with fake Analytics Engine and rate-limit bindings.
+`test/prefixes.test.ts` is the table per prefix and type (keyless metadata, public data keyed and anonymous, restricted
+keyed, `backups/` 404, the root files, the folder index rewrite). In a sandbox
 where the default temp dir is read-only, run with `TMPDIR=<writable dir> npm test`. The tests need no Cloudflare login.
 (`@cloudflare/vitest-pool-workers` is deprecated and renamed `@cloudflare/vitest-plugin`; this uses the new one.)
 
@@ -99,7 +122,10 @@ where the default temp dir is read-only, run with `TMPDIR=<writable dir> npm tes
    (`storage.oceanmetrics.io/*`), deploy, then retire the Caddy VM after a week.
 10. Smoke test (replace the key): `curl -sI -H 'Range: bytes=0-' 'https://storage.oceanmetrics.io/gazetteer/<collection>/places.parquet?key=<id>'`
     should be `206` with `Content-Range`. Unlisted: `curl -sI -H 'Range: bytes=0-1023' '<url>/unlisted/gazetteer/mr_eez/places.parquet?key=<id>'`
-    is `206`, and `403` (`key_required`) without the key. Client reminder from the spike: duckdb-wasm >= 1.30 must open with
+    is `206`, and `403` (`key_required`) without the key. Other prefixes:
+    `curl -sI -H 'Range: bytes=0-16383' <url>/basemap/gebco/far.pmtiles` is `206` `application/vnd.pmtiles`;
+    `<url>/atlas/aquamaps_eov/collection.json` and `<url>/obis-h3/latest.json` `200`; `<url>/marine-atlas/` `200` html;
+    `<url>/atlas-restricted/x` `403` `key_required`; `<url>/backups/` and `<url>/backups/anything` `404`. Client reminder from the spike: duckdb-wasm >= 1.30 must open with
     `db.open({filesystem:{forceFullHTTPReads:false}})` or it downloads whole files (these show up as `fullfile`).
 
 ## Minting keys

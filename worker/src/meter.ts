@@ -36,8 +36,10 @@ export async function getUsage(env: Env, id: string, now: Date): Promise<number>
 
 /** one request's metric row. Analytics Engine layout (keep in step with the rollup SQL and the README):
  *    index1  key id, or `anon`
- *    blob1   key id ('' when keyless)   blob2 app   blob3 path class (stac|parquet|pmtiles|other|fullfile|unlisted)
+ *    blob1   key id ('' when keyless)   blob2 app   blob3 path class (stac|parquet|pmtiles|tif|data|other|fullfile|unlisted)
  *    blob4   origin                     blob5 tier (anonymous|open|<key tier>)   blob6 method   blob7 object path (`unlisted/` prefixed for the unlisted bucket)
+ *    blob8   prefix: first segment of blob7 (gazetteer|indicators|atlas|obis-h3|basemap|marine-atlas|issues|atlas-restricted|unlisted),
+ *            `root` for root files, or the request path's first segment when the path is not served (e.g. backups)
  *    double1 response bytes             double2 http status */
 export interface Metric {
   key:    string
@@ -49,13 +51,14 @@ export interface Metric {
   path:   string
   status: number
   bytes:  number
+  prefix: string
 }
 
 export function writeMetric(env: Env, m: Metric): void {
   try {
     env.METRICS.writeDataPoint({
       indexes: [(m.key || 'anon').slice(0, 96)],
-      blobs:   [m.key, m.app, m.cls, m.origin, m.tier, m.method, m.path],
+      blobs:   [m.key, m.app, m.cls, m.origin, m.tier, m.method, m.path, m.prefix],
       doubles: [m.bytes, m.status],
     })
   } catch {

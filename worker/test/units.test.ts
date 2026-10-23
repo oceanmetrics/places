@@ -19,15 +19,15 @@ describe('paths', () => {
     expect(classify('gazetteer/index/unlisted.json', 'unlisted')).toEqual({ cls: 'unlisted', gate: 'open' })
   })
   it('routes /unlisted/gazetteer/... to the unlisted bucket with the same key layout', () => {
-    expect(target('/gazetteer/a/b.json')).toEqual({ store: 'public', key: 'gazetteer/a/b.json' })
-    expect(target('/unlisted/gazetteer/mr_eez/places.parquet')).toEqual({ store: 'unlisted', key: 'gazetteer/mr_eez/places.parquet' })
+    expect(target('/gazetteer/a/b.json')).toEqual({ store: 'public', key: 'gazetteer/a/b.json', prefix: 'gazetteer' })
+    expect(target('/unlisted/gazetteer/mr_eez/places.parquet')).toEqual({ store: 'unlisted', key: 'gazetteer/mr_eez/places.parquet', prefix: 'unlisted' })
     expect(objectKey('/unlisted/gazetteer/mr_eez/places.parquet')).toBeNull()
     for (const p of ['/unlisted/', '/unlisted/x.json', '/unlisted/gazetteer/../x', '/unlisted/unlisted/gazetteer/a.json']) expect(target(p), p).toBeNull()
   })
-  it('rejects paths outside gazetteer/, traversal and directory paths', () => {
+  it('rejects paths outside the served prefixes and traversal', () => {
     expect(objectKey('/gazetteer/a/b.json')).toBe('gazetteer/a/b.json')
     expect(objectKey('/gazetteer/a%20b.json')).toBe('gazetteer/a b.json')
-    for (const p of ['/', '/x/y.json', '/gazetteer/', '/gazetteer/../x', '/gazetteer//x', '/gazetteer/%E0%A4%A']) expect(objectKey(p), p).toBeNull()
+    for (const p of ['/x/y.json', '/gazetteer', '/gazetteer/../x', '/gazetteer//x', '/gazetteer/%E0%A4%A']) expect(objectKey(p), p).toBeNull()
   })
 })
 

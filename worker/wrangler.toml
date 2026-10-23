@@ -1,4 +1,4 @@
-# Cloudflare Worker fronting storage.oceanmetrics.io/gazetteer/* (see README.md for the runbook).
+# Cloudflare Worker fronting storage.oceanmetrics.io/* (every published prefix; see README.md for the runbook).
 # Deployed to https://om-gazetteer.ben-f07.workers.dev (Ocean Metrics Cloudflare account) since 2026-10-22.
 name = "om-gazetteer"
 main = "src/index.ts"
