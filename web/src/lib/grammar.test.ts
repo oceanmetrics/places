@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSearch, carryView, parseLayers, parseView, serializeLayers } from './grammar'
+import { buildSearch, carryView, parseLayerParam, parseLayers, parsePeriod, parseView, serializeLayers } from './grammar'
 
 describe('layers= grammar', () => {
   it('parses slug-only entries in order', () => {
@@ -76,12 +76,14 @@ describe('view in the query string', () => {
       ],
       place: 'NMS:PMNM',
       proj: 'globe',
+      layer: null,
+      t: null,
     })
-    expect(parseView('')).toEqual({ layers: null, place: null, proj: 'globe' })
+    expect(parseView('')).toEqual({ layers: null, place: null, proj: 'globe', layer: null, t: null })
   })
 
   it('writes layers and place, round-tripping through parseView', () => {
-    const v = { layers: [{ slug: 'a', colour: '#ff0000', opacity: 0.5, width: 2 }, { slug: 'b', colour: null, opacity: null, width: null }], place: 'AOA:N1', proj: 'globe' as const }
+    const v = { layers: [{ slug: 'a', colour: '#ff0000', opacity: 0.5, width: 2 }, { slug: 'b', colour: null, opacity: null, width: null }], place: 'AOA:N1', proj: 'globe' as const, layer: null, t: null }
     const s = buildSearch(v)
     expect(s).toBe('?layers=a:ff0000:0.5:2,b&place=AOA:N1')
     expect(parseView(s)).toEqual(v)
@@ -108,5 +110,29 @@ describe('view in the query string', () => {
     expect(parseView('?proj=lambert').proj).toBe('globe')
     expect(buildSearch({ proj: 'mercator' }, '?layers=a')).toBe('?layers=a&proj=mercator')
     expect(buildSearch({ proj: 'globe' }, '?layers=a&proj=mercator')).toBe('?layers=a')
+  })
+
+  it('reads and writes the layer under the map and its period', () => {
+    const v = parseView('?layer=grid:jplMURSST41mday:sst&t=2024-07')
+    expect([v.layer, v.t]).toEqual(['grid:jplMURSST41mday:sst', '2024-07'])
+    expect(buildSearch({ layer: 'grid:dhw_5km:CRW_SST', t: '2024' }, '?proj=mercator')).toBe('?proj=mercator&layer=grid:dhw_5km:CRW_SST&t=2024')
+    expect(buildSearch({ layer: null, t: null }, '?layer=grid:a:b&t=2024&x=1')).toBe('?x=1')
+  })
+
+  it('takes a known slot kind only, and reads erddap: as grid:', () => {
+    expect(parseLayerParam('erddap:dhw_5km:CRW_SST')).toBe('grid:dhw_5km:CRW_SST')
+    expect(parseLayerParam('cog:aquamaps_eov')).toBe('cog:aquamaps_eov')
+    expect(parseLayerParam('wms:x')).toBeNull()
+    expect(parseLayerParam('grid:')).toBeNull()
+    expect(parseLayerParam('grid:a b')).toBeNull()
+  })
+
+  it('takes a year, a month or a day as the period', () => {
+    expect(['2024', '2024-07', '2024-07-15'].map(parsePeriod)).toEqual(['2024', '2024-07', '2024-07-15'])
+    expect(['24', '2024-13', '2024-07-32', 'latest', ''].map(parsePeriod)).toEqual([null, null, null, null, null])
+  })
+
+  it('carries the layer and its period to another page, as it does proj', () => {
+    expect(carryView('/p/MRGID:8439', '?layer=grid:jplMURSST41mday:sst&t=2024-07')).toBe('/p/MRGID:8439?layer=grid:jplMURSST41mday:sst&t=2024-07')
   })
 })

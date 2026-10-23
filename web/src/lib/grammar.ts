@@ -2,6 +2,10 @@
 //   ?layers=slug[:colour][:opacity][:width],…   draw order, first on top; `layers=off` = none
 //   &place=<place_id>
 //   &proj=mercator                               the map projection; absent = globe (the default)
+//   &layer=<kind>:<id>[:<variable>]               the layer under the map (@oceanmetrics/map's slot key, e.g.
+//                                                grid:jplMURSST41mday:sst); absent = none
+//   &t=<period>                                  the period the layer is drawn at: 2024, 2024-07 or 2024-07-15; absent =
+//                                                the dataset's latest. the same `t` as the indicators app's hash
 // colour = 6 hex digits without `#` (a leading `#` is accepted), opacity 0..1 (2 dp), width 0.5..4 px (0.5 steps).
 
 export interface LayerSel {
@@ -16,6 +20,10 @@ export interface ViewState {
   layers: LayerSel[] | null
   place : string | null
   proj  : Projection
+  /** the layer under the map as its slot key (`grid:jplMURSST41mday:sst`), null for none */
+  layer : string | null
+  /** the period of the layer: `2024`, `2024-07` or `2024-07-15`; null = the latest */
+  t     : string | null
 }
 
 export type Projection = 'globe' | 'mercator'
@@ -54,14 +62,29 @@ export function serializeLayers(ls: LayerSel[]): string {
   }).join(',')
 }
 
+const PERIOD = /^\d{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?)?$/
+
+/** a period as `t=` takes it (a year, a month or a day), else null */
+export const parsePeriod = (v: string | null | undefined): string | null => (v && PERIOD.test(v.trim()) ? v.trim() : null)
+
+/** a slot key as `layer=` takes it: `<kind>:<id>[:<variable>]` with a known kind (`erddap:` is read as `grid:`), else null */
+export function parseLayerParam(v: string | null | undefined): string | null {
+  const m = /^(grid|cog|h3|erddap):([\w.-]+)(?::([\w.-]+))?$/.exec((v ?? '').trim())
+  return m ? `${m[1] === 'erddap' ? 'grid' : m[1]}:${m[2]}${m[3] ? `:${m[3]}` : ''}` : null
+}
+
 /** read the view from a query string (with or without the leading `?`). */
 export function parseView(search: string): ViewState {
   const p = new URLSearchParams(search)
-  return { layers: parseLayers(p.get('layers')), place: p.get('place') || null, proj: p.get('proj') === 'mercator' ? 'mercator' : 'globe' }
+  return {
+    layers: parseLayers(p.get('layers')), place: p.get('place') || null, proj: p.get('proj') === 'mercator' ? 'mercator' : 'globe',
+    layer : parseLayerParam(p.get('layer')), t: parsePeriod(p.get('t')),
+  }
 }
 
-/** view settings that follow the user from page to page (not part of a page's own state). */
-export const CARRIED = ['proj'] as const
+/** view settings that follow the user from page to page (not part of a page's own state): the projection, and the
+ * layer under the map at its period, so the same place in another layer opens on the same layer */
+export const CARRIED = ['proj', 'layer', 't'] as const
 
 /**
  * add the carried settings of the current query to an in-app url that does not set them itself, so a page change
@@ -93,6 +116,14 @@ export function buildSearch(view: Partial<ViewState>, current = ''): string {
   }
   if ('proj' in view) {
     if (view.proj === 'mercator') p.set('proj', 'mercator'); else p.delete('proj')
+  }
+  if ('layer' in view) {
+    const l = parseLayerParam(view.layer)
+    if (l) p.set('layer', l); else p.delete('layer')
+  }
+  if ('t' in view) {
+    const t = parsePeriod(view.t)
+    if (t) p.set('t', t); else p.delete('t')
   }
   const s = p.toString().replace(/%3A/gi, ':').replace(/%2C/gi, ',')
   return s ? '?' + s : ''

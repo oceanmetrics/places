@@ -4,6 +4,12 @@
   import Credit from '../lib/Credit.svelte'
   import CopyButton from '../lib/CopyButton.svelte'
   import Indicators from '../lib/Indicators.svelte'
+  import LayerUnder from '../lib/LayerUnder.svelte'
+  import type { LegendSpec } from '@oceanmetrics/map'
+  import { loadErddapLayers } from '../lib/map/gridKind'
+  import type { ErddapLayer } from '../lib/map/gridLayer'
+  import { parseView } from '../lib/grammar'
+  import { loc } from '../lib/router.svelte'
   import { BASE, manifest, loadManifest } from '../lib/data.svelte'
   import {
     calcofiLink, derivedLine, erddapLink, fmtValue, geojsonSql, keepsGeometry, layerForPlace, layerPath, parquetUrl, placePath, sanitizeHtml, viaTitle, withBase,
@@ -17,7 +23,13 @@
   let copies = $state<IndexPlace[]>([])   // the same place in other layers (index group_id)
   let row = $state<IndexPlace | null>(null) // the index row: link back to the source, and all a reference place without per-place geometry has
 
+  // the layer under the map and its period, from the query (grammar.ts); the ERDDAP collections of the gazetteer for the picker
+  const view = $derived(parseView(loc.search))
+  let erddap = $state<ErddapLayer[]>([])
+  let legend = $state<LegendSpec | null>(null)
+
   onMount(async () => {
+    loadErddapLayers().then((ls) => { erddap = ls }).catch(() => { erddap = [] })
     await loadManifest()
     try {
       const [f, hits] = await Promise.all([getPlace(id, { unwrap: true }), search(id, { limit: 20 }).catch(() => [])])
@@ -72,9 +84,13 @@
       {#await import('../lib/PlacesMap.svelte')}
         <p class="muted">Loading the map…</p>
       {:then m}
-        <m.default highlight={feature} popups={false} selected={sel} layers={manifest.layers} fit={!feature && row ? row.bbox : null} />
+        <m.default highlight={feature} popups={false} selected={sel} layers={manifest.layers} fit={!feature && row ? row.bbox : null}
+          layerKey={feature ? view.layer : null} t={view.t} slicePlace={feature ? id : null} onlegend={(l) => { legend = l }} />
       {/await}
     </div>
+    {#if feature && /Polygon$/.test(feature.geometry?.type ?? '')}
+      <LayerUnder layers={erddap} layerKey={view.layer} t={view.t} {legend} />
+    {/if}
 
     <Indicators placeId={id} {layer} />
 

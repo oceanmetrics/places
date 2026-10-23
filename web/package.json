@@ -11,10 +11,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "1.32.0",
     "@oceanmetrics/catalog": "^0.3.0",
+    "@oceanmetrics/engine": "^0.1.1",
+    "@oceanmetrics/map": "^0.2.2",
     "@oceanmetrics/places": "^0.5.2",
+    "apache-arrow": "^17.0.0",
     "hyparquet": "^1.31.5",
-    "maplibre-gl": "^5.24.0",
+    "hyparquet-compressors": "^1.1.2",
+    "hyparquet-writer": "^0.16.13",
+    "maplibre-gl": "^6.15.0",
     "pmtiles": "^4.5.0"
   },
   "devDependencies": {
