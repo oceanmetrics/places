@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
-  cardsFor, COVERAGE_COLUMNS, DEFAULT_INDICATORS_BASE, emptyState, footerLine, loadCoverage, loadCoverageFor, loadManifest,
+  cardsFor, COVERAGE_COLUMNS, DEFAULT_INDICATORS_BASE, emptyState, EVERY_PLACE_WEEK, footerLine, loadCoverage, loadCoverageFor, loadManifest,
   methodName, periodOf, pickRow, placeViewHref, resolveIndicatorsBase, rowsFor, slotFor, type CoverageRow, type IndicatorsManifest,
 } from './indicators'
 
@@ -152,8 +152,9 @@ describe('the three absences', () => {
     expect(nodata).toEqual({ kind: 'nodata', text: 'No data here: the indicators catalog covers National Marine Sanctuaries, but none of its indicators has a value for this place.' })
     expect(notcomputed).toEqual({
       kind: 'notcomputed',
-      text: 'Not computed yet. Indicators for every gazetteer place arrive in build week 3, 2026-11-13 to 11-19; until then compute one in ERDDAP Places.',
+      text: 'Not computed yet. Nobody has computed indicators for this place: compute it in ERDDAP Places, or ask for it in Indicators. Indicators for every gazetteer place arrive in build week 3, 2026-11-13 to 11-19.',
       href: 'https://oceanmetrics.io/erddap-places/#place=BOEM:OCS-A 0486', linkText: 'ERDDAP Places',
+      more: [{ href: 'https://oceanmetrics.io/indicators/#view=place&place=BOEM:OCS-A%200486', linkText: 'Indicators' }],
     })
     expect(nostatus).toEqual({
       kind: 'nostatus',
@@ -163,16 +164,32 @@ describe('the three absences', () => {
     expect(new Set([nodata.text, notcomputed.text, nostatus.text]).size).toBe(3)
   })
 
-  it('no data here: the place has rows without values, or its layer is covered and it has none', async () => {
-    const rows = await load()
-    expect(slotFor(rowsFor(rows, 'NMS:EMPTY'), MANIFEST, 'NMS:EMPTY', { title: 'Sanctuaries', collection: 'places' }).absence?.kind).toBe('nodata')
-    expect(slotFor([], MANIFEST, 'NMS:NEW', { title: 'Sanctuaries', collection: 'places' }).absence?.kind).toBe('nodata')
+  it('regression: no data here is a place with coverage rows whose values are all null', async () => {
+    const s = slotFor(rowsFor(await load(), 'NMS:EMPTY'), MANIFEST, 'NMS:EMPTY', { title: 'Sanctuaries', collection: 'places' })
+    expect(s.absence?.kind).toBe('nodata')
+    expect(s.cards).toEqual([])
   })
 
-  it('not computed yet: the catalog does not cover the layer', () => {
+  it('regression: not computed yet is a place with no coverage rows, even in a collection the catalog covers', () => {
+    for (const collection of ['places', 'mr_eez']) {
+      expect(slotFor([], MANIFEST, 'NMS:NEW', { title: 'Covered layer', collection }).absence).toEqual(emptyState('notcomputed', 'NMS:NEW'))
+    }
     const s = slotFor([], MANIFEST, 'BOEM:X', { title: 'Wind leases', collection: 'boem_wind_leases' })
     expect(s).toEqual({ cards: [], first: 0, noStatus: null, total: 0, absence: emptyState('notcomputed', 'BOEM:X') })
     expect(slotFor([], MANIFEST, 'BOEM:X', null).absence?.kind).toBe('notcomputed')
+  })
+
+  it('regression: not computed yet names what the reader can do now, with both links, and the week', () => {
+    const a = emptyState('notcomputed', 'NMS:NEW')
+    expect(a.text).toContain('compute it in ERDDAP Places, or ask for it in Indicators')
+    expect(a.text).toContain(EVERY_PLACE_WEEK)
+    expect([a.href, a.more?.[0].href]).toEqual(['https://oceanmetrics.io/erddap-places/#place=NMS:NEW', 'https://oceanmetrics.io/indicators/#view=place&place=NMS:NEW'])
+  })
+
+  it('regression: no status rule is the OBIS fold, not an empty slot', async () => {
+    const s = slotFor(rowsFor(await load(), 'MRGID:1'), MANIFEST, 'MRGID:1', { collection: 'mr_eez' })
+    expect(s.absence).toBeNull()
+    expect(s.noStatus?.kind).toBe('nostatus')
   })
 })
 

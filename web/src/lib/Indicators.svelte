@@ -39,7 +39,7 @@
     <p class="notice">The indicators catalog could not be read: {message}</p>
   {:else if slot}
     {#if slot.absence}
-      <p class="notice">{slot.absence.text}{#if slot.absence.href}{' '}<a href={slot.absence.href} target="_blank" rel="noopener noreferrer">{slot.absence.linkText} ↗</a>{/if}</p>
+      <p class="notice">{slot.absence.text}{#if slot.absence.href}{' '}<a href={slot.absence.href} target="_blank" rel="noopener noreferrer">{slot.absence.linkText} ↗</a>{#each slot.absence.more ?? [] as l}{' · '}<a href={l.href} target="_blank" rel="noopener noreferrer">{l.linkText} ↗</a>{/each}{/if}</p>
     {/if}
     {#if shown.length}
       <div class="row cards">

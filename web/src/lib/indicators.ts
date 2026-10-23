@@ -249,14 +249,16 @@ export interface Absence {
   /** where the reader goes next, and the link's words */
   href?: string
   linkText?: string
+  /** further links after the first, in reading order */
+  more?: { href: string; linkText: string }[]
 }
 
-/** the build week that brings indicators to every gazetteer place */
+/** the build week that brings indicators to every gazetteer place; remove it, and the sentence in `emptyState` that uses it, when week 3 ships */
 export const EVERY_PLACE_WEEK = 'build week 3, 2026-11-13 to 11-19'
 
 /**
- * the words of each absence, kept distinct: "no data here" (the catalog covers the place's layer and has no value for
- * it), "not computed yet" (the catalog does not cover the layer yet), "no status rule" (OBIS series: counts that track
+ * the words of each absence, kept distinct: "no data here" (the place has coverage rows and every value is null),
+ * "not computed yet" (the place has no coverage rows: nobody has computed it, whatever its collection), "no status rule" (OBIS series: counts that track
  * sampling effort, shown as values; `n` is their number, `shown` how many of them are cards above: the leads).
  */
 export function emptyState(kind: AbsenceKind, placeId: string, layer?: { title?: string } | null, n = 0, shown = 0): Absence {
@@ -265,8 +267,9 @@ export function emptyState(kind: AbsenceKind, placeId: string, layer?: { title?:
       return { kind, text: `No data here: the indicators catalog covers ${layer?.title ?? "this place's layer"}, but none of its indicators has a value for this place.` }
     case 'notcomputed':
       return {
-        kind, text: `Not computed yet. Indicators for every gazetteer place arrive in ${EVERY_PLACE_WEEK}; until then compute one in ERDDAP Places.`,
+        kind, text: `Not computed yet. Nobody has computed indicators for this place: compute it in ERDDAP Places, or ask for it in Indicators. Indicators for every gazetteer place arrive in ${EVERY_PLACE_WEEK}.`,
         href: erddapLink(placeId), linkText: 'ERDDAP Places',
+        more: [{ href: placeViewHref(placeId), linkText: 'Indicators' }],
       }
     case 'nostatus':
       return {
@@ -275,10 +278,6 @@ export function emptyState(kind: AbsenceKind, placeId: string, layer?: { title?:
       }
   }
 }
-
-/** does the catalog compute any indicator for the collection? */
-export const covers = (manifest: IndicatorsManifest, collection: string | undefined) =>
-  !!collection && manifest.indicators.some((i) => i.collections?.some((c) => c.coll === collection))
 
 // the slot ----
 export interface Slot {
@@ -303,7 +302,8 @@ export function slotFor(rows: CoverageRow[], manifest: IndicatorsManifest, place
   const obis = all.filter((c) => c.obis)
   const leads = cards.filter((c) => c.lead).length
   let absence: Absence | null = null
-  if (!all.length) absence = emptyState(rows.length || covers(manifest, layer?.collection) ? 'nodata' : 'notcomputed', placeId, layer)
+  // coverage rows for this place: all values null reads "no data here"; no rows at all reads "not computed yet", whatever the collection
+  if (!all.length) absence = emptyState(rows.length ? 'nodata' : 'notcomputed', placeId, layer)
   return {
     cards, first: Math.min(cards.length, leads || SHOWN_FIRST),
     noStatus: obis.length ? emptyState('nostatus', placeId, layer, obis.length, obis.filter((c) => c.lead).length) : null,
