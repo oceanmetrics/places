@@ -20,7 +20,7 @@
   {#if failed}
     <p class="notice">The indicators catalog could not be read, so the reports that include this place cannot be listed.</p>
   {:else if presets === null}
-    <p class="muted" aria-live="polite">Reading the report presets…</p>
+    <p class="muted loading" aria-live="polite">Reading the report presets…</p>
   {:else if !presets.length}
     <p class="muted">No report of the indicators app includes this place yet: nobody has computed its indicators.</p>
   {:else}

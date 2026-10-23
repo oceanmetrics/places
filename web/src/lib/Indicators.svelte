@@ -35,7 +35,7 @@
 <section class="indicators" aria-labelledby="indicators-h">
   <h2 id="indicators-h">Indicators</h2>
   {#if phase === 'loading'}
-    <p class="notice" aria-live="polite">Loading the indicators of this place…</p>
+    <p class="notice loading" aria-live="polite">Loading the indicators of this place…</p>
   {:else if phase === 'error'}
     <p class="notice">The indicators catalog could not be read: {message}</p>
   {:else if slot}

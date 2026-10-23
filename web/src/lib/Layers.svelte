@@ -23,7 +23,7 @@
 <section aria-labelledby="layers-h">
   <h2 id="layers-h">Layers that cover this place</h2>
   {#if phase === 'loading'}
-    <p class="muted" aria-live="polite">Reading the atlas and ERDDAP catalogs…</p>
+    <p class="muted loading" aria-live="polite">Reading the atlas and ERDDAP catalogs…</p>
   {:else}
     {#if phase === 'error'}<p class="notice">The atlas catalog could not be read; the ERDDAP layers follow.</p>{/if}
     <p class="muted">{coverLine(hits)}</p>

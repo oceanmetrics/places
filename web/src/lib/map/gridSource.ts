@@ -12,7 +12,10 @@ import mvpWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url
 import { Engine, connectBrowser, fetchTimeExtent, lobeAxes, lobeMasks, placeLobes, sliceSource, toDataset } from '@oceanmetrics/engine'
 import type { SliceSource } from '@oceanmetrics/engine'
 import { getPlace } from '@oceanmetrics/places'
-import { axisSteps, overBudget } from './gridLayer'
+import { axisSteps, overBudget, patientFetch } from './gridLayer'
+
+// every ERDDAP request of the slice asks again when the mirror drops it (gridLayer.ts `patientFetch`)
+const erddapFetch = patientFetch()
 
 let engine: Engine | null = null
 const theEngine = () => (engine ??= new Engine(() => connectBrowser(duckdb, {
@@ -37,7 +40,7 @@ export async function prepareGridSource(collection: unknown, variableName: strin
   const lobes = placeLobes({ place_id: placeId, geometry: f.geometry })
   const over = overBudget(lobes, axisSteps(collection as Parameters<typeof axisSteps>[0]))
   if (over) throw new Error(over)
-  const [axes, extent] = await Promise.all([lobeAxes(ds, lobes), fetchTimeExtent(ds.baseUrl, ds.datasetId).catch(() => null)])
+  const [axes, extent] = await Promise.all([lobeAxes(ds, lobes, { fetch: erddapFetch }), fetchTimeExtent(ds.baseUrl, ds.datasetId, undefined, { fetchFn: erddapFetch }).catch(() => null)])
   const { cells } = lobeMasks(ds, lobes, axes)
-  return { source: sliceSource({ dataset: ds, variable, axes, mask: cells, engine: theEngine(), extent }), cells: cells.length, lobes: lobes.length }
+  return { source: sliceSource({ dataset: ds, variable, axes, mask: cells, engine: theEngine(), extent, fetch: erddapFetch }), cells: cells.length, lobes: lobes.length }
 }

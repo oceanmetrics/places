@@ -38,7 +38,7 @@
 
   <h3>OBIS records in the place</h3>
   {#if obis.phase === 'loading'}
-    <p class="muted" aria-live="polite">Reading the OBIS counts…</p>
+    <p class="muted loading" aria-live="polite">Reading the OBIS counts…</p>
   {:else if obis.phase === 'error'}
     <p class="notice">The OBIS release could not be read: {obis.msg}</p>
   {:else if obis.phase === 'none' || !obis.r}
@@ -71,7 +71,7 @@
 
   <h3>Species from AquaMaps (habitat suitability models)</h3>
   {#if sdm.phase === 'loading'}
-    <p class="muted" aria-live="polite">Reading the AquaMaps cells of the place…</p>
+    <p class="muted loading" aria-live="polite">Reading the AquaMaps cells of the place…</p>
   {:else if sdm.phase === 'error'}
     <p class="notice">The AquaMaps species could not be read: {sdm.msg}</p>
   {:else if sdm.phase === 'large' || !sdm.r}
@@ -81,14 +81,14 @@
     {#if shown.length}
       <div class="scroll">
         <table class="kv sp">
-          <thead><tr><th>Species</th><th>Group</th><th>Cells</th><th>Suitability, mean (best cell)</th></tr></thead>
+          <thead><tr><th>Species</th><th>Group</th><th>Cells</th><th>Suitability, mean (best)</th></tr></thead>
           <tbody>
             {#each shown as s (s.aphiaId)}
               <tr>
                 <td>{#if s.worms}<a href={s.worms} target="_blank" rel="noopener noreferrer"><i>{s.name}</i></a>{:else}<i>{s.name}</i>{/if}{#if s.common}<span class="muted">{' · '}{s.common}</span>{/if}{#if s.redlist}<span class="muted">{' · '}IUCN {s.redlist}</span>{/if}</td>
                 <td>{eovLabel(s.group ?? 'other')}</td>
-                <td>{int(s.cells)} <span class="muted">({Math.round(s.share * 100)}%)</span></td>
-                <td>{Math.round(s.meanSuit)}% ({s.maxSuit}%)</td>
+                <td class="n">{int(s.cells)}</td>
+                <td class="n">{Math.round(s.meanSuit)}% <span class="muted">({s.maxSuit}%)</span></td>
               </tr>
             {/each}
           </tbody>
@@ -114,6 +114,7 @@
   .dec th, .sp th { width: auto; padding-right: 16px; }
   .dec td, .sp td { overflow-wrap: anywhere; }
   .sp { width: 100%; }
+  .sp .n { white-space: nowrap; }
   .repro { font-size: 12.5px; }
   .repro summary { cursor: pointer; color: var(--link); }
   .repro pre { white-space: pre-wrap; overflow-wrap: anywhere; }

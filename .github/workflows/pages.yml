@@ -37,6 +37,9 @@ jobs:
         working-directory: web
       - run: npm run build -- --base=/places/
         working-directory: web
+      # the size budget (web/README "Size budget"): entry, map, engine and the other lazy chunks, gzip
+      - run: npm run size
+        working-directory: web
       # SPA fallback: GitHub Pages serves 404.html for unknown paths (/places/p/NMS:PMNM, /places/credits)
       - run: cp web/dist/index.html web/dist/404.html
       - uses: actions/configure-pages@v5
