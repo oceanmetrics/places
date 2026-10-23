@@ -5,7 +5,7 @@
 // codec writes).
 //
 //   placeObisUrl({ placeId: 'NMS:CINMS', name: 'Channel Islands', bbox: [-120.65, 33.2, -118.85, 34.25] })
-//   https://oceanmetrics.io/atlas/?c=obis_h3&i=all&dim.indicator=es&dim.period=all&res=auto&map=-119.75,33.725,8.38&collection=…#pl=p.NMS%253ACINMS.Channel%2520Islands
+//   https://oceanmetrics.io/atlas/?c=obis_h3&i=all&dim.indicator=es&dim.period=all&res=auto&map=-119.75,33.725,8.38#pl=p.NMS%253ACINMS.Channel%2520Islands
 //
 // - the query is the OBIS layer's grammar: `c=obis_h3`, `i=all` (or an EOV item), `dim.indicator` (default es),
 //   `dim.period` (default all), `res=auto`;
@@ -15,10 +15,9 @@
 // - the hash `pl` is the place token, written the way the atlas writes a hash value (URLSearchParams, then `,`, `:` and
 //   `/` unescaped), so its `%` is `%25`.
 import { ATLAS_APP, placeToken } from './layers'
-import { store } from './storage'
 
-/** the OBIS H3 collection in the bucket. drop when `atlas/catalog.json` lists obis_h3 */
-export const OBIS_COLLECTION_HREF = store('obis-h3/collection.json')
+/** the collection.json the link carries as `&collection=`: none, since 2026-10-23 `atlas/catalog.json` lists obis_h3 (group obis). kept as the empty default so a staging override is one argument */
+export const OBIS_COLLECTION_HREF = ''
 
 export interface PlaceObisLink {
   /** the gazetteer place_id (`NMS:CINMS`, `MRGID:8432`) */
@@ -34,7 +33,7 @@ export interface PlaceObisLink {
   period?: string
   /** the atlas app url; default https://oceanmetrics.io/atlas/ */
   app?: string
-  /** the collection.json the atlas loads obis_h3 from; default OBIS_COLLECTION_HREF, '' for none (once the catalog lists it) */
+  /** the collection.json the atlas loads obis_h3 from; default OBIS_COLLECTION_HREF (none: the atlas catalog lists obis_h3); a value is carried as `&collection=` for a staging catalog */
   collection?: string
 }
 
