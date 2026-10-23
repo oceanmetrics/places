@@ -101,6 +101,12 @@ per gazetteer id, the sections in this order, each a component that only draws, 
      of the four collections on 2026-10-23, checked with DuckDB, and is asserted on a synthetic fixture in
      `species.test.ts` and `speciesRead.test.ts` (a tiny species.parquet written in the test with hyparquet-writer).
      CINMS: 2,258 species, 668 in the 2020s; FGBNMS: 469, 160 (both equal `sp`).
+   - *Species on the map* (since 2026-10-23, `src/lib/obisLink.ts` `placeObisUrl`): under the OBIS heading, "Species on the map
+     (Ocean Metrics Atlas, OBIS H3 layer)" opens `https://oceanmetrics.io/atlas/?c=obis_h3&i=all&dim.indicator=es&dim.period=all&res=auto&map=<lon,lat,zoom>&collection=<OBIS_COLLECTION_HREF>#pl=<p. token>`
+     with the place selected and the camera on its box (zoom `log2(600/span)`, clamped 1..10). The rule is the atlas's own
+     (oceanmetrics/atlas `src/lib/state/obisPlace.ts`, `docs/obis-layer.md`), ported with its test cases in `obisLink.test.ts` (the CINMS
+     url byte for byte, a box across 180, the zoom clamps). `OBIS_COLLECTION_HREF` (the bucket's `obis-h3/collection.json`) rides along as
+     `&collection=` so the link works before `atlas/catalog.json` lists obis_h3: drop it then (one constant and its test). The per-species WoRMS links stay.
    - *Species from AquaMaps*: the atlas collection `aquamaps_eov` declares `atlas:cell_species`, a cell -> species table in
      5° tiles of the 0.05° grid (not H3). The place's cells are the cells whose centre falls in its polygon (exact on the
      native grid; a part too small for a centre keeps the cell under it: `placeCells`), only the tiles' row groups whose

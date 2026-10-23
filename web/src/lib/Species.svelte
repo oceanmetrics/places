@@ -4,6 +4,7 @@
   // species.ts (tested); the reads are speciesRead.ts, a lazy chunk. this only draws.
   import CopyButton from './CopyButton.svelte'
   import { atlasHref } from './layers'
+  import { placeObisUrl } from './obisLink'
   import { eovLabel, groupOf, obisLine, obisLinks, placeSpeciesCsv, sdmCsv, sdmLine, speciesCheck, speciesCountLine, speciesCounts, speciesLookupUrl } from './species'
   import type { ObisResult, ObisSpeciesResult, SdmResult } from './speciesRead'
 
@@ -36,6 +37,7 @@
   })
 
   const links = $derived(bbox ? obisLinks(bbox) : null)
+  const mapHref = $derived(placeObisUrl({ placeId, name, bbox }))
   const sql = $derived(obis.r ? `SELECT * FROM '${obis.r.url}'\nWHERE place_id = '${placeId.replaceAll("'", "''")}' ORDER BY eov, decade NULLS FIRST;` : '')
   const spSql = $derived(obis.r && osp.r
     ? `SELECT s.name_key, any_value(l.species) AS species, sum(s.n) AS records, min(s.year_min) AS year_min, max(s.year_max) AS year_max\nFROM '${osp.r.url}' s\nLEFT JOIN '${speciesLookupUrl(obis.r.release)}' l USING (aphiaid)\nWHERE s.place_id = '${placeId.replaceAll("'", "''")}'\nGROUP BY s.name_key ORDER BY records DESC;` : '')
@@ -55,6 +57,7 @@
   <h2 id="species-h">Species</h2>
 
   <h3>OBIS records in the place</h3>
+  <p class="maplink"><a href={mapHref} target="_blank" rel="noopener noreferrer">Species on the map (Ocean Metrics Atlas, OBIS H3 layer) ↗</a></p>
   {#if obis.phase === 'loading'}
     <p class="muted loading" aria-live="polite">Reading the OBIS counts…</p>
   {:else if obis.phase === 'error'}
@@ -175,6 +178,7 @@
   .sp { width: 100%; }
   .sp .n { white-space: nowrap; }
   .osp .grp { display: block; }
+  .maplink { margin: 4px 0 8px; }
   .repro { font-size: 12.5px; }
   .repro summary { cursor: pointer; color: var(--link); }
   .repro pre { white-space: pre-wrap; overflow-wrap: anywhere; }
