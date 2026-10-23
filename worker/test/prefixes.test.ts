@@ -18,6 +18,10 @@ async function seedPrefixes(): Promise<void> {
   await put('indicators/values/indicator=sst/coll=mpa/data.parquet', PARQUET)
   await put('indicators/README.md', '# indicators')
   await put('indicators/producers/sst.svg', '<svg/>')
+  await put('indicators/feeds/all.xml', '<feed xmlns="http://www.w3.org/2005/Atom"/>', 'application/atom+xml; charset=utf-8')
+  await put('indicators/feeds/place=NMS:CINMS.xml', '<feed xmlns="http://www.w3.org/2005/Atom"/>')   // no stored type
+  await put('indicators/feeds/all.atom', '<feed xmlns="http://www.w3.org/2005/Atom"/>', 'application/octet-stream')
+  await put('indicators/feeds/all.xml.gz', PARQUET)
   await put('atlas/catalog.json', JSON.stringify({ type: 'Catalog' }))
   await put('atlas/index/credits', 'atlas credits')
   await put('atlas/aquamaps_eov/collection.json', JSON.stringify({ type: 'Collection' }))
@@ -101,6 +105,11 @@ describe('classify(): by type, not by prefix', () => {
     ['issues/apps-8/walrus.JPEG',                  'other',    'open'],
     ['atlas/aquamaps_eov/eov_summary.csv',         'other',    'open'],
     ['indicators/producers/sst.svg',               'other',    'open'],
+    ['indicators/feeds/all.xml',                   'other',    'open'],
+    ['indicators/feeds/place=NMS:CINMS.XML',       'other',    'open'],
+    ['indicators/feeds/all.atom',                  'other',    'open'],
+    // seeded fault: a compressed feed is data, not a feed
+    ['indicators/feeds/all.xml.gz',                'data',     'anonymous'],
     ['gazetteer/credits',                          'other',    'open'],
     ['README.md',                                  'other',    'open'],
     // data: key tiers, anonymous limiter without a key
@@ -140,6 +149,11 @@ describe('every published prefix through handle()', () => {
     { path: '/atlas/aquamaps_eov/eov_summary.csv',    status: 200, cls: 'other', tier: 'open', prefix: 'atlas', type: 'text/csv; charset=utf-8' },
     { path: '/indicators/README.md',                  status: 200, cls: 'other', tier: 'open', prefix: 'indicators' },
     { path: '/indicators/producers/sst.svg',          status: 200, cls: 'other', tier: 'open', prefix: 'indicators', type: 'image/svg+xml' },
+    // the Atom feeds: keyless, never the anonymous limiter; the stored type wins, else the extension's
+    { path: '/indicators/feeds/all.xml',              status: 200, cls: 'other', tier: 'open', prefix: 'indicators', type: 'application/atom+xml; charset=utf-8' },
+    { path: '/indicators/feeds/place=NMS:CINMS.xml',  status: 200, cls: 'other', tier: 'open', prefix: 'indicators', type: 'application/xml; charset=utf-8' },
+    { path: '/indicators/feeds/all.atom',             status: 200, cls: 'other', tier: 'open', prefix: 'indicators', type: 'application/atom+xml; charset=utf-8' },
+    { path: '/indicators/feeds/all.xml.gz',           range: 'bytes=0-99', status: 206, cls: 'data', tier: 'anonymous', prefix: 'indicators', type: 'application/gzip' },
     { path: '/issues/apps-8/walrus.jpg',              status: 200, cls: 'other', tier: 'open', prefix: 'issues', type: 'image/jpeg' },
     // public data keyless: anonymous tier through the limiter
     { path: '/indicators/coverage.parquet',           range: 'bytes=0-99', status: 206, cls: 'parquet', tier: 'anonymous', prefix: 'indicators', type: 'application/vnd.apache.parquet', link: null },

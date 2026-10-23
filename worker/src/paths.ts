@@ -61,8 +61,9 @@ export function objectKey(pathname: string): string | null {
   return t && t.store === 'public' ? t.key : null
 }
 
-/** keyless by type everywhere public: catalogs, manifests, pages, thumbnails */
-const KEYLESS_EXT = new Set(['json', 'md', 'html', 'png', 'jpg', 'jpeg', 'txt', 'csv', 'svg'])
+/** keyless by type everywhere public: catalogs, manifests, pages, thumbnails, and the Atom feeds (`indicators/feeds/*.xml`,
+ *  `.atom`), so a feed reader polling them never meets the anonymous data limiter */
+const KEYLESS_EXT = new Set(['json', 'md', 'html', 'png', 'jpg', 'jpeg', 'txt', 'csv', 'svg', 'atom', 'xml'])
 /** data by type (key tiers and the anonymous limiter); any extension not listed in either set is data too */
 const DATA_EXT: Record<string, PathClass> = {
   parquet: 'parquet', pmtiles: 'pmtiles', tif: 'tif', tiff: 'tif', duckdb: 'data', zip: 'data', gz: 'data', fgb: 'data',
@@ -75,7 +76,7 @@ export function extOf(key: string): string {
   return i > 0 ? base.slice(i + 1) : ''
 }
 
-/** path class and gate. Public: by type, not prefix: json/md/html/png/jpg/txt/csv/svg (and an extensionless `credits`)
+/** path class and gate. Public: by type, not prefix: json/md/html/png/jpg/txt/csv/svg/atom/xml (and an extensionless `credits`)
  *  are open; parquet/pmtiles/tif/duckdb/zip/gz/fgb and unknown extensions are data, which falls to the anonymous tier
  *  without a key, except under `gazetteer/index/` (open). `atlas-restricted/...`: class `unlisted`, every file needs a key.
  *  Unlisted bucket: class `unlisted`, every path needs a key except `gazetteer/index/` (the `unlisted.json` listing). */
@@ -107,6 +108,8 @@ const TYPES: Record<string, string> = {
   jpeg:    'image/jpeg',
   png:     'image/png',
   svg:     'image/svg+xml',
+  atom:    'application/atom+xml; charset=utf-8',
+  xml:     'application/xml; charset=utf-8',
   zip:     'application/zip',
   gz:      'application/gzip',
 }

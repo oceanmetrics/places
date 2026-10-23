@@ -29,7 +29,7 @@ How a served public path is gated, by type, not by prefix (`classify()`):
 
 | Request | Result |
 |---|---|
-| `*.json` (STAC, `catalog.json`, `layers.json`, `indicators.json`, `latest.json`, `versions.json`), `*.md`, `*.html`, `*.png`, `*.jpg`/`*.jpeg`, `*.txt`, `*.csv`, `*.svg`, `credits`, anything under `gazetteer/index/` | keyless. A `?key=` is used only for attribution; a wrong or stale one is ignored, never a 403. Class `stac` for json, else `other` |
+| `*.json` (STAC, `catalog.json`, `layers.json`, `indicators.json`, `latest.json`, `versions.json`), `*.md`, `*.html`, `*.png`, `*.jpg`/`*.jpeg`, `*.txt`, `*.csv`, `*.svg`, `*.atom`/`*.xml` (the indicators Atom feeds, `indicators/feeds/`: `application/atom+xml` as stored, else the extension's type), `credits`, anything under `gazetteer/index/` | keyless. A `?key=` is used only for attribution; a wrong or stale one is ignored, never a 403. Class `stac` for json, else `other` |
 | data: `*.parquet`, `*.pmtiles`, `*.tif`/`*.tiff`, `*.duckdb`, `*.zip`, `*.gz`, `*.fgb`, and any extension not in the keyless list, with a valid `?key=` | served; Origin must match the key's allow-list (no Origin header, as from curl/R/QGIS, passes). Class `parquet`, `pmtiles`, `tif`, else `data` |
 | same, no key | **anonymous tier**: served, but through the `ANON_LIMITER` rate-limit binding (per client IP); over the limit is a 429, not a 403 |
 | same, unknown/malformed/disabled key, or wrong Origin | 403 JSON (`invalid_key`, `origin_not_allowed`) |
