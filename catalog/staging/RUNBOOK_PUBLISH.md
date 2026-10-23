@@ -1,5 +1,11 @@
 # RUNBOOK_PUBLISH: master publish plan for the places gazetteer (written 2026-10-08, NOTHING PUBLISHED YET)
 
+> **Since 2026-10-23 every upload goes through oceanmetrics/platform `scripts/om-publish.sh`** (both stores, R2 then S3;
+> never deletes), which `scripts/publish_collections.sh` and `build_h3_membership.py --upload` call. The `aws s3 sync|cp`
+> lines below that write to the bucket are the history of the first publishes: by hand, run
+> `../platform/scripts/om-publish.sh --really <local> gazetteer/<...>` instead (dry run without `--really`), or the S3-only
+> copy is up to an hour stale on the storage host until the mirror catches up. The `aws s3 sync s3://... catalog/pub/` reads stay.
+
 Merges the per-agent runbooks: `RUNBOOK_mr.md`, `RUNBOOK_mc15.md`, `RUNBOOK_mpa_gebco.md`, `RUNBOOK_calcofi.md`, plus
 the BOEM/NOAA-AOA six (already published at 1.0.0, commit 28eb877 in the erddap-places pipeline) and the proven
 `~/Github/oceanmetrics/erddap-places/catalog/publish_places.sh`. Rules: `AGENTS.md` (licence tiers, `rashid check` gate,

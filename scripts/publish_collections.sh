@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # publish staged collections into the live gazetteer catalog:
 # copy -> portolan add -> restore shared files -> fix sizes/checksums/roles -> rashid gate -> upload -> verify
+# the upload goes through oceanmetrics/platform scripts/om-publish.sh (both stores, R2 then S3; never deletes): OM_PUBLISH,
+# else a platform checkout beside this repo (scripts/om_publish_path.sh). the live root files are read from S3.
 #
 # usage: scripts/publish_collections.sh [--no-upload] [--republish [--version V] [--note TEXT]] <slug> [<slug> ...]
 #
@@ -218,15 +220,17 @@ if mine:
 print(f"gate ok: no errors in the publish set ({elsewhere} pre-existing error lines elsewhere in the pulled tree)")
 PYEOF
 
-# 7. upload (no --delete anywhere; root files last, merged into the live ones) ----
+# 7. upload through om-publish.sh (both stores; no delete anywhere; collection.json last in each slug, the root files
+#    last of all, merged into the live ones, their previous R2 copies kept under gazetteer/_history/<date>/) ----
 if [[ $do_upload -eq 1 ]]; then
+  . "$dir_repo/scripts/om_publish_path.sh"
   for s in $slugs; do
     if is_reference "$dir_pub/$s" && find "$dir_pub/$s" \( -name '*.parquet' -o -name '*.pmtiles' \) | grep -q .; then
       echo "REFUSED: reference collection $s has data files in the pub tree; nothing uploaded" >&2; exit 1
     fi
   done
   for s in $slugs; do
-    aws s3 sync "$dir_pub/$s/" "$s3_dest/$s/" --exclude '.portolan/*'
+    "$P" --really --exclude '.portolan/*' --last collection.json "$dir_pub/$s" "gazetteer/$s"
   done
   # the root files: the bucket has other publishers (erddap-places places/, erddap/, stats/ ...) and `aws s3 sync` keeps a
   # same-size local copy, so the pulled ones can be stale (on 2026-10-16 an upload of them put places back to 1.2.0).
@@ -250,8 +254,8 @@ for f, obj, kw in ((root_v, live_v, {}), (root_c, live_c, {"ensure_ascii": False
         json.dump(obj, fh, indent=2, **kw); fh.write("\n")
 print("root files: updated", " ".join(slugs), "in the live versions.json /", len(live_c["links"]), "catalog links")
 PYEOF
-  aws s3 cp "$root_v" "$s3_dest/versions.json" --content-type application/json
-  aws s3 cp "$root_c" "$s3_dest/catalog.json"  --content-type application/json
+  "$P" --really --keep-history "$root_v" gazetteer --as versions.json
+  "$P" --really --keep-history "$root_c" gazetteer --as catalog.json
   cp "$root_v" "$dir_pub/versions.json"; cp "$root_c" "$dir_pub/catalog.json"
   rm -f "$root_v" "$root_c"
   for s in $slugs; do

@@ -20,7 +20,8 @@ a collection without polygons (points, lines) gets no membership.
 (`missing_slugs`), so the invariant "a polygon vector row has h3" holds after each sync, not only for the slugs it rebuilt.
 With --missing and no --slug only those are built; with neither, every layer with a parquet is.
 
---upload syncs each <out>/<slug>/h3/ to s3://oceanmetrics.io-public/gazetteer/<slug>/h3/ (no --delete), membership.json
+--upload publishes each <out>/<slug>/h3/ to gazetteer/<slug>/h3/ of the bucket through oceanmetrics/platform
+scripts/om-publish.sh (both stores, R2 then S3; never deletes; OM_PUBLISH or a platform checkout beside this repo), membership.json
 last. --layers-out writes the PUBLISHED layers.json unchanged but for each row's `h3` (build_layers_json.attach_h3,
 from every <out>/*/h3/membership.json), so advertising the membership rebuilds nothing else; with --upload it goes to
 index/layers.json and the root layers.json, after the collections' h3/ files.
@@ -49,7 +50,7 @@ sys.path.insert(0, str(ROOT))
 from gazetteer import membership as m  # noqa: E402
 
 BASE_DIRECT = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/"
-S3 = "s3://oceanmetrics.io-public/gazetteer"
+PREFIX = "gazetteer"     # the prefix in the public bucket (both stores, through om-publish.sh)
 
 
 def get(url: str) -> bytes:
@@ -128,11 +129,30 @@ def attach_published(lj: dict, out: Path) -> dict:
   return {**lj, "layers": bl.attach_h3(lj["layers"], mans, lj.get("base", bl.BASE))}
 
 
-def upload(slug: str, out: Path) -> None:
-  d = out / slug / "h3"
-  subprocess.run(["aws", "s3", "sync", str(d), f"{S3}/{slug}/h3/", "--exclude", "membership.json"], check=True)
-  subprocess.run(["aws", "s3", "cp", str(d / "membership.json"), f"{S3}/{slug}/h3/membership.json",
-                  "--content-type", "application/json"], check=True)
+def om_publish_path() -> str:
+  """the one publisher of the bucket, oceanmetrics/platform scripts/om-publish.sh: OM_PUBLISH, else a platform checkout
+  beside this repo, else ~/Github/oceanmetrics/platform (scripts/om_publish_path.sh is the shell twin)"""
+  env = os.environ.get("OM_PUBLISH")
+  cands = [Path(env)] if env else [ROOT.parent / "platform" / "scripts" / "om-publish.sh",
+                                   Path.home() / "Github" / "oceanmetrics" / "platform" / "scripts" / "om-publish.sh"]
+  for c in cands:
+    if c.is_file() and os.access(c, os.X_OK):
+      return str(c)
+  raise SystemExit("om-publish.sh not found (set OM_PUBLISH to oceanmetrics/platform scripts/om-publish.sh)")
+
+
+def upload(slug: str, out: Path, run=subprocess.run, publisher: str | None = None) -> None:
+  """<out>/<slug>/h3/ to gazetteer/<slug>/h3/ on both stores, membership.json last (content types by extension)"""
+  run([publisher or om_publish_path(), "--really", "--last", "membership.json", str(out / slug / "h3"),
+       f"{PREFIX}/{slug}/h3"], check=True)
+
+
+def upload_layers(lo: Path, run=subprocess.run, publisher: str | None = None) -> None:
+  """the layers.json with `h3` attached to gazetteer/index/ (its previous R2 copy kept under _history/) and gazetteer/"""
+  p = publisher or om_publish_path()
+  run([p, "--really", "--keep-history", "--cache-control", "no-cache", str(lo), f"{PREFIX}/index", "--as", "layers.json"],
+      check=True)
+  run([p, "--really", "--cache-control", "no-cache", str(lo), PREFIX, "--as", "layers.json"], check=True)
 
 
 def main(argv=None) -> int:
@@ -182,9 +202,7 @@ def main(argv=None) -> int:
     lo.write_text(json.dumps(new, indent=2, ensure_ascii=False) + "\n")
     print(f"wrote {lo}: {sum(1 for r in new['layers'] if r.get('h3'))} of {len(new['layers'])} layers with h3", flush=True)
     if a.upload:
-      for key in ("index/layers.json", "layers.json"):
-        subprocess.run(["aws", "s3", "cp", str(lo), f"{S3}/{key}", "--content-type", "application/json",
-                        "--cache-control", "no-cache"], check=True)
+      upload_layers(lo)
   return 0
 
 

@@ -6,6 +6,12 @@ carries its own **licence** and **attribution**. Places are identified by `place
 (for example `BOEM:OCS-P 0561`), ids never change; geometry versions do.
 
 - Catalog: https://storage.oceanmetrics.io/gazetteer/ (S3 bucket `oceanmetrics.io-public`, prefix `gazetteer/`)
+- Publishing: every upload (`scripts/publish_collections.sh`, `scripts/build_h3_membership.py --upload`, the index step
+  of `sync.yml`) goes through oceanmetrics/platform `scripts/om-publish.sh`, the one publisher of the bucket: both stores
+  (R2 `oceanmetrics-io-public-enam`, which the storage host serves, then S3), content types by extension, never a
+  delete; the root `versions.json`, `catalog.json` and `index/layers.json` keep the R2 copy they replace under
+  `gazetteer/_history/<date>/`. `sync.yml` checks platform out at `main` and sets `OM_PUBLISH`; by hand a platform
+  checkout beside this repo is found (`scripts/om_publish_path.sh`). Tested against fakes in `tests/test_publish.py`.
 - Each collection: `places.parquet` (GeoParquet 1.1, WKB, `bbox` struct, EPSG:4326, split at +/-180; the file
   bbox and STAC extent cross +/-180 with west > east, per RFC 7946, when a place is cut there),
   `places.pmtiles` (layer name = collection slug, attribution in the metadata), `style.json`, `README.md`,

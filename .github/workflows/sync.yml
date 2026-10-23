@@ -12,9 +12,10 @@
 #
 # runs on the Mac mini (`macmini` runner, shared with oceanmetrics/erddap-places stats.yml and obis-h3.yml: one job at a
 # time). moved from oceanmetrics/erddap-places gazetteer-sync.yml on 2026-10-16, when this repo became the only
-# publisher of the place collections. host tools come from Homebrew (uv, tippecanoe, aws, python3); portolan and rashid
-# are uv tools. the S3 writes use the host's AWS profile; the repository holds no AWS secrets, and if
-# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are ever added they take precedence.
+# publisher of the place collections. host tools come from Homebrew (uv, tippecanoe, aws, rclone, python3); portolan and
+# rashid are uv tools. the writes go through oceanmetrics/platform scripts/om-publish.sh (R2 through the host's rclone
+# wrapper, S3 through the host's AWS profile); the repository holds no secrets, and if AWS_ACCESS_KEY_ID /
+# AWS_SECRET_ACCESS_KEY are ever added they take precedence for S3.
 #
 # publishing goes through scripts/publish_collections.sh --republish (the portolan 0.8.0 guards, the rashid gate, the
 # root versions.json / catalog.json merged into the live ones). reads of the published catalog go to the S3 origin: the
@@ -61,10 +62,19 @@ jobs:
     env:
       AWS_DEFAULT_REGION: us-east-1
       ORIGIN: https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer
+      # every upload goes through oceanmetrics/platform scripts/om-publish.sh (both stores, R2 then S3; never deletes),
+      # checked out below; the R2 keys stay on the host like the AWS profile (~/.config/oceanmetrics/rclone-r2.sh)
+      OM_PUBLISH: ${{ github.workspace }}/.om-platform/scripts/om-publish.sh
       # the Python uv fetches: left to itself it took 3.15.0, which has no pyarrow wheel (erddap-places, 2026-10-13)
       UV_PYTHON: '3.13'
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: oceanmetrics/platform
+          path: .om-platform
+          sparse-checkout: scripts/om-publish.sh
+          sparse-checkout-cone-mode: false
 
       # Homebrew's uv, tippecanoe and aws; uv tools (portolan, rashid) land in ~/.local/bin
       - name: host tools
@@ -174,9 +184,10 @@ jobs:
           uv run scripts/build_h3_membership.py $slugs --missing --layers "file://$lj" --out "$RUNNER_TEMP/h3" --upload
           uv run scripts/build_layers_json.py --no-local --out "$lj"
           uv run scripts/build_index.py --no-local --out "$RUNNER_TEMP/index"
-          aws s3 sync "$RUNNER_TEMP/index/" s3://oceanmetrics.io-public/gazetteer/index/ --exclude '.portolan/*'
-          aws s3 cp "$lj" s3://oceanmetrics.io-public/gazetteer/index/layers.json --content-type application/json
-          aws s3 cp "$lj" s3://oceanmetrics.io-public/gazetteer/layers.json --content-type application/json
+          # om-publish.sh, both stores: index/ first, then layers.json (its previous R2 copy under gazetteer/_history/)
+          "$OM_PUBLISH" --really --exclude '.portolan/*' "$RUNNER_TEMP/index" gazetteer/index
+          "$OM_PUBLISH" --really --keep-history "$lj" gazetteer/index --as layers.json
+          "$OM_PUBLISH" --really "$lj" gazetteer --as layers.json
 
       - name: fail the job if a collection failed to build
         if: ${{ steps.build.outcome == 'failure' }}
