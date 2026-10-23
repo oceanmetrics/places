@@ -35,8 +35,16 @@ jobs:
         working-directory: web
       - run: npm run test
         working-directory: web
+      # analytics only when the repository variable VITE_GA_ID is set (a GA4 id; the bar loads it, web/README "Analytics")
       - run: npm run build -- --base=/places/
         working-directory: web
+        env:
+          VITE_GA_ID: ${{ vars.VITE_GA_ID }}
+      # no gtag.js script tag in any page, and the id in the bundle exactly when the variable is set
+      - run: node scripts/check-ga.mjs dist --id "$VITE_GA_ID"
+        working-directory: web
+        env:
+          VITE_GA_ID: ${{ vars.VITE_GA_ID }}
       # the size budget (web/README "Size budget"): entry, map, engine and the other lazy chunks, gzip
       - run: npm run size
         working-directory: web

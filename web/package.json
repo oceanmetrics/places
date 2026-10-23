@@ -10,14 +10,16 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
-    "size": "node scripts/size-budget.mjs"
+    "size": "node scripts/size-budget.mjs",
+    "check:ga": "node scripts/check-ga.mjs dist",
+    "e2e:ga": "node scripts/ga-e2e.mjs"
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "1.32.0",
     "@oceanmetrics/catalog": "^0.6.0",
     "@oceanmetrics/engine": "^0.1.2",
     "@oceanmetrics/map": "^0.2.2",
-    "@oceanmetrics/nav": "^0.1.0",
+    "@oceanmetrics/nav": "^0.2.0",
     "@oceanmetrics/places": "^0.5.2",
     "apache-arrow": "^17.0.0",
     "hyparquet": "^1.31.5",

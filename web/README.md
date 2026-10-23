@@ -227,6 +227,25 @@ Not budgeted, and printed: DuckDB-WASM's worker scripts (381 kB) and wasm (eh 7.
 engine's worker on the first slice), MapLibre's worker module (147 kB), and geotiff's decoders that the map package's COG
 protocol would import (never requested: no `cog` slot here).
 
+## Analytics
+
+Off unless the repository variable **`VITE_GA_ID`** (Settings -> Secrets and variables -> Actions -> Variables) holds a
+GA4 measurement id. `pages.yml` passes it to `vite build`; `src/lib/ga.ts` `gaId()` keeps it only when it matches
+`^G-[A-Z0-9]{4,16}$`, and `App.svelte` sets it on the bar as `<om-nav data-ga>`. The bar (`@oceanmetrics/nav` >= 0.2.0,
+README "Analytics") loads gtag.js once, with `anonymize_ip`, no Google signals and no ad personalization, and sends a
+page_view on load and on each route change (pushState, popstate) with a rebuilt `page_location`: origin + path, never
+the query (`?q=`, `layers=`, `place=`) or a fragment. No id is written in the repo.
+
+- `npm test`: `src/lib/ga.test.ts` (the id rule, and `scripts/check-ga.mjs` on small dists).
+- `npm run check:ga` (after a build; `pages.yml` runs it with `--id "$VITE_GA_ID"`): no page carries a gtag.js script
+  tag, and a measurement id is in the bundle exactly when one was given.
+- `npm run e2e:ga [-- --id G-TEST000000]` (after a build with or without `VITE_GA_ID=G-TEST000000`): the built site in
+  headless Chrome, every request off its origin aborted, opened with a polygon, a title and a search in its url and
+  moved by pushState, replaceState and the hash. Unset: no script tag, no dataLayer. Set: one script tag,
+  `anonymize_ip: true`, `send_page_view: false`, and no gtag() call or request carries the query or the fragment.
+
+The GA4 stream's enhanced measurement "Page changes based on browser history events" must be off (the nav README says why).
+
 ## Deploy
 
 **Live now at <https://oceanmetrics.io/places/>** via GitHub Pages (`.github/workflows/pages.yml`: on push to `main`

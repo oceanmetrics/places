@@ -2,6 +2,7 @@
   import '@oceanmetrics/nav/define'
   import { onMount } from 'svelte'
   import { BASE, loadManifest } from './lib/data.svelte'
+  import { gaId } from './lib/ga'
   import { navSearchTarget, withBase } from './lib/helpers'
   import { loc, navigate, route, startRouter } from './lib/router.svelte'
   import { theme, toggleTheme } from './lib/theme.svelte'
@@ -12,6 +13,8 @@
   import Docs from './pages/Docs.svelte'
 
   let bar: HTMLElement
+  // analytics only when the build had VITE_GA_ID (the bar loads it; lib/ga.ts)
+  const GA_ID = gaId()
   onMount(() => {
     startRouter(); loadManifest()
     // the bar's place search: Places is the target itself, so a url on this origin routes in-app; others fall through to the bar
@@ -39,7 +42,7 @@
   })
 </script>
 
-<om-nav bind:this={bar} current="places" changes-href="https://oceanmetrics.io/docs/" search-href={new URL(withBase('/', BASE), location.origin).href}>
+<om-nav bind:this={bar} current="places" data-ga={GA_ID || undefined} changes-href="https://oceanmetrics.io/docs/" search-href={new URL(withBase('/', BASE), location.origin).href}>
   <nav class="app-nav" aria-label="Places">
     {#each nav as n}
       <a href={withBase(n.href, BASE)} aria-current={here === n.name ? 'page' : undefined}>{n.label}</a>

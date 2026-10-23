@@ -7,13 +7,15 @@ interface ImportMetaEnv {
   readonly VITE_PLACES_BASE?: string
   /** indicators catalog root, default https://storage.oceanmetrics.io/indicators/ */
   readonly VITE_INDICATORS_BASE?: string
+  /** the GA4 measurement id (the repository variable VITE_GA_ID); unset = no analytics */
+  readonly VITE_GA_ID?: string
 }
 
 // the shared bar (@oceanmetrics/nav), a custom element: its attributes as Svelte sees them
 declare namespace svelteHTML {
   interface IntrinsicElements {
     'om-nav': import('svelte/elements').HTMLAttributes<HTMLElement> & {
-      current?: string; theme?: 'light' | 'dark'; 'changes-href'?: string; 'search-href'?: string; 'collapse-at'?: string | number; items?: string
+      current?: string; theme?: 'light' | 'dark'; 'changes-href'?: string; 'search-href'?: string; 'collapse-at'?: string | number; items?: string; 'data-ga'?: string; 'data-ga-keep'?: string
     }
   }
 }
