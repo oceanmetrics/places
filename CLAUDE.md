@@ -47,10 +47,13 @@ Tests in `tests/test_staged.py` and similar run only when `catalog/staging/<slug
 JS (`web/` and `worker/` are each their own npm package; run `npm install` inside it first). The `@oceanmetrics/places` client
 (reads `layers.json`, index, parquet and PMTiles straight from storage) lives in https://github.com/oceanmetrics/platform
 `packages/places` since 2026-10-22 and is on npm: `web/` depends on
-`@oceanmetrics/places` and `@oceanmetrics/status` from the registry and consumes the client's built `dist/` like any other
-consumer, with no sibling checkout. A client change is made in oceanmetrics/platform `packages/places` and released there
-(version, `CHANGELOG.md`, npm publish); then bump the range in `web/package.json` here. `@oceanmetrics/catalog` (devDependency of
-`web/`) brings the JSON schemas that `tests/test_layers_schema.py` validates against.
+`@oceanmetrics/places` from the registry and consumes the client's built `dist/` like any other consumer. A client change is
+made in oceanmetrics/platform `packages/places` and released there (version, `CHANGELOG.md`, npm publish); then bump the range
+in `web/package.json` here. `@oceanmetrics/catalog` 0.3.0 holds the indicator cards (`@oceanmetrics/catalog/indicators`, shared
+with the indicators viewer; `web/src/lib/indicators.ts` only wires it) and brings the JSON schemas that
+`tests/test_layers_schema.py` validates against. Until 0.3.0 is on npm it is a `file:../../platform/packages/catalog` link to a
+sibling checkout of oceanmetrics/platform (run `npm run build` there first; `pages.yml` checks out both); then it becomes
+`^0.3.0` and the sibling checkout goes again (TODO in `web/src/lib/indicators.ts`).
 
 ```sh
 # the client is tested in its own repo (oceanmetrics/platform: npm test && npm run typecheck)

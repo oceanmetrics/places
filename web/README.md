@@ -18,7 +18,7 @@ a client change is made and released there, then the range in `package.json` is 
 
 ```sh
 cd web
-npm install          # @oceanmetrics/places and @oceanmetrics/status from npm (the client's built dist/); no sibling checkout
+npm install          # @oceanmetrics/places from npm; @oceanmetrics/catalog from ../../platform (built) until 0.3.0 is on npm
 npm run dev          # http://localhost:5180
 npm test             # vitest: URL grammar codec (round trips), pure helpers, the indicators slot (synthetic fixtures, no network)
 npm run check        # svelte-check
@@ -41,20 +41,25 @@ the client repo's `packages/places/test/fixtures/` (oceanmetrics/platform) with 
 
 ## Indicators on the place page
 
-The place page shows the place's indicators right after the map (`src/lib/Indicators.svelte`, rules in
-`src/lib/indicators.ts`, tested in `indicators.test.ts` with `src/lib/fixtures/` (`indicators.json`, and
-`coverage.parquet` made by `make_coverage.sql`)). It reads the Ocean Metrics indicators catalog
+The place page shows the place's indicators right after the map (`src/lib/Indicators.svelte`). The rules are
+`@oceanmetrics/catalog/indicators` (oceanmetrics/platform `packages/catalog`, 0.3.0: the one implementation of the cards,
+shared with the indicators viewer, and tested there); `src/lib/indicators.ts` only wires them to this site (the catalog
+base, the dated "not computed yet" sentence), checked in `indicators.test.ts` with `src/lib/fixtures/` (a copy of the
+package's fixtures: `indicators.json`, and `coverage.parquet` made by `make_coverage.sql`). It reads the Ocean Metrics indicators catalog
 (oceanmetrics/indicators): `indicators.json` (the manifest: titles, units, series, leads, status method, dataset citation)
 and `coverage.parquet` (one row per place × indicator × grain with the last value, status, trend and the method's
 sentence, all computed there with `@oceanmetrics/status`; nothing here computes a status). Each card has the title, the
 last value with its unit, the period (by grain: `2025`, `2025-07`, `the 2020s`), the status glyph and caption (shapes
 from the indicators viewer: a ring with a plus, a filled centre, a minus, a dashed ring for none; captions say "its own
-record"), the sentence, method and citation under a disclosure, and "Open in Indicators ↗", the indicators app's Place
+record"), the sentence, method (label and note) and the citation with the place in its "Values:" clause under a
+disclosure, a "Reproduce" disclosure (the values parquet url, a DuckDB query for the place's rows, the config lines and
+their hash), and "Open in Indicators ↗", the indicators app's Place
 view (`https://oceanmetrics.io/indicators/#view=place&place=<id>&coll=<coll>&ind=<indicator>`). Leads show first, then
 "Show all"; the OBIS series that are not leads fold into one "no status rule" line with a count. With no cards the
 section says which absence applies: **no data here** (the catalog covers the place's layer but has no value for it) or
-**not computed yet** (it does not cover the layer: indicators for every gazetteer place arrive in build week 3,
-2026-11-13 to 11-19; until then the link goes to ERDDAP Places). The full Place page is build week 3.
+**not computed yet** (nobody computed the place, whatever its layer: indicators for every gazetteer place arrive in
+build week 3, 2026-11-13 to 11-19, a sentence this site passes to the package; until then the link goes to ERDDAP
+Places). The full Place page is build week 3.
 
 Catalog base: `https://storage.oceanmetrics.io/indicators/` by default; override at build time with
 `VITE_INDICATORS_BASE=https://…/` or at run time with `?indicators=https://…/` (for example a local `catalog/` of the

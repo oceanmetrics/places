@@ -22,29 +22,43 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # the client (@oceanmetrics/places) and @oceanmetrics/status come from npm like any consumer
+      # the client (@oceanmetrics/places) comes from npm; @oceanmetrics/catalog 0.3.0 (the indicator cards) is a file: link
+      # to a sibling checkout of oceanmetrics/platform until it is on npm (web/package.json -> ../../platform/packages/catalog),
+      # so both repos sit side by side in the workspace. TODO(catalog publish): back to one checkout with ^0.3.0.
       - uses: actions/checkout@v4
+        with:
+          path: places
+      - uses: actions/checkout@v4
+        with:
+          repository: oceanmetrics/platform
+          ref: main
+          path: platform
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            places/web/package-lock.json
+            platform/package-lock.json
+      # the packages export from dist/, and the catalog's own imports (hyparquet, @oceanmetrics/status) resolve from platform/node_modules
+      - run: npm ci && npm run build
+        working-directory: platform
       - run: npm ci
-        working-directory: web
+        working-directory: places/web
       - run: npm run check
-        working-directory: web
+        working-directory: places/web
       - run: npm run test
-        working-directory: web
+        working-directory: places/web
       - run: npm run build -- --base=/places/
-        working-directory: web
+        working-directory: places/web
       # SPA fallback: GitHub Pages serves 404.html for unknown paths (/places/p/NMS:PMNM, /places/credits)
-      - run: cp web/dist/index.html web/dist/404.html
+      - run: cp places/web/dist/index.html places/web/dist/404.html
       - uses: actions/configure-pages@v5
         with:
           enablement: true   # first run creates the Pages site (workflow build type)
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web/dist
+          path: places/web/dist
 
   deploy:
     needs: build

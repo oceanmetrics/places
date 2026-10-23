@@ -3,15 +3,16 @@
 
   // the catalog is read once per page load and shared by every place page visited (two files, one request each)
   let catalog: Promise<[IndicatorsManifest, CoverageRow[]]> | null = null
-  const readCatalog = () => (catalog ??= Promise.all([loadManifest(fetch, INDICATORS_BASE), loadCoverage(fetch, INDICATORS_BASE)])
+  const readCatalog = () => (catalog ??= Promise.all([loadManifest(INDICATORS_BASE), loadCoverage(INDICATORS_BASE)])
     .catch((e) => { catalog = null; throw e }))
 </script>
 
 <script lang="ts">
   // the indicators slot of the place page: the cards of the place from the indicators catalog, or which absence applies.
-  // the rules are in indicators.ts (tested); this only wires them to the page.
-  import { footerLine, rowsFor, slotFor, type Slot } from './indicators'
+  // the rules are @oceanmetrics/catalog's cards (wired in indicators.ts, tested); this only draws them.
+  import { coverageFor, footerLine, slotFor, type Slot } from './indicators'
   import { GLYPH_PATHS } from './glyphs'
+  import CopyButton from './CopyButton.svelte'
 
   let { placeId, layer }: { placeId: string; layer?: { title?: string; collection?: string } | null } = $props()
 
@@ -24,7 +25,7 @@
     const id = placeId, l = layer
     phase = 'loading'; expanded = false
     readCatalog()
-      .then(([m, rows]) => { if (id === placeId) { slot = slotFor(rowsFor(rows, id), m, id, l); phase = 'ok' } })
+      .then(([m, rows]) => { if (id === placeId) { slot = slotFor(coverageFor(rows, id), m, id, l); phase = 'ok' } })
       .catch((e: unknown) => { phase = 'error'; message = String((e as Error)?.message ?? e) })
   })
 
@@ -55,8 +56,21 @@
             <details>
               <summary>Sentence, method and citation</summary>
               {#if c.sentence}<p>{c.sentence}</p>{/if}
-              <p><span class="muted">Method:</span> {c.method}</p>
-              {#if c.citation}<p><span class="muted">Citation:</span> {c.citation}</p>{/if}
+              <p><span class="muted">Method:</span> {c.methodLabel}. {c.methodNote}</p>
+              <p><span class="muted">Citation:</span> {c.citation}</p>
+              <p><CopyButton text={c.citation} label="Copy citation" /></p>
+            </details>
+            <details class="repro">
+              <summary>Reproduce</summary>
+              {#if c.reproduce.valuesUrl}
+                <p><span class="muted">Values:</span> <a href={c.reproduce.valuesUrl}>{c.reproduce.valuesUrl}</a></p>
+                <pre><code>{c.reproduce.snippet}</code></pre>
+                <p><CopyButton text={c.reproduce.snippet ?? ''} label="Copy DuckDB SQL" /></p>
+              {:else}
+                <p class="muted">The indicators manifest lists no values file for this place's collection.</p>
+              {/if}
+              <p><span class="muted">Config hash:</span> <code>{c.reproduce.hash}</code></p>
+              <pre><code>{c.reproduce.config.join('\n')}</code></pre>
             </details>
             <a class="btn secondary small" href={c.href} target="_blank" rel="noopener noreferrer">Open in Indicators ↗</a>
           </article>
@@ -92,6 +106,7 @@
   details { font-size: 12.5px; color: var(--text-body); }
   details summary { cursor: pointer; color: var(--link); }
   details p { margin: 4px 0 0; overflow-wrap: anywhere; }
+  .repro pre { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .ind .btn { align-self: flex-start; margin-top: auto; }
   .foot { font-size: 12.5px; margin: 8px 0 0; }
 </style>

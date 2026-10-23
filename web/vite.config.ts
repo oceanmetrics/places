@@ -10,6 +10,8 @@ export default defineConfig({
     dedupe    : ['hyparquet'],
   },
   build : { target: 'es2022', chunkSizeWarningLimit: 1200 },
-  server: { port: 5180, strictPort: true, fs: { allow: ['..'] } },
+  // the platform checkout: @oceanmetrics/catalog is a file: link until 0.3.0 is on npm (then drop both entries); its own
+  // import of @oceanmetrics/status (0.1.1, the status words) resolves from that checkout's node_modules
+  server: { port: 5180, strictPort: true, fs: { allow: ['..', '../../platform/packages', '../../platform/node_modules'] } },
   test  : { environment: 'node', include: ['src/**/*.test.ts'] },
 })
