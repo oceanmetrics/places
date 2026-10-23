@@ -86,6 +86,12 @@ per gazetteer id, the sections in this order, each a component that only draws, 
    (`compareHref`: `#view=map&ind=erddap:dhw_5km:CRW_SST:mean&pi=coll:places&grain=month&t=<now>&t2=<now - 8 years>&layer=<the
    layer>&place=<id>`; Now is the picker's month, else the layer's latest; a place outside the sanctuaries opens over itself,
    `pi=<id>`). The swipe, the difference and the year-range Then live there, not here.
+   **Try these** (Ben 2026-10-23; `src/lib/tryThese.ts`, drawn by `TryThese.svelte`): the home page under the search (until a
+   search or a place replaces it) and the Data page (`/docs`) list five examples: three Place pages (Channel Islands with
+   `?layer=grid:jplMURSST41mday:sst` under the map, Flower Garden Banks, the Senegalese EEZ `MRGID:8371`) and two ways out, in a
+   new tab (the viewer's Then vs Now at the Channel Islands, the atlas's OBIS species richness on the globe). The same
+   examples are in the indicators viewer's and the atlas's Help and on oceanmetrics.io `/docs/`; `tryThese.test.ts` reads
+   every link with the grammar that owns it.
 3. **Indicators** (below): led by the roll-up line (`src/lib/reports.ts` `summaryLine` over `@oceanmetrics/catalog`
    `rollups`): "N indicators with a value: a above, w within, b below the place's own record, n without a status; latest
    <period>".

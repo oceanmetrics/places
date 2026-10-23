@@ -1,5 +1,6 @@
 <script lang="ts">
   import { BASE } from '../lib/data.svelte'
+  import TryThese from '../lib/TryThese.svelte'
   import { layersJsonUrl, recipes, REPO_URL, stacRoot, withBase } from '../lib/helpers'
 
   const r = recipes(`${BASE}boem_wind_leases/places.parquet`)
@@ -9,6 +10,8 @@
 <main class="page">
   <h1>Docs</h1>
   <p class="muted">The gazetteer is a set of static files: no server and no API key. Read them from the web, a notebook or an app.</p>
+
+  <TryThese />
 
   <h2>STAC catalog</h2>
   <p>The root is a <a href="https://stacspec.org">STAC</a> 1.1 catalog, one collection per source layer.</p>

@@ -4,6 +4,7 @@
   import { buildSearch, parseView, type LayerSel } from '../lib/grammar'
   import { collectionDir, defaultColour, derivedLine, drawable, fmtDate, fmtLonLat, fmtN, groupByAuthority, layerPath, placePath, queryOf, sanitizeHtml, withBase } from '../lib/helpers'
   import { loc, navigate } from '../lib/router.svelte'
+  import TryThese from '../lib/TryThese.svelte'
 
   // the URL is the state: layers=… and place=… are read here and written back with replaceState ----
   const view = $derived(parseView(loc.search))
@@ -145,6 +146,8 @@
         </select>
       </label>
     {/if}
+
+    {#if !q.trim() && !view.place}<TryThese />{/if}
 
     {#if index.status === 'error' && q.trim()}
       <p class="notice">The places index is not available yet, so name search is off. Layers are filtered by that text instead.</p>
