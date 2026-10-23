@@ -233,3 +233,84 @@ def test_parent_lists_every_child_directory():
     assert dirs == sorted(names + ["rasters", "stats"])
     for d in dirs:
         assert f"gazetteer/{d}/index.html" in pg
+
+
+def _fake_publisher(tmp_path, exit_code=0):
+    """a stand-in for om-publish.sh that records its arguments and the files it was given"""
+    log = tmp_path / "calls.jsonl"
+    fake = tmp_path / "om-publish"
+    fake.write_text(f"#!{sys.executable}\nimport json, os, sys\n"
+                    "a = sys.argv[1:]\nsrc = a[-2]\n"
+                    "files = sorted(os.path.relpath(os.path.join(d, f), src) for d, _, fs in os.walk(src) for f in fs) if os.path.isdir(src) else [src]\n"
+                    f"open({str(log)!r}, 'a').write(json.dumps([a, files]) + '\\n')\nsys.exit({exit_code})\n")
+    fake.chmod(0o755)
+    return fake, log
+
+
+def _calls(log):
+    return [json.loads(line) for line in log.read_text().splitlines()]
+
+
+def test_publish_sends_each_prefix_then_the_root_page_through_om_publish(tmp_path, monkeypatch):
+    src = tmp_path / "pub"
+    (src / "stats").mkdir(parents=True)
+    (src / "README.md").write_text("# top\n")
+    (src / "stats" / "a.parquet").write_bytes(b"x")
+    out = tmp_path / "out"
+    fake, log = _fake_publisher(tmp_path)
+    monkeypatch.setenv("OM_PUBLISH", str(fake))
+    assert bp.main(["--prefix", "gazetteer/", "--local", str(src), "--out", str(out), "--root", "--publish"]) == 0
+    calls = _calls(log)
+    assert [c[0][-1] for c in calls] == ["gazetteer", "/"]          # the prefix, then the bucket root
+    for args, _ in calls:
+        assert args[0] == "--dry-run"                                # a dry run unless --really
+        assert args[1:5] == ["--include", args[2], "--cache-control", "no-cache"] and "--delete" not in args
+    assert calls[0][0][2] == "*index.html" and calls[0][0][-2] == str(out / "gazetteer")
+    assert calls[0][1] == ["index.html", "stats/index.html"]
+    assert calls[1][0][2] == "index.html" and calls[1][0][-2] == str(out)
+
+
+def test_publish_really_uploads_and_stops_at_the_first_failure(tmp_path, monkeypatch):
+    src = tmp_path / "pub"
+    src.mkdir()
+    (src / "a.json").write_text("{}")
+    fake, log = _fake_publisher(tmp_path)
+    monkeypatch.setenv("OM_PUBLISH", str(fake))
+    assert bp.main(["--prefix", "gazetteer/", "--local", str(src), "--out", str(tmp_path / "out"), "--publish", "--really"]) == 0
+    assert _calls(log)[0][0][0] == "--really"
+
+
+def test_publish_stops_at_the_first_failing_call(tmp_path, monkeypatch):
+    src = tmp_path / "pub"
+    src.mkdir()
+    (src / "a.json").write_text("{}")
+    d = tmp_path / "bad"
+    d.mkdir()
+    fake, log = _fake_publisher(d, exit_code=3)
+    monkeypatch.setenv("OM_PUBLISH", str(fake))
+    assert bp.main(["--prefix", "gazetteer/", "--local", str(src), "--out", str(tmp_path / "out"), "--root", "--publish", "--really"]) == 1
+    assert len(_calls(log)) == 1                                      # the root page was not tried after the prefix failed
+
+
+def test_nothing_is_published_without_the_flag_and_really_needs_it(tmp_path, monkeypatch):
+    src = tmp_path / "pub"
+    src.mkdir()
+    (src / "a.json").write_text("{}")
+    fake, log = _fake_publisher(tmp_path)
+    monkeypatch.setenv("OM_PUBLISH", str(fake))
+    assert bp.main(["--prefix", "gazetteer/", "--local", str(src), "--out", str(tmp_path / "out")]) == 0
+    assert not log.exists()
+    with pytest.raises(SystemExit):
+        bp.main(["--prefix", "gazetteer/", "--local", str(src), "--out", str(tmp_path / "out"), "--really"])
+
+
+def test_a_missing_publisher_stops_naming_the_variable(tmp_path, monkeypatch):
+    monkeypatch.setenv("OM_PUBLISH", str(tmp_path / "missing"))
+    with pytest.raises(SystemExit, match="OM_PUBLISH"):
+        bp.om_publish_path()
+
+
+def test_publish_calls_skip_a_prefix_without_pages_and_the_root_when_not_asked():
+    pages = {"gazetteer/index.html": "x", "gazetteer/a/index.html": "y"}
+    c = bp.publish_calls(pages, Path("/o"), ["gazetteer/", "marine-atlas/"], False, True, "P")
+    assert c == [["P", "--really", "--include", "*index.html", "--cache-control", "no-cache", "/o/gazetteer", "gazetteer"]]

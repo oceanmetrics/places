@@ -9,9 +9,14 @@ rewrites a folder URL to that object. Same conventions as the sibling generators
   * MarineSensitivity/msens R/storage.R               (same bucket and vhost: look, README block,
     dirs link to the storage host, files link straight to S3 so no bytes transit the VM)
 
-It only WRITES local files. Uploading is a separate, deliberate step (see docs/vhost_gazetteer_browse.diff for the root/vhost side):
-    aws s3 sync OUT s3://oceanmetrics.io-public/ --exclude '*' --include '*index.html' \
-        --cache-control no-cache
+It writes local files. Uploading is a separate, deliberate step (see docs/vhost_gazetteer_browse.diff for the root/vhost
+side): `--publish` sends the pages through oceanmetrics/platform scripts/om-publish.sh (OM_PUBLISH, else a platform
+checkout beside this repo): one call per generated prefix (`--include '*index.html' --cache-control no-cache OUT/<prefix>
+<prefix>`) and, with --root, one for the root page (`--include index.html ... OUT /`: om-publish takes the exact key
+index.html at the bucket root and nothing else there). Both stores, R2 then S3; never a delete (a page the new listing no
+longer needs is removed from OUT, not from the bucket). A dry run (listings only) unless --really is also given:
+    scripts/build_browse_pages.py --prefix gazetteer/ --root --out OUT --publish            # dry run
+    scripts/build_browse_pages.py --prefix gazetteer/ --root --out OUT --publish --really   # upload
 
 Usage:
     scripts/build_browse_pages.py --prefix gazetteer/ --out OUT            # live bucket listing
@@ -26,6 +31,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import posixpath
 import re
 import subprocess
@@ -432,6 +438,33 @@ def write_pages(pages: dict[str, str], out: Path, prefixes: list[str], root: boo
     return len(pages), sum(len(d.encode("utf-8")) for d in pages.values())
 
 
+def om_publish_path() -> str:
+    """the one publisher of the bucket, oceanmetrics/platform scripts/om-publish.sh: OM_PUBLISH, else a platform checkout
+    beside this repo, else ~/Github/oceanmetrics/platform (build_h3_membership.py and om_publish_path.sh are the twins)"""
+    env = os.environ.get("OM_PUBLISH")
+    root = Path(__file__).resolve().parent.parent
+    cands = [Path(env)] if env else [root.parent / "platform" / "scripts" / "om-publish.sh",
+                                     Path.home() / "Github" / "oceanmetrics" / "platform" / "scripts" / "om-publish.sh"]
+    for c in cands:
+        if c.is_file() and os.access(c, os.X_OK):
+            return str(c)
+    raise SystemExit("om-publish.sh not found (set OM_PUBLISH to oceanmetrics/platform scripts/om-publish.sh)")
+
+
+def publish_calls(pages: dict[str, str], out: Path, prefixes: list[str], root: bool, really: bool,
+                  publisher: str) -> list[list[str]]:
+    """The om-publish.sh calls for the pages written to out, in order: each generated prefix, then the root page.
+    Every call is `--include <index glob> --cache-control no-cache <local> <prefix>`; the mode is --dry-run unless really."""
+    mode = "--really" if really else "--dry-run"
+    calls = []
+    for p in (x.strip("/") for x in prefixes):
+        if any(k.startswith(p + "/") for k in pages):
+            calls.append([publisher, mode, "--include", "*index.html", "--cache-control", "no-cache", str(out / p), p])
+    if root and "index.html" in pages:
+        calls.append([publisher, mode, "--include", "index.html", "--cache-control", "no-cache", str(out), "/"])
+    return calls
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--prefix", action="append", help="bucket prefix to generate pages for (repeatable); default gazetteer/")
@@ -442,7 +475,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--file-base", default=FILE_BASE, help="where file links point (default: the S3 endpoint)")
     ap.add_argument("--ga4-id", default=GA4_ID, help="GA4 measurement id ('' for none)")
     ap.add_argument("--root", action="store_true", help="also write the root index.html (marine-atlas/ and gazetteer/ only)")
+    ap.add_argument("--publish", action="store_true", help="send the pages through om-publish.sh after writing them (a dry run unless --really)")
+    ap.add_argument("--really", action="store_true", help="with --publish: upload, not a dry run")
     a = ap.parse_args(argv)
+    if a.really and not a.publish:
+        ap.error("--really goes with --publish")
 
     prefixes = [p if p.endswith("/") else p + "/" for p in (a.prefix or ["gazetteer/"])]
     if a.local and len(prefixes) != 1:
@@ -459,6 +496,12 @@ def main(argv: list[str] | None = None) -> int:
                         ga4_id=a.ga4_id, root=a.root)
     n, size = write_pages(pages, a.out, prefixes, a.root)
     print(f"{len(objs):,} objects -> {n} page(s), {size:,} bytes in {a.out}")
+    if a.publish:
+        publisher = om_publish_path()
+        for call in publish_calls(pages, a.out, prefixes, a.root, a.really, publisher):
+            print("+", " ".join(call[1:]), flush=True)
+            if subprocess.run(call).returncode != 0:
+                return 1
     return 0
 
 
