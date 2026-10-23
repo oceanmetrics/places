@@ -2,7 +2,7 @@
 // implementation of the indicator cards (readers, cards, the three absences, the OBIS fold, Reproduce) shared with the
 // indicators viewer. what stays here is this site's own: where the catalog is read from, and the dated sentence of
 // "not computed yet".
-import { DEFAULT_INDICATORS_BASE, slash, slotFor as slotOf } from '@oceanmetrics/catalog/indicators'
+import { DEFAULT_INDICATORS_BASE, loadCoverage as loadCoverageOf, loadManifest as loadManifestOf, slash, slotFor as slotOf } from '@oceanmetrics/catalog/indicators'
 import type { CoverageRow, IndicatorsManifest, Slot } from '@oceanmetrics/catalog/indicators'
 
 export {
@@ -32,3 +32,9 @@ export const EVERY_PLACE_NOTE = `Indicators for every gazetteer place arrive in 
 /** what the section shows for a place: its cards, the folded OBIS line, or the absence; values urls under INDICATORS_BASE */
 export const slotFor = (rows: CoverageRow[], manifest: IndicatorsManifest, placeId: string, layer?: { title?: string } | null, base = INDICATORS_BASE): Slot =>
   slotOf(rows, manifest, placeId, { layerTitle: layer?.title, note: EVERY_PLACE_NOTE, base })
+
+// the catalog is read once per page load and shared by every place page visited and every section that needs it
+// (Indicators, Reports, Downloads): two files, one request each
+let catalog: Promise<[IndicatorsManifest, CoverageRow[]]> | null = null
+export const readCatalog = (): Promise<[IndicatorsManifest, CoverageRow[]]> => (catalog ??= Promise.all([loadManifestOf(INDICATORS_BASE), loadCoverageOf(INDICATORS_BASE)])
+  .catch((e) => { catalog = null; throw e }))

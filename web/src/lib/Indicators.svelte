@@ -1,16 +1,9 @@
-<script module lang="ts">
-  import { INDICATORS_BASE, loadCoverage, loadManifest, type CoverageRow, type IndicatorsManifest } from './indicators'
-
-  // the catalog is read once per page load and shared by every place page visited (two files, one request each)
-  let catalog: Promise<[IndicatorsManifest, CoverageRow[]]> | null = null
-  const readCatalog = () => (catalog ??= Promise.all([loadManifest(INDICATORS_BASE), loadCoverage(INDICATORS_BASE)])
-    .catch((e) => { catalog = null; throw e }))
-</script>
 
 <script lang="ts">
   // the indicators slot of the place page: the cards of the place from the indicators catalog, or which absence applies.
   // the rules are @oceanmetrics/catalog's cards (wired in indicators.ts, tested); this only draws them.
-  import { coverageFor, footerLine, slotFor, type Slot } from './indicators'
+  import { coverageFor, footerLine, readCatalog, slotFor, type Slot } from './indicators'
+  import { placeRollup, summaryLine } from './reports'
   import { GLYPH_PATHS } from './glyphs'
   import CopyButton from './CopyButton.svelte'
 
@@ -19,13 +12,20 @@
   let phase = $state<'loading' | 'ok' | 'error'>('loading')
   let message = $state('')
   let slot = $state<Slot | null>(null)
+  let summary = $state<string | null>(null)
   let expanded = $state(false)
 
   $effect(() => {
     const id = placeId, l = layer
     phase = 'loading'; expanded = false
     readCatalog()
-      .then(([m, rows]) => { if (id === placeId) { slot = slotFor(coverageFor(rows, id), m, id, l); phase = 'ok' } })
+      .then(([m, rows]) => {
+        if (id !== placeId) return
+        const mine = coverageFor(rows, id)
+        slot = slotFor(mine, m, id, l)
+        summary = summaryLine(placeRollup(mine, id))
+        phase = 'ok'
+      })
       .catch((e: unknown) => { phase = 'error'; message = String((e as Error)?.message ?? e) })
   })
 
@@ -39,6 +39,7 @@
   {:else if phase === 'error'}
     <p class="notice">The indicators catalog could not be read: {message}</p>
   {:else if slot}
+    {#if summary}<p class="summary">{summary}</p>{/if}
     {#if slot.absence}
       <p class="notice">{slot.absence.text}{#if slot.absence.href}{' '}<a href={slot.absence.href} target="_blank" rel="noopener noreferrer">{slot.absence.linkText} ↗</a>{#each slot.absence.more ?? [] as l}{' · '}<a href={l.href} target="_blank" rel="noopener noreferrer">{l.linkText} ↗</a>{/each}{/if}</p>
     {/if}
@@ -109,4 +110,5 @@
   .repro pre { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .ind .btn { align-self: flex-start; margin-top: auto; }
   .foot { font-size: 12.5px; margin: 8px 0 0; }
+  .summary { margin: 0 0 4px; color: var(--text-body); }
 </style>

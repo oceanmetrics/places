@@ -5,6 +5,12 @@
   import CopyButton from '../lib/CopyButton.svelte'
   import Indicators from '../lib/Indicators.svelte'
   import LayerUnder from '../lib/LayerUnder.svelte'
+  import Layers from '../lib/Layers.svelte'
+  import Reports from '../lib/Reports.svelte'
+  import Species from '../lib/Species.svelte'
+  import ValuesDownload from '../lib/ValuesDownload.svelte'
+  import { obisColls } from '../lib/species'
+  import type { Box } from '../lib/layers'
   import type { LegendSpec } from '@oceanmetrics/map'
   import { loadErddapLayers } from '../lib/map/gridKind'
   import type { ErddapLayer } from '../lib/map/gridLayer'
@@ -21,6 +27,7 @@
   let status = $state<'loading' | 'ok' | 'missing' | 'error'>('loading')
   let message = $state('')
   let copies = $state<IndexPlace[]>([])   // the same place in other layers (index group_id)
+  let copiesRead = $state(false)
   let row = $state<IndexPlace | null>(null) // the index row: link back to the source, and all a reference place without per-place geometry has
 
   // the layer under the map and its period, from the query (grammar.ts); the ERDDAP collections of the gazetteer for the picker
@@ -37,7 +44,7 @@
       const refOnly = !f && row && manifest.layers.some((l) => l.slug === row!.collection && keepsGeometry(l))
       if (f || refOnly) {
         feature = f; status = 'ok'
-        samePlace(id, { slug: f?.collection ?? row!.collection }).then((c) => { copies = c }).catch(() => { copies = [] })
+        samePlace(id, { slug: f?.collection ?? row!.collection }).then((c) => { copies = c }).catch(() => { copies = [] }).finally(() => { copiesRead = true })
       } else status = 'missing'
     } catch (e) {
       status = 'error'
@@ -57,6 +64,10 @@
   const sql = $derived(url ? geojsonSql(url, id) : '')
   const geojsonHref = $derived(feature && !isRef ? URL.createObjectURL(new Blob([JSON.stringify(feature)], { type: 'application/geo+json' })) : '')
   const fileName = $derived(id.replace(/[^\w.-]+/g, '_') + '.geojson')
+  const ownColl = $derived(feature?.collection ?? row?.collection ?? layer?.collection ?? null)
+  // the gazetteer collections that hold the place (its own, then its copies'): the OBIS files and the report sets are by collection
+  const placeColls = $derived(obisColls(ownColl, copies))
+  const bbox = $derived(((feature?.bbox ?? row?.bbox) as Box | undefined) ?? null)
 </script>
 
 <main class="page">
@@ -93,6 +104,14 @@
     {/if}
 
     <Indicators placeId={id} {layer} />
+
+    {#if copiesRead}
+      <Species placeId={id} {name} geometry={feature && /Polygon$/.test(feature.geometry?.type ?? '') ? feature.geometry as never : null} {bbox} colls={placeColls} />
+    {/if}
+
+    <Layers placeId={id} {name} {bbox} {erddap} />
+
+    {#if copiesRead}<Reports placeId={id} {name} {placeColls} />{/if}
 
     {#if copies.length}
       <h2>Same place in other layers</h2>
@@ -136,7 +155,9 @@
       <a class="btn secondary" href={withBase(`/?${layer ? `layers=${layer.slug}&` : ''}place=${id}`, BASE)}>This map</a>
     </div>
 
-    <h2>Download</h2>
+    <h2>Downloads</h2>
+    <ValuesDownload placeId={id} />
+    <h3>The boundary</h3>
     {#if layer?.kind === 'derived'}
       <p>These places are computed by Ocean Metrics from {viaTitle(layer, manifest.layers)}; their geometry stays internal, so there is no download.</p>
     {:else if isRef}
@@ -148,7 +169,7 @@
         <a class="btn secondary" href={geojsonHref} download={fileName}>GeoJSON (this place)</a>
       </div>
       {#if sql}
-        <h3>Or copy this DuckDB SQL to write GeoJSON from the parquet</h3>
+        <h4>Or copy this DuckDB SQL to write GeoJSON from the parquet</h4>
         <pre>{sql}</pre>
         <CopyButton text={sql} label="Copy SQL" />
       {/if}
