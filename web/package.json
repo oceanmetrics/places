@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@oceanmetrics/catalog": "file:../../platform/packages/catalog",
+    "@oceanmetrics/catalog": "^0.3.0",
     "@oceanmetrics/places": "^0.5.2",
     "hyparquet": "^1.31.5",
     "maplibre-gl": "^5.24.0",

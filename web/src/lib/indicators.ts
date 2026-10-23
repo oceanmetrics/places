@@ -2,8 +2,6 @@
 // implementation of the indicator cards (readers, cards, the three absences, the OBIS fold, Reproduce) shared with the
 // indicators viewer. what stays here is this site's own: where the catalog is read from, and the dated sentence of
 // "not computed yet".
-// TODO(catalog publish): web/package.json links `file:../../platform/packages/catalog`; switch it to `^0.3.0` once
-// @oceanmetrics/catalog 0.3.0 is on npm (and drop the platform entry from vite.config.ts `server.fs.allow`).
 import { DEFAULT_INDICATORS_BASE, slash, slotFor as slotOf } from '@oceanmetrics/catalog/indicators'
 import type { CoverageRow, IndicatorsManifest, Slot } from '@oceanmetrics/catalog/indicators'
 

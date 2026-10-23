@@ -18,7 +18,7 @@ a client change is made and released there, then the range in `package.json` is 
 
 ```sh
 cd web
-npm install          # @oceanmetrics/places from npm; @oceanmetrics/catalog from ../../platform (built) until 0.3.0 is on npm
+npm install          # @oceanmetrics/places and @oceanmetrics/catalog from npm (their built dist/); no sibling checkout
 npm run dev          # http://localhost:5180
 npm test             # vitest: URL grammar codec (round trips), pure helpers, the indicators slot (synthetic fixtures, no network)
 npm run check        # svelte-check

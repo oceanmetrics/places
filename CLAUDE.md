@@ -51,9 +51,7 @@ JS (`web/` and `worker/` are each their own npm package; run `npm install` insid
 made in oceanmetrics/platform `packages/places` and released there (version, `CHANGELOG.md`, npm publish); then bump the range
 in `web/package.json` here. `@oceanmetrics/catalog` 0.3.0 holds the indicator cards (`@oceanmetrics/catalog/indicators`, shared
 with the indicators viewer; `web/src/lib/indicators.ts` only wires it) and brings the JSON schemas that
-`tests/test_layers_schema.py` validates against. Until 0.3.0 is on npm it is a `file:../../platform/packages/catalog` link to a
-sibling checkout of oceanmetrics/platform (run `npm run build` there first; `pages.yml` checks out both); then it becomes
-`^0.3.0` and the sibling checkout goes again (TODO in `web/src/lib/indicators.ts`).
+`tests/test_layers_schema.py` validates against; it comes from npm (`^0.3.0`) like the client, with no sibling checkout.
 
 ```sh
 # the client is tested in its own repo (oceanmetrics/platform: npm test && npm run typecheck)
