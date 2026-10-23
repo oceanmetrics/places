@@ -268,9 +268,11 @@ def test_main_offline_writes_manifest(tmp_path):
   assert bl.main(["--staging", str(tmp_path / "st"), "--out", str(out), "--no-remote"]) == 0
   m = json.loads(out.read_text())
   assert m["schema"] == 1 and [r["slug"] for r in m["layers"]] == ["acme_leases"]
-  # pmtiles stay canonical (storage host); base_direct is the redirect-free bucket host apps MAY rewrite onto
+  # pmtiles stay canonical (storage host); base_direct, the redirect-free host apps MAY rewrite onto, is the storage
+  # host since the cutover of 2026-10-23 (path-style S3 before, 2746599)
   assert m["base"] == "https://storage.oceanmetrics.io/gazetteer/"
-  assert m["base_direct"] == "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/"   # path-style (2746599)
+  assert m["base_direct"] == "https://storage.oceanmetrics.io/gazetteer/"
+  assert "s3.us-east-1" not in out.read_text()
   assert m["layers"][0]["pmtiles"].startswith(m["base"])
 
 
@@ -294,7 +296,7 @@ def test_crossing_extent_is_unwrapped_for_fit_bounds():
 
 def test_reads_go_to_the_s3_origin_not_the_cdn():
   """regression: the CDN caches versions.json for a day, so a build right after a publish read the old versions."""
-  assert bl.origin(bl.BASE + "versions.json") == bl.BASE_DIRECT + "versions.json"
+  assert bl.origin(bl.BASE + "versions.json") == "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/versions.json"
   assert bl.origin("file:///tmp/layers.json") == "file:///tmp/layers.json"
 
 

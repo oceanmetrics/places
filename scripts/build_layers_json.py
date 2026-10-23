@@ -14,10 +14,10 @@ the collection `via` and show each place in that layer's feature whose place_id 
 `id_from` column's value, e.g. `fao_high_seas` place FAOHS:21 has source_id FAO:21 and is drawn by `fao_major_areas`).
 either source may be absent. every row has `source_link` ({href, title}: the source gazetteer or publisher page apps link back to).
 
-URLs: every layer's `pmtiles` is CANONICAL, on the storage host (`base`, https://storage.oceanmetrics.io/gazetteer/):
-each request there costs one 302 to the bucket. apps MAY rewrite a `pmtiles` URL onto `base_direct` (the bucket's own
-host, https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/, no redirect) by replacing the `base` prefix, until a
-redirect-free host lands. the manifest itself is published at <base>index/layers.json (the client falls back to
+URLs: every layer's `pmtiles` is CANONICAL, on the storage host (`base`, https://storage.oceanmetrics.io/gazetteer/).
+since the storage cutover of 2026-10-23 that host is the om-gazetteer Worker over R2 with no redirect, so `base_direct`
+(the redirect-free host apps MAY rewrite a `pmtiles` URL onto by replacing the `base` prefix) is the storage host too;
+until then it was the bucket's path-style S3 host, behind Caddy's 302. the manifest itself is published at <base>index/layers.json (the client falls back to
 <base>layers.json).
 
 status and versions (all null when unknown, so an older collection still makes a valid row):
@@ -60,7 +60,11 @@ from gazetteer.dedup import search_rank  # noqa: E402
 from gazetteer.legacy import legacy_title  # noqa: E402
 
 BASE = "https://storage.oceanmetrics.io/gazetteer/"
-BASE_DIRECT = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/"   # path-style: the dotted bucket name breaks tls on the virtual-hosted form
+# the redirect-free host written as `base_direct`: the storage host itself since the cutover of 2026-10-23 (was path-style S3)
+BASE_DIRECT = BASE
+# where the build READS the published catalog: the S3 origin, written first by every publisher until the freeze (path-style:
+# the dotted bucket name breaks tls on the virtual-hosted form)
+READ_ORIGIN = "https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/"
 SCHEMA = 1
 
 # default paint per geometry kind (MapLibre paint properties), overridden by a collection's styles/default.json ----
@@ -363,10 +367,11 @@ def local_rows(staging: Path, base: str = BASE, fetch=None) -> list[dict]:
   return rows
 
 
-# reads go to the S3 origin, not the CDN: storage.oceanmetrics.io caches the catalog's JSON for a day (max-age=86400), so
-# right after a publish it still serves the old versions.json and ledgers (2026-10-16). URLs written out keep `base`
+# reads go to the S3 origin, not the storage host: storage.oceanmetrics.io cached the catalog's JSON for a day
+# (max-age=86400), so right after a publish it still served the old versions.json and ledgers (2026-10-16); after the
+# cutover R2 trails an S3-only write by the mirror's 6 hours. URLs written out keep `base`
 def origin(url: str) -> str:
-  return BASE_DIRECT + url[len(BASE):] if url.startswith(BASE) else url
+  return READ_ORIGIN + url[len(BASE):] if url.startswith(BASE) else url
 
 
 def get_json(url: str, timeout: int = 60):
