@@ -17,7 +17,7 @@ Rules for anyone (human or agent) changing this repo. Each rule is guarded by a 
   `gazetteer:reference` too, builds no PMTiles, and its layers.json row is `kind: "derived"` with `display`, drawn by
   the `via` collection's PMTiles (the piece's `source_id` is the `via` place_id). Public: metadata, index rows, and
   derived values tables (no geometry). Unlisted copies of the Marine Regions data (`mr_*` parquet + PMTiles, the
-  `fao_high_seas` parquet) live in the R2 bucket `oceanmetrics-io-unlisted` under the same `gazetteer/<slug>/` layout, listed
+  `fao_high_seas` parquet) live in the R2 bucket `oceanmetrics-io-unlisted-enam` under the same `gazetteer/<slug>/` layout, listed
   only by its own `gazetteer/index/unlisted.json` and served by the Worker at `/unlisted/gazetteer/...` with a valid key only
   (no anonymous tier); nothing public links to them and the public `mr_*` rows stay `kind: "raster"`. Their contract is
   Ben's email to VLIZ of 2026-10-22 (one copy per release, unlisted, not offered for download, credit and DOI on every map,

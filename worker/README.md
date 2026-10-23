@@ -8,7 +8,8 @@ DuckDB-WASM and pmtiles-js, per-request metering and monthly byte caps. Design: 
 D8; client behaviour: `notes/om/plans_todo/2026-10-08_duckdb-wasm-key-spike.md`.
 
 **Status (2026-10-22): deployed to the workers.dev preview `https://om-gazetteer.ben-f07.workers.dev` on the Ocean Metrics
-Cloudflare account (buckets `oceanmetrics-io-public` and `oceanmetrics-io-unlisted`, KV `KEYS`, Analytics Engine
+Cloudflare account (buckets `oceanmetrics-io-public-enam` and `oceanmetrics-io-unlisted-enam`, US location ENAM since
+2026-10-23, KV `KEYS`, Analytics Engine
 `om_gazetteer`); the S3 → R2 mirror runs from the Mac mini with rclone; the production route (`storage.oceanmetrics.io`)
 waits on the DNS cutover.** Steps that need the account or DNS are marked **BEN-DOES**.
 
@@ -18,7 +19,7 @@ Which paths are served (`target()` in `src/paths.ts`):
 
 | Request path | Result |
 |---|---|
-| `/gazetteer/...`, `/indicators/...`, `/atlas/...`, `/obis-h3/...`, `/basemap/...`, `/marine-atlas/...`, `/issues/...` | served from `BUCKET` (`oceanmetrics-io-public`), gated by type (next table) |
+| `/gazetteer/...`, `/indicators/...`, `/atlas/...`, `/obis-h3/...`, `/basemap/...`, `/marine-atlas/...`, `/issues/...` | served from `BUCKET` (`oceanmetrics-io-public-enam`), gated by type (next table) |
 | `/index.html`, `/README.md` (and `/`, which reads `index.html`) | served, keyless; every other root object (`nc.parquet`, `indicators.pmtiles`) is a 404 |
 | a folder URL ending in `/` (`/marine-atlas/`, `/marine-atlas/cog/`) | serves `index.html` under it when that object exists, else 404 (the old Caddy's `/marine-atlas/` rewrite) |
 | `/atlas-restricted/...` (restricted atlas collections, not linked from `catalog.json`) | served from `BUCKET` like `/unlisted/`: every file (json included) needs a valid key, **no anonymous tier**, metric class `unlisted`; keyless is 403 `key_required` |
@@ -37,7 +38,7 @@ How a served public path is gated, by type, not by prefix (`classify()`):
 | key at or over its monthly byte cap | 429 JSON `{error:"monthly_cap_exceeded", key, cap_bytes, used_bytes}`, `Retry-After` to the start of next UTC month |
 | key at or over `soft_pct` (default 80 %) of its cap | served, with `X-OM-Usage: used=...; cap=...; pct=...; state=soft` |
 | un-ranged GET of a parquet over `FULLFILE_BYTES` (16 MiB), any prefix | 200 (not blocked), metric class `fullfile`, `X-OM-Warn: full-file-read ...` |
-| `/unlisted/gazetteer/<slug>/...` (any file) with a valid `?key=` | served from the `UNLISTED` bucket (`oceanmetrics-io-unlisted`, same `gazetteer/...` key layout) with the same key, Origin, cap, Range/HEAD/ETag/CORS and `Link` rules as the public archives; metric class `unlisted`, object path `unlisted/gazetteer/...` |
+| `/unlisted/gazetteer/<slug>/...` (any file) with a valid `?key=` | served from the `UNLISTED` bucket (`oceanmetrics-io-unlisted-enam`, same `gazetteer/...` key layout) with the same key, Origin, cap, Range/HEAD/ETag/CORS and `Link` rules as the public archives; metric class `unlisted`, object path `unlisted/gazetteer/...` |
 | same, no key | **no anonymous tier**: 403 JSON `key_required` (with CORS) |
 | same, wrong key or Origin | 403 `invalid_key` / `origin_not_allowed`, as above |
 | `/unlisted/gazetteer/index/unlisted.json` (anything under `unlisted/gazetteer/index/`) | keyless, like the public index; metric class `unlisted` |
@@ -98,12 +99,13 @@ where the default temp dir is read-only, run with `TMPDIR=<writable dir> npm tes
 1. **BEN-DOES** Create/choose the Cloudflare account; add `oceanmetrics.io` as a zone (import DNS records, then switch
    nameservers at the registrar). Diff the Caddyfile before cutover (plan section 9, Migration).
 2. **BEN-DOES** `npx wrangler login` (inside `worker/`).
-3. **BEN-DOES** R2 bucket: `npx wrangler r2 bucket create oceanmetrics-io-public` (R2 names cannot contain dots, hence
-   `-io-`). Then `rclone sync` the S3 bucket's `gazetteer/` prefix into it, keeping the `gazetteer/` key prefix. Set the
+3. **BEN-DOES** R2 bucket: `npx wrangler r2 bucket create oceanmetrics-io-public-enam --location enam` (R2 names cannot
+   contain dots, hence `-io-`; the US buckets `-enam` are the default since 2026-10-23, Ben; the first EEUR buckets
+   `oceanmetrics-io-public` and `oceanmetrics-io-unlisted` are no longer bound and are kept until Ben deletes them). Then `rclone sync` the S3 bucket's `gazetteer/` prefix into it, keeping the `gazetteer/` key prefix. Set the
    object `Content-Type` as you copy (`.parquet`, `.pmtiles`, `.json`); the Worker falls back to an extension guess. Upload
    `gazetteer/credits` (the licence/credits page the Link header points to). Do not add public access or CORS rules to the
    bucket: the Worker is the only reader.
-   Second bucket `oceanmetrics-io-unlisted` (created 2026-10-22, binding `UNLISTED`): the unlisted Marine Regions copies
+   Second bucket `oceanmetrics-io-unlisted-enam` (binding `UNLISTED`; the EEUR original was created 2026-10-22): the unlisted Marine Regions copies
    (`gazetteer/<slug>/places.parquet`, `places.pmtiles`, `provenance.json`, `README.md`, and `gazetteer/index/unlisted.json`),
    uploaded per release with rclone as in `catalog/staging/RUNBOOK_PUBLISH.md` "Unlisted copies" (parquet with
    `--header-upload 'Content-Type: application/vnd.apache.parquet'`). Same rule: no public access, the Worker is the only reader.

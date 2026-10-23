@@ -17,14 +17,17 @@ FULLFILE_BYTES = "16777216"   # un-ranged parquet GET over 16 MiB is flagged `fu
 AE_DATASET     = "om_gazetteer"
 # CF_ACCOUNT_ID = "..."       # rollup only; set CF_API_TOKEN with `wrangler secret put CF_API_TOKEN`
 
+# the US (ENAM) buckets are the default (Ben, 2026-10-23): oceanmetrics-io-public-enam was copied server-side from the
+# EEUR bucket oceanmetrics-io-public plus a delta from S3 (rclone check against S3: 818,890 matching, 0 differences);
+# the EEUR buckets oceanmetrics-io-public and oceanmetrics-io-unlisted are kept until Ben deletes them
 [[r2_buckets]]
 binding     = "BUCKET"
-bucket_name = "oceanmetrics-io-public"
+bucket_name = "oceanmetrics-io-public-enam"
 
 # unlisted copies (Marine Regions GeoParquet + PMTiles, VLIZ email 2026-10-22): /unlisted/gazetteer/... with a key only
 [[r2_buckets]]
 binding     = "UNLISTED"
-bucket_name = "oceanmetrics-io-unlisted"
+bucket_name = "oceanmetrics-io-unlisted-enam"
 
 [[kv_namespaces]]
 binding = "KEYS"

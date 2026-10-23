@@ -157,7 +157,7 @@ Refuses when the pulled ledger already has that version. Then rebuild index/ and
 
 The reference collections (`mr_*`, and `fao_high_seas` derived from `mr_high_seas`) are never uploaded by
 `publish_collections.sh`. Their full-resolution `places.parquet` and `places.pmtiles` go to the second R2 bucket
-`oceanmetrics-io-unlisted` instead, same key layout (`gazetteer/<slug>/places.parquet`, `places.pmtiles`, `provenance.json`,
+`oceanmetrics-io-unlisted-enam` instead, same key layout (`gazetteer/<slug>/places.parquet`, `places.pmtiles`, `provenance.json`,
 `README.md`), plus `gazetteer/index/unlisted.json` (slug, version, credit, the two hrefs relative to that file, rows). The
 contract is Ben's email to VLIZ of 2026-10-22 (notes `om/om_2026-10.md`, "VLIZ email sent"): one copy per release, unlisted,
 not offered for download, credit and DOI on every map, the public layers stay on VLIZ's raster tiles. Nothing in the public
@@ -170,13 +170,13 @@ Per release, on the build machine (the files never enter the repo):
 ST=/Volumes/msens_big/_big/oceanmetrics/unlisted_stage    # README.md + provenance.json + index/unlisted.json, outside the repo
 R=~/.config/oceanmetrics/rclone-r2.sh
 # provenance.json: the published one (its sha256 is the internal collection.json's `provenance` asset checksum)
-for s in $(ls ~/data/oceanmetrics/places-internal); do $R copyto r2:oceanmetrics-io-public/gazetteer/$s/provenance.json $ST/gazetteer/$s/provenance.json; done
+for s in $(ls ~/data/oceanmetrics/places-internal); do $R copyto r2:oceanmetrics-io-public-enam/gazetteer/$s/provenance.json $ST/gazetteer/$s/provenance.json; done
 python3 -I $ST/stage_unlisted.py $ST                       # READMEs + index/unlisted.json; asserts DuckDB rows == provenance record_count
-$R copy $ST/gazetteer r2:oceanmetrics-io-unlisted/gazetteer --s3-no-check-bucket
-$R copy ~/data/oceanmetrics/places-internal r2:oceanmetrics-io-unlisted/gazetteer --s3-no-check-bucket \
+$R copy $ST/gazetteer r2:oceanmetrics-io-unlisted-enam/gazetteer --s3-no-check-bucket
+$R copy ~/data/oceanmetrics/places-internal r2:oceanmetrics-io-unlisted-enam/gazetteer --s3-no-check-bucket \
   --include '*/places.parquet' --header-upload 'Content-Type: application/vnd.apache.parquet'
-$R copy ~/data/oceanmetrics/places-internal r2:oceanmetrics-io-unlisted/gazetteer --s3-no-check-bucket --include '*/places.pmtiles'
-$R check ~/data/oceanmetrics/places-internal r2:oceanmetrics-io-unlisted/gazetteer --one-way --include '*/places.parquet' --include '*/places.pmtiles'
+$R copy ~/data/oceanmetrics/places-internal r2:oceanmetrics-io-unlisted-enam/gazetteer --s3-no-check-bucket --include '*/places.pmtiles'
+$R check ~/data/oceanmetrics/places-internal r2:oceanmetrics-io-unlisted-enam/gazetteer --one-way --include '*/places.parquet' --include '*/places.pmtiles'
 ```
 
 rclone sets `.json` and `.md` content types from the extension but not `.parquet`, hence the `--header-upload`. Check:
