@@ -328,6 +328,27 @@ export function placeSpeciesCsv(placeId: string, list: readonly ObisSpecies[]): 
   return [head, ...rows].map((r) => r.map(csvCell).join(',')).join('\n') + '\n'
 }
 
+/** a file-name part: lower case, accents dropped, anything else a hyphen ("Delphinus delphis" -> "delphinus-delphis") */
+export const slugPart = (s: string) =>
+  s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+
+/**
+ * the species download of the filters in force: `list` is already what the table shows (EOV group and taxon applied, in the table's
+ * order before the text box and the sort), so the rows are exactly those; the name is `<place>_species[_<eov>][_<taxon>].csv`
+ * (the place as in the other downloads, the EOV key as is, the taxon slugged); `line` says what the file holds. the filters are
+ * the applied ones: a taxon the page could not resolve is passed as null. unfiltered, `csv` is `placeSpeciesCsv` unchanged
+ */
+export function speciesDownload(placeId: string, list: readonly ObisSpecies[], f: { eov?: string | null; taxon?: string | null; total?: number } = {}) {
+  const eov = f.eov || null, taxon = f.taxon?.trim() || null, total = f.total ?? list.length
+  const tag = taxon ? slugPart(taxon) || 'taxon' : ''
+  const name = `${placeId.replace(/[^\w.-]+/g, '_')}_species${eov ? `_${eov.replace(/[^\w.-]+/g, '_')}` : ''}${tag ? `_${tag}` : ''}.csv`
+  const n = list.length, sp = (k: number) => `${k.toLocaleString('en-US')} species`
+  const line = eov || taxon
+    ? `The CSV holds the ${sp(n)} of the ${total.toLocaleString('en-US')} left by the filters: ${[eov && `EOV group ${eovLabel(eov)}`, taxon && `taxon ${taxon}`].filter(Boolean).join(', ')}.`
+    : `The CSV holds all ${sp(n)} with records in the place.`
+  return { csv: placeSpeciesCsv(placeId, list), name, line }
+}
+
 /**
  * the row ranges of the row groups whose `key` statistics (strings) can hold `value`: a file sorted by place keeps a place
  * in one group or a few neighbours; a group without usable statistics always counts. adjacent ranges are one read

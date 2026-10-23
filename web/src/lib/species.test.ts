@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   bboxWkt, byGroup, cellAt, eovChips, filterEov, filterSpecies, filterTaxon, inLineage, pickWormsTaxon, speciesLineageUrl, taxonLabel, wormsNameUrl, groupIndexes, groupOf, groupsHolding, groupsHoldingText, inRings, nextSort, obisColls, obisLine, obisLinks, obisSpeciesSql, obisSummary, obisValuesSql, parseCellSpecies, placeCells,
-  placeExactUrl, placeSpecies, placeSpeciesCsv, placeSpeciesUrl, sdmCsv, sdmLine, sdmSpecies, sortSpecies, speciesCheck, speciesCountLine, speciesCounts,
-  DEFAULT_SPECIES_SORT, speciesLookupUrl, tilesOf, type CellGrid, type MetaLike, type ObisLookupRow, type ObisRow, type PlaceSpeciesRow,
+  placeExactUrl, placeSpecies, placeSpeciesCsv, placeSpeciesUrl, sdmCsv, sdmLine, sdmSpecies, sortSpecies, speciesCheck, speciesCountLine, speciesCounts, speciesDownload, slugPart,
+  DEFAULT_SPECIES_SORT, speciesLookupUrl, tilesOf, type CellGrid, type MetaLike, type ObisLookupRow, type ObisRow, type ObisSpecies, type PlaceSpeciesRow,
 } from './species'
 
 // ---- OBIS ----
@@ -471,5 +471,72 @@ describe('the row groups within a range', () => {
       { index: 1, rowStart: 10, rowEnd: 20 }, { index: 2, rowStart: 20, rowEnd: 30 }, { index: 3, rowStart: 30, rowEnd: 35 },
     ])
     expect(groupIndexes(meta, [])).toEqual([])
+  })
+})
+
+describe('the species download follows the filters', () => {
+  const sp = (nameKey: number, name: string, eov: string | null, aphiaIds: number[], n: number): ObisSpecies => ({
+    nameKey, aphiaId: aphiaIds[0], aphiaIds, name, eov, cls: eov ? null : 'Teleostei', redlist: null, n, yearMin: 1990, yearMax: 2024,
+    worms: `https://www.marinespecies.org/aphia.php?p=taxdetails&id=${aphiaIds[0]}`,
+  })
+  // lineage: the aphiaid, then its ancestors (self first); 100 is a taxon holding the first two
+  const full = [sp(1, 'Alpha one', 'fish', [11], 500), sp(2, 'Alpha two', 'fish', [12], 300), sp(3, 'Beta, three', 'seabirds', [13], 90), sp(4, 'Gamma four', null, [14], 7), sp(5, 'Delta five', 'fish', [15], 3)]
+  const L = new Map<number, number[]>([[11, [11, 100, 1]], [12, [12, 100, 1]], [13, [13, 200, 1]], [14, [14, 1]], [15, [15, 200, 1]]])
+  const csvOf = (list: ObisSpecies[]) => list.map((s) => s.name)
+  const rowsOf = (csv: string) => csv.trimEnd().split('\n').slice(1)
+
+  it('REGRESSION: with no filter the CSV is byte-identical to the whole list as it was written before the filters', () => {
+    const d = speciesDownload('NMS:CINMS', full, { eov: null, taxon: null, total: 5 })
+    expect(d.csv).toBe(placeSpeciesCsv('NMS:CINMS', full))
+    expect(d.csv).toBe(
+      'place_id,aphiaid,name_key,scientific_name,eov,class,redlist_code,records,year_min,year_max,worms_url\n' +
+      'NMS:CINMS,11,1,Alpha one,fish,,,500,1990,2024,https://www.marinespecies.org/aphia.php?p=taxdetails&id=11\n' +
+      'NMS:CINMS,12,2,Alpha two,fish,,,300,1990,2024,https://www.marinespecies.org/aphia.php?p=taxdetails&id=12\n' +
+      'NMS:CINMS,13,3,"Beta, three",seabirds,,,90,1990,2024,https://www.marinespecies.org/aphia.php?p=taxdetails&id=13\n' +
+      'NMS:CINMS,14,4,Gamma four,,Teleostei,,7,1990,2024,https://www.marinespecies.org/aphia.php?p=taxdetails&id=14\n' +
+      'NMS:CINMS,15,5,Delta five,fish,,,3,1990,2024,https://www.marinespecies.org/aphia.php?p=taxdetails&id=15\n')
+    expect(speciesDownload('NMS:CINMS', full).csv).toBe(d.csv)   // no filter state at all
+    expect(d.name).toBe('NMS_CINMS_species.csv')
+    expect(d.line).toBe('The CSV holds all 5 species with records in the place.')
+  })
+
+  it('EOV only: the rows are the chip\'s species, the name carries the key', () => {
+    const d = speciesDownload('NMS:CINMS', filterEov(full, 'fish'), { eov: 'fish', total: 5 })
+    expect(rowsOf(d.csv).map((r) => r.split(',')[3])).toEqual(['Alpha one', 'Alpha two', 'Delta five'])
+    expect(d.name).toBe('NMS_CINMS_species_fish.csv')
+    expect(d.line).toBe('The CSV holds the 3 species of the 5 left by the filters: EOV group fish.')
+  })
+
+  it('EOV with a camel-case key keeps the key in the name and the label in the line', () => {
+    const d = speciesDownload('places:x', filterEov(full, 'seabirds'), { eov: 'seabirds', total: 5 })
+    expect(d.name).toBe('places_x_species_seabirds.csv')
+    expect(speciesDownload('p', [], { eov: 'marineMammals', total: 5 }).name).toBe('p_species_marineMammals.csv')
+    expect(speciesDownload('p', [], { eov: 'marineMammals', total: 5 }).line).toBe('The CSV holds the 0 species of the 5 left by the filters: EOV group marine mammals.')
+  })
+
+  it('taxon only: the rows are the subtree\'s, the name carries the slugged taxon', () => {
+    const d = speciesDownload('NMS:CINMS', filterTaxon(full, L, 100), { taxon: 'Delphinus delphis', total: 5 })
+    expect(rowsOf(d.csv).map((r) => r.split(',')[3])).toEqual(['Alpha one', 'Alpha two'])
+    expect(d.name).toBe('NMS_CINMS_species_delphinus-delphis.csv')
+    expect(d.line).toBe('The CSV holds the 2 species of the 5 left by the filters: taxon Delphinus delphis.')
+  })
+
+  it('both: the stacked filters, EOV before taxon in the name and the line', () => {
+    expect(csvOf(filterTaxon(full, L, 200))).toEqual(['Beta, three', 'Delta five'])   // the taxon alone
+    const d = speciesDownload('NMS:CINMS', filterTaxon(filterEov(full, 'fish'), L, 200), { eov: 'fish', taxon: 'Cetacea', total: 5 })
+    expect(rowsOf(d.csv).map((r) => r.split(',')[3])).toEqual(['Delta five'])
+    expect(d.name).toBe('NMS_CINMS_species_fish_cetacea.csv')
+    expect(d.line).toBe('The CSV holds the 1 species of the 5 left by the filters: EOV group fish, taxon Cetacea.')
+  })
+
+  it('slugs a taxon to a safe file-name part, and never leaves the part empty', () => {
+    expect(slugPart('  Scombridae / Tunas (2) ')).toBe('scombridae-tunas-2')
+    expect(slugPart('Pleurobrachia pileus × x')).toBe('pleurobrachia-pileus-x')
+    expect(slugPart('Müller\'s café')).toBe('muller-s-cafe')
+    expect(speciesDownload('p', [], { taxon: '鯨' }).name).toBe('p_species_taxon.csv')
+  })
+
+  it('a blank taxon or an EOV of "" is no filter', () => {
+    expect(speciesDownload('p', full, { eov: '', taxon: '  ' }).name).toBe('p_species.csv')
   })
 })

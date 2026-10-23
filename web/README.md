@@ -117,7 +117,7 @@ per gazetteer id, the sections in this order, each a component that only draws, 
      has 2,266 aphiaids of 2,258 names), sums the records, spans first and last year, and ranks by records then name.
      The table shows the first 20 ("Show all N"), species with a WoRMS link, the group (the EOV group when the lookup has
      an `eov` column, else the OBIS class: the release's lookup has no `eov` or `redlist_code` column yet, so today it is the
-     class), records and first-last year; a CSV (`placeSpeciesCsv`); "Explore in OBIS" (the OBIS mapper) and the OBIS
+     class), records and first-last year; a CSV that follows the EOV chip and the taxon (below); "Explore in OBIS" (the OBIS mapper) and the OBIS
      checklist (JSON) for the place's box (`bboxWkt`, two boxes across +-180), which is a box, not the boundary.
      **The count line** "N species with records in the place (exact), M in the latest decade (the 2020s)" is the list's own
      count (`speciesCounts`: N names; M names whose last year is in or after the latest decade of the indicators), and it
@@ -149,6 +149,13 @@ per gazetteer id, the sections in this order, each a component that only draws, 
        and `?taxon=<name as typed>` (a name of 2 to 100 characters), next to `layer=` and `t=`; the chips and the box write them with a
        replace (no history entry per click), the page reads them on load, and `carryView` does not carry them to another place.
        The Reproduce SQL for the species adds `AND l.eov = '<group>'` and `AND list_contains(l.lineage, <id>)` for the filters on.
+     - *The CSV follows the filters* (`speciesDownload`, tested in `species.test.ts`): its rows are the rows the table shows with the EOV
+       group and the taxon applied (in the list's order; the text box and the sort do not change the file), written by `placeSpeciesCsv`, so
+       with no filter it is byte-identical to the whole list. The file is `<place>_species[_<eov>][_<taxon>].csv` (the place with `:` as `_`,
+       the EOV key as in the URL, the taxon's WoRMS name slugged: `NMS_CINMS_species_fish_scombridae.csv`), and a line under the table says
+       what it holds ("The CSV holds the 3 species of the 5 left by the filters: EOV group fish, taxon Scombridae."). A taxon counts once its
+       record and lineages are in: while they load the link is not drawn, and a taxon WoRMS cannot resolve is not applied (not in the
+       file, the name or the Reproduce SQL). The AquaMaps list keeps `aquamaps_species_<place>.csv`.
      - *Measured* (live, `node scripts/shoot.mjs`, CINMS, 2026-10-23, release v20261012 as amended): the species section reads 202 kB of
        `place_exact/coll=places/species.parquet` (one group), 1.8 MB of the species lookup (17 of 17 row groups: a place's 2,266
        aphiaids are spread over the whole aphiaid range, so the group pruning saves nothing there; columns `aphiaid, species,

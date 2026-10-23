@@ -6,7 +6,7 @@
   import { atlasHref } from './layers'
   import { placeObisUrl } from './obisLink'
   import {
-    DEFAULT_SPECIES_SORT, eovChips, eovLabel, filterEov, filterSpecies, filterTaxon, groupOf, nextSort, obisLine, obisLinks, obisSpeciesSql, obisValuesSql, placeSpeciesCsv,
+    DEFAULT_SPECIES_SORT, eovChips, eovLabel, filterEov, filterSpecies, filterTaxon, groupOf, nextSort, obisLine, obisLinks, obisSpeciesSql, obisValuesSql, speciesDownload,
     sdmCsv, sdmLine, sortSpecies, speciesCheck, speciesCountLine, speciesCounts, speciesLineageUrl, speciesLookupUrl, taxonLabel, wormsUrl,
   } from './species'
   import type { SpeciesSort, WormsTaxon } from './species'
@@ -79,7 +79,9 @@
   const links = $derived(bbox ? obisLinks(bbox) : null)
   const mapHref = $derived(placeObisUrl({ placeId, name, bbox }))
   const sql = $derived(obis.r ? obisValuesSql(obis.r.url, placeId) : '')
-  const spSql = $derived(obis.r && osp.r ? obisSpeciesSql(osp.r.url, speciesLookupUrl(obis.r.release), placeId, { eov, taxonId: tax.t?.id ?? null }) : '')
+  // the taxon counts once its record and its lineages are in; until then (or when it cannot be resolved) it is not applied
+  const appliedTax = $derived(tax.t && lin.r ? tax.t : null)
+  const spSql = $derived(obis.r && osp.r ? obisSpeciesSql(osp.r.url, speciesLookupUrl(obis.r.release), placeId, { eov, taxonId: appliedTax?.id ?? null }) : '')
   const counts = $derived(obis.r && osp.r ? speciesCounts(osp.r.list, obis.r.summary.latest?.decade ?? null) : null)
   const warn = $derived(obis.r && counts ? speciesCheck(counts, obis.r.summary) : null)
   // the filter and the sort act on the whole list; the first SHOWN of what is left are drawn until "Show all"
@@ -87,14 +89,15 @@
   const byEov = $derived(osp.r ? filterEov(osp.r.list, eov) : [])
   // a taxon waits for its record and its lineages (the list is not drawn unfiltered meanwhile); one that cannot be resolved is not applied, and says so
   const taxonPending = $derived(!!taxon && (tax.phase === 'resolving' || (tax.phase === 'ok' && lin.phase !== 'ok' && lin.phase !== 'error')))
-  const byTaxon = $derived(tax.t && lin.r ? filterTaxon(byEov, lin.r.lineages, tax.t.id) : byEov)
+  const byTaxon = $derived(appliedTax && lin.r ? filterTaxon(byEov, lin.r.lineages, appliedTax.id) : byEov)
   const matched = $derived(osp.r && !taxonPending ? sortSpecies(filterSpecies(byTaxon, query), sort) : [])
   const filtered = $derived(!!eov || (!!tax.t && !!lin.r) || !!query.trim())
   const obisShown = $derived(allObis ? matched : matched.slice(0, SHOWN))
   const arrow = (k: SpeciesSort['key']) => (sort.key === k ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '')
   const ariaSort = (k: SpeciesSort['key']) => (sort.key === k ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none')
-  const obisCsvHref = $derived(osp.r ? URL.createObjectURL(new Blob([placeSpeciesCsv(placeId, osp.r.list)], { type: 'text/csv' })) : '')
-  const obisCsvName = $derived(`obis_species_${placeId.replace(/[^\w.-]+/g, '_')}.csv`)
+  // the download follows the filters in force (EOV group and taxon; the text box and the sort do not change the file)
+  const dl = $derived(osp.r && !taxonPending ? speciesDownload(placeId, byTaxon, { eov, taxon: appliedTax?.name, total: osp.r.list.length }) : null)
+  const obisCsvHref = $derived(dl ? URL.createObjectURL(new Blob([dl.csv], { type: 'text/csv' })) : '')
   const kb = (b: number) => (b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.round(b / 1e3)} kB`)
   const csvHref = $derived(sdm.r ? URL.createObjectURL(new Blob([sdmCsv(placeId, sdm.r.species)], { type: 'text/csv' })) : '')
   const csvName = $derived(`aquamaps_species_${placeId.replace(/[^\w.-]+/g, '_')}.csv`)
@@ -197,10 +200,11 @@
       {/if}
       <div class="row">
         {#if matched.length > SHOWN}<button class="btn secondary small" type="button" aria-expanded={allObis} onclick={() => (allObis = !allObis)}>{allObis ? `Show the first ${SHOWN}` : `Show all ${int(matched.length)}`}</button>{/if}
-        <a class="btn secondary small" href={obisCsvHref} download={obisCsvName}>Species list (CSV)</a>
+        {#if dl}<a class="btn secondary small" href={obisCsvHref} download={dl.name}>Species list (CSV)</a>{/if}
         {#if links}<a class="btn secondary small" href={links.mapper} target="_blank" rel="noopener noreferrer">Explore in OBIS ↗</a>
           <a class="btn secondary small" href={links.checklist} target="_blank" rel="noopener noreferrer">OBIS checklist for the box (JSON) ↗</a>{/if}
       </div>
+      {#if dl}<p class="muted">{dl.line} Saved as {dl.name}; the Reproduce query below gives the same species.</p>{/if}
       <p class="muted">Ranked by records; a name that carries several AphiaIDs is one species, as in the counts above. The group is the EOV group of the release's species table (fish, hard corals, mangroves, marine mammals, seabirds, seagrasses, sea turtles), else the OBIS class;
         the chips count species names. A taxon is a WoRMS name looked up by its REST API; its species are those whose lineage (the AphiaID, then its ancestors) holds it.
         Read {kb(osp.r.rowBytes)} of the {obis.r.coll} species file ({osp.r.groupsRead} of {osp.r.groups} row {osp.r.groups === 1 ? 'group' : 'groups'}) and {kb(osp.r.lookupBytes)} of the species names ({osp.r.lookupGroupsRead} of {osp.r.lookupGroups} row groups){#if lin.r}, then {kb(lin.r.bytes)} of the lineage file ({lin.r.groupsRead} of {lin.r.groups}) for the taxon{/if}.
