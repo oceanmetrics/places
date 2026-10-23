@@ -4,8 +4,10 @@ name = "om-gazetteer"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
-# route once DNS for oceanmetrics.io lives in a Cloudflare zone (BEN-DOES)
-# routes = [{ pattern = "storage.oceanmetrics.io/*", zone_name = "oceanmetrics.io" }]
+# the production host: a Cloudflare custom domain (the proxied DNS record is created by the deploy); Ben moved the
+# zone to Cloudflare and said "route it" on 2026-10-23; rollback = remove this line and redeploy (the wildcard A to msens returns)
+routes = [{ pattern = "storage.oceanmetrics.io", custom_domain = true }]
+workers_dev = true   # the preview url https://om-gazetteer.ben-f07.workers.dev stays for the range-read workflow and smoke tests
 
 [triggers]
 crons = ["*/15 * * * *"]   # usage rollup stub
