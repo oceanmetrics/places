@@ -132,7 +132,9 @@ const HASH_NAME = /^[0-9a-f]{16,64}(_3857)?\.(tif|tiff|pmtiles)$/
 /** a release or schema version folder: `v20261012`, `v2` */
 const VERSION_DIR = /^v\d+$/
 
-/** may this object be served with `Cache-Control: public, max-age=31536000, immutable` and kept in the edge cache?
+/** MIRRORED in shell by is_immutable() in oceanmetrics/platform scripts/om-publish.sh (which refuses to overwrite such a key with
+ *  different bytes; its yes/no tables in scripts/om-publish.test.ts are this file's test/edge.test.ts): change both together.
+ *  may this object be served with `Cache-Control: public, max-age=31536000, immutable` and kept in the edge cache?
  *  Only public data files whose key names their content, from the catalogs' publish layouts (2026-10-23):
  *    obis-h3/v<digits>/**             a release folder (`obis-h3/v20261012/species_flat/res=3/p=<cell>.parquet`)
  *    marine-atlas/**\/<hash>.tif|pmtiles, <hash>_3857.tif   content-addressed (`cog/`, `native/`, `cog_3857/`, `v7/cog_3857/`)
