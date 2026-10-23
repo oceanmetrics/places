@@ -5,12 +5,17 @@
   import CopyButton from './CopyButton.svelte'
   import { atlasHref } from './layers'
   import { placeObisUrl } from './obisLink'
-  import { DEFAULT_SPECIES_SORT, eovLabel, filterSpecies, groupOf, nextSort, obisLine, obisLinks, obisSpeciesSql, obisValuesSql, placeSpeciesCsv, sdmCsv, sdmLine, sortSpecies, speciesCheck, speciesCountLine, speciesCounts, speciesLookupUrl } from './species'
-  import type { SpeciesSort } from './species'
-  import type { ObisResult, ObisSpeciesResult, SdmResult } from './speciesRead'
+  import {
+    DEFAULT_SPECIES_SORT, eovChips, eovLabel, filterEov, filterSpecies, filterTaxon, groupOf, nextSort, obisLine, obisLinks, obisSpeciesSql, obisValuesSql, placeSpeciesCsv,
+    sdmCsv, sdmLine, sortSpecies, speciesCheck, speciesCountLine, speciesCounts, speciesLineageUrl, speciesLookupUrl, taxonLabel, wormsUrl,
+  } from './species'
+  import type { SpeciesSort, WormsTaxon } from './species'
+  import type { LineageRead, ObisResult, ObisSpeciesResult, SdmResult } from './speciesRead'
 
-  let { placeId, name, geometry, bbox, colls }: {
+  // `eov` and `taxon` are the query string's (grammar.ts), `onfilter` writes them back: the URL is the state
+  let { placeId, name, geometry, bbox, colls, eov = null, taxon = null, onfilter = () => {} }: {
     placeId: string; name: string; geometry: { type: string; coordinates: unknown } | null; bbox: number[] | null; colls: string[]
+    eov?: string | null; taxon?: string | null; onfilter?: (v: { eov?: string | null; taxon?: string | null }) => void
   } = $props()
 
   let obis = $state<{ phase: 'loading' | 'ok' | 'none' | 'error'; r: ObisResult | null; msg: string }>({ phase: 'loading', r: null, msg: '' })
@@ -21,6 +26,11 @@
   let query = $state('')
   let sort = $state<SpeciesSort>(DEFAULT_SPECIES_SORT)
   const SHOWN = 20
+
+  // the taxon box: the typed name -> WoRMS's record (REST, by name) -> the lineage file (read once, on the first taxon)
+  let taxonText = $state('')
+  let tax = $state<{ phase: 'idle' | 'resolving' | 'ok' | 'none' | 'error'; t: WormsTaxon | null; msg: string }>({ phase: 'idle', t: null, msg: '' })
+  let lin = $state<{ phase: 'idle' | 'loading' | 'ok' | 'error'; r: LineageRead | null; key: string; msg: string }>({ phase: 'idle', r: null, key: '', msg: '' })
 
   $effect(() => {
     const id = placeId, cs = colls, g = geometry
@@ -39,14 +49,47 @@
     })
   })
 
+  // the box shows the URL's taxon (a link, back/forward) and resolves it
+  $effect(() => {
+    const x = taxon
+    taxonText = x ?? ''
+    if (!x) { tax = { phase: 'idle', t: null, msg: '' }; return }
+    tax = { phase: 'resolving', t: null, msg: '' }
+    void import('./speciesRead').then((m) => m.readWormsTaxon(x)).then(
+      (t) => { if (taxon === x) tax = t ? { phase: 'ok', t, msg: '' } : { phase: 'none', t: null, msg: '' } },
+      (e) => { if (taxon === x) tax = { phase: 'error', t: null, msg: String(e?.message ?? e) } },
+    )
+  })
+
+  // the lineage file is read when a taxon is resolved and the place's list is in, for the place's aphiaids
+  $effect(() => {
+    const list = osp.r?.list, release = obis.r?.release
+    if (tax.phase !== 'ok' || !list || !release) return
+    const url = speciesLineageUrl(release), key = `${url}|${placeId}`
+    if (lin.key === key && lin.phase !== 'error') return
+    lin = { phase: 'loading', r: null, key, msg: '' }
+    void import('./speciesRead').then((m) => m.readLineage(url, list.flatMap((s) => s.aphiaIds))).then(
+      (r) => { if (lin.key === key) lin = { phase: 'ok', r, key, msg: '' } },
+      (e) => { if (lin.key === key) lin = { phase: 'error', r: null, key, msg: String(e?.message ?? e) } },
+    )
+  })
+
+  const submitTaxon = (e: Event) => { e.preventDefault(); onfilter({ taxon: taxonText }) }
+
   const links = $derived(bbox ? obisLinks(bbox) : null)
   const mapHref = $derived(placeObisUrl({ placeId, name, bbox }))
   const sql = $derived(obis.r ? obisValuesSql(obis.r.url, placeId) : '')
-  const spSql = $derived(obis.r && osp.r ? obisSpeciesSql(osp.r.url, speciesLookupUrl(obis.r.release), placeId) : '')
+  const spSql = $derived(obis.r && osp.r ? obisSpeciesSql(osp.r.url, speciesLookupUrl(obis.r.release), placeId, { eov, taxonId: tax.t?.id ?? null }) : '')
   const counts = $derived(obis.r && osp.r ? speciesCounts(osp.r.list, obis.r.summary.latest?.decade ?? null) : null)
   const warn = $derived(obis.r && counts ? speciesCheck(counts, obis.r.summary) : null)
   // the filter and the sort act on the whole list; the first SHOWN of what is left are drawn until "Show all"
-  const matched = $derived(osp.r ? sortSpecies(filterSpecies(osp.r.list, query), sort) : [])
+  const chips = $derived(osp.r ? eovChips(osp.r.list, eov) : [])
+  const byEov = $derived(osp.r ? filterEov(osp.r.list, eov) : [])
+  // a taxon waits for its record and its lineages (the list is not drawn unfiltered meanwhile); one that cannot be resolved is not applied, and says so
+  const taxonPending = $derived(!!taxon && (tax.phase === 'resolving' || (tax.phase === 'ok' && lin.phase !== 'ok' && lin.phase !== 'error')))
+  const byTaxon = $derived(tax.t && lin.r ? filterTaxon(byEov, lin.r.lineages, tax.t.id) : byEov)
+  const matched = $derived(osp.r && !taxonPending ? sortSpecies(filterSpecies(byTaxon, query), sort) : [])
+  const filtered = $derived(!!eov || (!!tax.t && !!lin.r) || !!query.trim())
   const obisShown = $derived(allObis ? matched : matched.slice(0, SHOWN))
   const arrow = (k: SpeciesSort['key']) => (sort.key === k ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '')
   const ariaSort = (k: SpeciesSort['key']) => (sort.key === k ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none')
@@ -97,9 +140,36 @@
     {:else}
       <p>{speciesCountLine(counts)}</p>
       {#if warn}<p class="notice" role="status">{warn}</p>{/if}
+      {#if chips.length > 1 || eov}
+        <div class="chips" role="group" aria-label="EOV group">
+          {#each chips as c (c.key)}
+            <button class="eovchip" type="button" aria-pressed={c.key === 'all' ? !eov : eov === c.key} onclick={() => onfilter({ eov: c.key === 'all' ? null : c.key })}>{c.label} <span class="cn">{int(c.n)}</span></button>
+          {/each}
+        </div>
+      {/if}
       {#if osp.r.list.length > 1}
+        <form class="taxon" onsubmit={submitTaxon}>
+          <label>Taxon <input type="search" bind:value={taxonText} placeholder="a WoRMS name: Cetacea, Scombridae" aria-controls="obis-species" autocomplete="off" spellcheck="false" /></label>
+          <button class="btn secondary small" type="submit" disabled={!taxonText.trim()}>Narrow</button>
+          {#if taxon}<button class="btn secondary small" type="button" onclick={() => onfilter({ taxon: null })}>Clear taxon</button>{/if}
+        </form>
+        {#if tax.phase === 'resolving'}
+          <p class="muted loading" aria-live="polite">Looking up “{taxon}” in WoRMS…</p>
+        {:else if tax.phase === 'none'}
+          <p class="notice" role="status">WoRMS has no name “{taxon}”: type a full name (a species, genus, family, order or class), not applied.</p>
+        {:else if tax.phase === 'error'}
+          <p class="notice" role="status">The taxon could not be looked up in WoRMS ({tax.msg}); not applied.</p>
+        {:else if tax.phase === 'ok' && tax.t}
+          {#if lin.phase === 'loading'}
+            <p class="muted loading" aria-live="polite">Reading the lineages of the place's species…</p>
+          {:else if lin.phase === 'error'}
+            <p class="notice" role="status">The release's lineage file could not be read ({lin.msg}); the taxon is not applied.</p>
+          {:else if lin.phase === 'ok'}
+            <p class="muted" role="status">Taxon <a href={wormsUrl(tax.t.id)} target="_blank" rel="noopener noreferrer">{taxonLabel(tax.t)}</a>: {int(byTaxon.length)} of {int(byEov.length)} species{eov ? ` of ${eovLabel(eov)}` : ''}.</p>
+          {/if}
+        {/if}
         <p class="filter"><label>Filter <input type="search" bind:value={query} placeholder="name, group or IUCN code" aria-controls="obis-species" /></label>
-          {#if query.trim()}<span class="muted" role="status">{int(matched.length)} of {int(osp.r.list.length)}</span>{/if}</p>
+          {#if filtered}<span class="muted" role="status">{int(matched.length)} of {int(osp.r.list.length)}</span>{/if}</p>
       {/if}
       {#if obisShown.length}
         <div class="scroll">
@@ -120,8 +190,10 @@
             </tbody>
           </table>
         </div>
-      {:else if query.trim()}
-        <p class="muted">No species match “{query.trim()}”.</p>
+      {:else if taxonPending}
+        <p class="muted loading" aria-live="polite">Narrowing the list to “{taxon}”…</p>
+      {:else if filtered}
+        <p class="muted">No species match {query.trim() ? `“${query.trim()}” with` : ''} the filters above.</p>
       {/if}
       <div class="row">
         {#if matched.length > SHOWN}<button class="btn secondary small" type="button" aria-expanded={allObis} onclick={() => (allObis = !allObis)}>{allObis ? `Show the first ${SHOWN}` : `Show all ${int(matched.length)}`}</button>{/if}
@@ -129,8 +201,9 @@
         {#if links}<a class="btn secondary small" href={links.mapper} target="_blank" rel="noopener noreferrer">Explore in OBIS ↗</a>
           <a class="btn secondary small" href={links.checklist} target="_blank" rel="noopener noreferrer">OBIS checklist for the box (JSON) ↗</a>{/if}
       </div>
-      <p class="muted">Ranked by records; a name that carries several AphiaIDs is one species, as in the counts above. The group is the OBIS class (the release's species table has no EOV group or red list code yet).
-        Read {kb(osp.r.rowBytes)} of the {obis.r.coll} species file ({osp.r.groupsRead} of {osp.r.groups} row {osp.r.groups === 1 ? 'group' : 'groups'}) and {kb(osp.r.lookupBytes)} of the species names.
+      <p class="muted">Ranked by records; a name that carries several AphiaIDs is one species, as in the counts above. The group is the EOV group of the release's species table (fish, hard corals, mangroves, marine mammals, seabirds, seagrasses, sea turtles), else the OBIS class;
+        the chips count species names. A taxon is a WoRMS name looked up by its REST API; its species are those whose lineage (the AphiaID, then its ancestors) holds it.
+        Read {kb(osp.r.rowBytes)} of the {obis.r.coll} species file ({osp.r.groupsRead} of {osp.r.groups} row {osp.r.groups === 1 ? 'group' : 'groups'}) and {kb(osp.r.lookupBytes)} of the species names ({osp.r.lookupGroupsRead} of {osp.r.lookupGroups} row groups){#if lin.r}, then {kb(lin.r.bytes)} of the lineage file ({lin.r.groupsRead} of {lin.r.groups}) for the taxon{/if}.
         The OBIS mapper and checklist are for the place's box, not its boundary.</p>
     {/if}
     <details class="repro">
@@ -194,6 +267,13 @@
   .sp { width: 100%; }
   .sp .n { white-space: nowrap; }
   .osp .grp { display: block; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+  .eovchip { font: inherit; font-size: 13px; padding: 3px 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: transparent; color: var(--text); cursor: pointer; }
+  .eovchip[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .eovchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .eovchip .cn { opacity: .75; font-variant-numeric: tabular-nums; }
+  .taxon { margin: 4px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .taxon label { display: flex; gap: 8px; align-items: center; flex: 1 1 260px; max-width: 420px; }
   .filter { margin: 4px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .filter label { display: flex; gap: 8px; align-items: center; flex: 1 1 260px; max-width: 420px; }
   .sortb { all: unset; cursor: pointer; font-weight: inherit; color: var(--link); }

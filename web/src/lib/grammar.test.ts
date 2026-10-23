@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSearch, carryView, parseLayerParam, parseLayers, parsePeriod, parseView, serializeLayers } from './grammar'
+import { buildSearch, carryView, EOV_KEYS, parseEov, parseTaxon, parseLayerParam, parseLayers, parsePeriod, parseView, serializeLayers } from './grammar'
 
 describe('layers= grammar', () => {
   it('parses slug-only entries in order', () => {
@@ -78,12 +78,14 @@ describe('view in the query string', () => {
       proj: 'globe',
       layer: null,
       t: null,
+      eov: null,
+      taxon: null,
     })
-    expect(parseView('')).toEqual({ layers: null, place: null, proj: 'globe', layer: null, t: null })
+    expect(parseView('')).toEqual({ layers: null, place: null, proj: 'globe', layer: null, t: null, eov: null, taxon: null })
   })
 
   it('writes layers and place, round-tripping through parseView', () => {
-    const v = { layers: [{ slug: 'a', colour: '#ff0000', opacity: 0.5, width: 2 }, { slug: 'b', colour: null, opacity: null, width: null }], place: 'AOA:N1', proj: 'globe' as const, layer: null, t: null }
+    const v = { layers: [{ slug: 'a', colour: '#ff0000', opacity: 0.5, width: 2 }, { slug: 'b', colour: null, opacity: null, width: null }], place: 'AOA:N1', proj: 'globe' as const, layer: null, t: null, eov: null, taxon: null }
     const s = buildSearch(v)
     expect(s).toBe('?layers=a:ff0000:0.5:2,b&place=AOA:N1')
     expect(parseView(s)).toEqual(v)
@@ -134,5 +136,46 @@ describe('view in the query string', () => {
 
   it('carries the layer and its period to another page, as it does proj', () => {
     expect(carryView('/p/MRGID:8439', '?layer=grid:jplMURSST41mday:sst&t=2024-07')).toBe('/p/MRGID:8439?layer=grid:jplMURSST41mday:sst&t=2024-07')
+  })
+})
+
+describe('eov= and taxon= (the Species section\'s filters)', () => {
+  it('reads the seven groups, and nothing else (absent, "all", an unknown key, the wrong case)', () => {
+    for (const k of EOV_KEYS) expect(parseEov(k)).toBe(k)
+    expect(EOV_KEYS.length).toBe(7)
+    expect([parseEov(null), parseEov(''), parseEov('all'), parseEov('macroalgae'), parseEov('Fish'), parseEov(' fish ')]).toEqual([null, null, null, null, null, 'fish'])
+  })
+
+  it('reads a taxon as the typed name, single-spaced, two to 100 characters', () => {
+    expect([parseTaxon('Cetacea'), parseTaxon('  Thunnus   albacares '), parseTaxon('x'), parseTaxon(''), parseTaxon(null), parseTaxon('a'.repeat(101))]).toEqual(['Cetacea', 'Thunnus albacares', null, null, null, null])
+  })
+
+  it('parses them in the view, null when absent or invalid', () => {
+    expect(parseView('?eov=seabirds&taxon=Aves')).toMatchObject({ eov: 'seabirds', taxon: 'Aves' })
+    expect(parseView('?eov=bogus')).toMatchObject({ eov: null, taxon: null })
+    expect(parseView('')).toMatchObject({ eov: null, taxon: null })
+  })
+
+  it('writes them and removes them, keeping every other parameter', () => {
+    const q = buildSearch({ eov: 'fish', taxon: 'Scombridae' }, '?layer=grid:jplMURSST41mday:sst&t=2024-07&base=x')
+    expect(q).toBe('?layer=grid:jplMURSST41mday:sst&t=2024-07&base=x&eov=fish&taxon=Scombridae')
+    expect(buildSearch({ eov: null }, q)).toBe('?layer=grid:jplMURSST41mday:sst&t=2024-07&base=x&taxon=Scombridae')
+    expect(buildSearch({ taxon: null, eov: null }, q)).toBe('?layer=grid:jplMURSST41mday:sst&t=2024-07&base=x')
+    expect(buildSearch({ eov: 'bogus', taxon: ' ' }, '?eov=fish&taxon=Aves')).toBe('')
+  })
+
+  it('leaves them alone when the other parameters change', () => {
+    expect(buildSearch({ layer: 'grid:a:b', t: '2024' }, '?eov=fish&taxon=Aves')).toBe('?eov=fish&taxon=Aves&layer=grid:a:b&t=2024')
+  })
+
+  it('round-trips parse(build(x)) for every group and for names with spaces, quotes and accents', () => {
+    for (const eov of EOV_KEYS) expect(parseView(buildSearch({ eov }, '')).eov).toBe(eov)
+    for (const taxon of ['Cetacea', 'Thunnus albacares', "Delphinus d'orbigny", 'Müller & Co', 'Aves/Reptilia?', 'a=b&c=d', 'Ünïcode núm']) {
+      expect(parseView(buildSearch({ taxon, eov: 'fish' }, '?proj=mercator'))).toMatchObject({ taxon, eov: 'fish', proj: 'mercator' })
+    }
+  })
+
+  it('does not carry them from place to place (they belong to one place\'s list)', () => {
+    expect(carryView('/p/NMS:FGBNMS', '?eov=fish&taxon=Aves&proj=mercator')).toBe('/p/NMS:FGBNMS?proj=mercator')
   })
 })

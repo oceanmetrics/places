@@ -107,9 +107,13 @@ per gazetteer id, the sections in this order, each a component that only draws, 
      a file under 1 MB is fetched once whole. Measured 2026-10-23 (release v20261012): the sanctuaries' file
      (`coll=places`, 202 kB) is one row group, so the whole file, 202 kB a page (the same as no pruning); `coll=mr_eez`
      (4.97 MB, 6 row groups of 122,880 rows) is 0.94 MB for a place in one group and 1.83 MB for one that spans two, against
-     4.97 MB whole; `coll=fao_high_seas` 510 kB (one group). The names come from the release's `species/species.parquet`
-     (one row per `aphiaid`; columns `aphiaid, species, class` read, 1.68 MB for a page, once per page load: two row groups,
-     so no pruning is possible). `placeSpecies` merges the rows of one `name_key` (richness counts names, not aphiaids: CINMS
+     4.97 MB whole; `coll=fao_high_seas` 510 kB (one group). The names, ranks and EOV groups come from the release's `species/species.parquet`
+     (one row per `aphiaid`, sorted by `aphiaid`, 17 row groups of 10,240 rows, 4.50 MB since obisindicators 0.12 amended
+     v20261012 on 2026-10-23; `lineage`, the taxon names above species and `records` are in it too and are not read here). `readObisLookup` reads
+     the columns `aphiaid, species, class, eov` (+ `redlist_code` when it has one; ~1.7 MB of the 4.50 MB, the column
+     chunks are separate ranges) and only the row groups whose `aphiaid` min/max can hold one of the place's aphiaids
+     (`groupsHolding`, `groupIndexes`); a group read once is kept for the page load. A place's aphiaids are spread over the
+     whole range, so a large place still touches most groups (measured below). `placeSpecies` merges the rows of one `name_key` (richness counts names, not aphiaids: CINMS
      has 2,266 aphiaids of 2,258 names), sums the records, spans first and last year, and ranks by records then name.
      The table shows the first 20 ("Show all N"), species with a WoRMS link, the group (the EOV group when the lookup has
      an `eov` column, else the OBIS class: the release's lookup has no `eov` or `redlist_code` column yet, so today it is the
@@ -122,6 +126,36 @@ per gazetteer id, the sections in this order, each a component that only draws, 
      of the four collections on 2026-10-23, checked with DuckDB, and is asserted on a synthetic fixture in
      `species.test.ts` and `speciesRead.test.ts` (a tiny species.parquet written in the test with hyparquet-writer).
      CINMS: 2,258 species, 668 in the 2020s; FGBNMS: 469, 160 (both equal `sp`).
+     **The EOV chips and the taxon box** (since 2026-10-23, obis-h3 v20261012 amended by obisindicators 0.12):
+     - *EOV chips* (`eovChips`, `filterEov`): above the table, "all" and the EOV groups that have species in the place (the
+       release's `eov` column: fish, hardCorals, mangroves, marineMammals, seabirds, seagrasses, seaTurtles, or NULL; most species first), each
+       with the place's count of species names (a name takes the `eov` of its aphiaid with the most records, else of the next that
+       has one). One chip at a time (`aria-pressed`); a chosen group the place lacks stays on the bar with 0, so a link never hides
+       the filter it carries. The counts equal the `sp` of that EOV's row of `indicators.parquet`, as the "By EOV group" line
+       above says them: checked on 2026-10-23 for all 317 places of `places`, `mr_eez` and `fao_high_seas` (0 differ); CINMS fish 338,
+       seabirds 94, marine mammals 23, hard corals 10, seagrasses 1, sea turtles 1. The group column of the table is the EOV
+       group when there is one, else the OBIS class.
+     - *Taxon box* (`filterTaxon`, `pickWormsTaxon`; `readLineage`, `readWormsTaxon` in the lazy chunk): the typed text is looked up
+       in WoRMS (REST `AphiaRecordsByName/<name>?like=false`, CORS-open, once per text; a full name of any rank, a synonym stands
+       for its accepted name) and narrows the list to the species whose `lineage` holds that AphiaID. The release's `lineage` is the
+       AphiaID itself, then its ancestors up to the root (self first), so the subtree test is "the lineage contains the id" (the
+       atlas's `list_contains(lineage, id)`; it is not a prefix of the array). A name matches through any of its aphiaids.
+       The lineages come from `species/lineage.parquet` (`aphiaid, name_key, lineage`, sorted by `aphiaid`, 10,240-row groups,
+       1.68 MB), read only on the first taxon and only for the place's aphiaids (columns `aphiaid, lineage`, the row groups that
+       hold them), never from the species lookup; with no taxon the file is not requested. While the record or the lineages load,
+       the list says so and is not drawn unfiltered; a name WoRMS does not know, a WoRMS error or an unreadable lineage file is
+       said and the taxon is not applied. The text box, the sort and "Show all" are unchanged; the three filters stack.
+     - *In the URL* (`src/lib/grammar.ts`, round-trip tested in `grammar.test.ts`): `?eov=<group>` (one of the seven; absent = all)
+       and `?taxon=<name as typed>` (a name of 2 to 100 characters), next to `layer=` and `t=`; the chips and the box write them with a
+       replace (no history entry per click), the page reads them on load, and `carryView` does not carry them to another place.
+       The Reproduce SQL for the species adds `AND l.eov = '<group>'` and `AND list_contains(l.lineage, <id>)` for the filters on.
+     - *Measured* (live, `node scripts/shoot.mjs`, CINMS, 2026-10-23, release v20261012 as amended): the species section reads 202 kB of
+       `place_exact/coll=places/species.parquet` (one group), 1.8 MB of the species lookup (17 of 17 row groups: a place's 2,266
+       aphiaids are spread over the whole aphiaid range, so the group pruning saves nothing there; columns `aphiaid, species,
+       class, eov` of the 4.50 MB file), and, only after the first taxon, 1.3 MB of `lineage.parquet` (17 of 17 groups, columns
+       `aphiaid, lineage` of the 1.68 MB file). "Cetacea" under the marine mammals chip leaves 16 of 23 (16 Cetacea species of the
+       place). The entry JS went 165.9 -> 169.7 kB gzip of the 172 budget. A machine whose resolver still returns the old
+       `storage.oceanmetrics.io` record shoots with `--resolve storage.oceanmetrics.io=<A record of 1.1.1.1>`.
    - *Species on the map* (since 2026-10-23, `src/lib/obisLink.ts` `placeObisUrl`): under the OBIS heading, "Species on the map
      (Ocean Metrics Atlas, OBIS H3 layer)" opens `https://oceanmetrics.io/atlas/?c=obis_h3&i=all&dim.indicator=es&dim.period=all&res=auto&map=<lon,lat,zoom>&collection=<OBIS_COLLECTION_HREF>#pl=<p. token>`
      with the place selected and the camera on its box (zoom `log2(600/span)`, clamped 1..10). The rule is the atlas's own

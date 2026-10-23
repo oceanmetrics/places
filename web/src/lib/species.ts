@@ -14,6 +14,12 @@
 //   asks; the tiles are not H3, so the place's H3 membership is not a step here); the tiles' row groups are sorted by cell,
 //   so only the groups whose cell range holds one of the place's cells are read. a species is listed when it is suitable
 //   (suitability 1 to 100) in at least one of them.
+//   the list takes two filters beyond the text box: the EOV group (the release's lookup `eov`: seven keys or null; chips with
+//   the place's counts) and a taxon (a typed WoRMS name -> its AphiaID by the WoRMS REST API -> the species whose
+//   `lineage` holds it; the release's `species/lineage.parquet` is read lazily on the first taxon, never the lookup).
+//   `lineage` is the aphiaid itself, then its ancestors up to the root (self first), so a taxon's subtree is every row
+//   whose lineage CONTAINS the id (the atlas's `list_contains(lineage, id)`), not a prefix of it. both ride in the
+//   query string (`eov=`, `taxon=`, grammar.ts).
 // the reading is speciesRead.ts (hyparquet, a lazy chunk).
 import { store } from './storage'
 
@@ -112,6 +118,9 @@ export const speciesLookupUrl = (release: Pick<ObisRelease, 'base'>) => `${relea
 /** a row of `place_exact/coll=<coll>/species.parquet`: one place x aphiaid */
 export interface PlaceSpeciesRow { place_id: string; aphiaid: number | bigint; name_key: number | bigint | null; n: number | bigint | null; year_min: number | null; year_max: number | null }
 
+/** the release's lineage file (`species/lineage.parquet`: aphiaid, name_key, lineage; sorted by aphiaid, 10,240-row groups) */
+export const speciesLineageUrl = (release: Pick<ObisRelease, 'base'>) => `${release.base.replace(/\/?$/, '/')}species/lineage.parquet`
+
 /** the lookup columns the list reads; the EOV group and the red list code only when the lookup has them */
 export interface ObisLookupRow { aphiaid: number | bigint; species?: string | null; scientific_name?: string | null; class?: string | null; eov?: string | null; redlist_code?: string | null }
 
@@ -120,8 +129,10 @@ export interface ObisSpecies {
   nameKey: number
   /** the aphiaid with the most records among those of the name (the link to WoRMS) */
   aphiaId: number
+  /** every aphiaid of the name that has records in the place, most records first (the taxon filter looks up all of them) */
+  aphiaIds: number[]
   name: string
-  /** the EOV group when the lookup gives it, else null */
+  /** the EOV group when the lookup gives it (that of the aphiaid with the most records, else of the next that has one), else null */
   eov: string | null
   /** the OBIS class of the lookup, the group the table shows when there is no EOV */
   cls: string | null
@@ -141,14 +152,15 @@ export const wormsUrl = (aphiaId: number) => `https://www.marinespecies.org/aphi
  */
 export function placeSpecies(rows: readonly PlaceSpeciesRow[], placeId: string, lookup: readonly ObisLookupRow[]): ObisSpecies[] {
   const info = new Map(lookup.map((l) => [Number(l.aphiaid), l]))
-  const by = new Map<number, { key: number; best: number; bestN: number; n: number; lo: number | null; hi: number | null }>()
+  const by = new Map<number, { key: number; best: number; bestN: number; n: number; lo: number | null; hi: number | null; ids: Map<number, number> }>()
   for (const r of rows) {
     if (r.place_id !== placeId) continue
     const id = Number(r.aphiaid), n = num(r.n) ?? 0
     // a row without a name_key stands for its own aphiaid (no other row can carry the same name)
     const key = r.name_key == null ? -id : Number(r.name_key)
-    const a = by.get(key) ?? by.set(key, { key, best: id, bestN: -1, n: 0, lo: null, hi: null }).get(key)!
+    const a = by.get(key) ?? by.set(key, { key, best: id, bestN: -1, n: 0, lo: null, hi: null, ids: new Map() }).get(key)!
     a.n += n
+    a.ids.set(id, (a.ids.get(id) ?? 0) + n)
     if (n > a.bestN) { a.best = id; a.bestN = n }
     const lo = num(r.year_min), hi = num(r.year_max)
     if (lo != null) a.lo = a.lo == null ? lo : Math.min(a.lo, lo)
@@ -156,8 +168,10 @@ export function placeSpecies(rows: readonly PlaceSpeciesRow[], placeId: string, 
   }
   return [...by.values()].map((a) => {
     const l = info.get(a.best)
+    const ids = [...a.ids.entries()].sort((x, y) => y[1] - x[1] || x[0] - y[0]).map(([id]) => id)
+    const eov = ids.map((id) => info.get(id)?.eov).find((e) => !!e) ?? null
     return {
-      nameKey: a.key, aphiaId: a.best, name: l?.scientific_name ?? l?.species ?? `AphiaID ${a.best}`, eov: l?.eov ?? null, cls: l?.class ?? null,
+      nameKey: a.key, aphiaId: a.best, aphiaIds: ids, name: l?.scientific_name ?? l?.species ?? `AphiaID ${a.best}`, eov, cls: l?.class ?? null,
       redlist: l?.redlist_code ?? null, n: a.n, yearMin: a.lo, yearMax: a.hi, worms: wormsUrl(a.best),
     }
   }).sort((x, y) => y.n - x.n || x.name.localeCompare(y.name) || x.aphiaId - y.aphiaId)
@@ -229,16 +243,83 @@ export function nextSort(sort: SpeciesSort, key: SpeciesSort['key']): SpeciesSor
   return { key, dir: key === 'name' || key === 'group' ? 'asc' : 'desc' }
 }
 
+// ---- the EOV chips and the taxon filter ----
+
+export { EOV_KEYS, parseEov, parseTaxon } from './grammar'
+import { EOV_KEYS } from './grammar'
+
+export interface EovChip { key: string; label: string; n: number }
+
+/**
+ * the chips: "all" first, then the EOV groups that have species in the place, most species first (ties in `EOV_KEYS` order).
+ * `selected` stays on the bar with its count even when the place has none, so a link never hides the filter it carries.
+ * `n` counts names (the list's own rows), so a chip's number is the `sp` of that EOV's row of the indicators
+ */
+export function eovChips(list: readonly Pick<ObisSpecies, 'eov'>[], selected: string | null = null): EovChip[] {
+  const by = new Map<string, number>()
+  for (const s of list) if (s.eov) by.set(s.eov, (by.get(s.eov) ?? 0) + 1)
+  const order = (k: string) => { const i = (EOV_KEYS as readonly string[]).indexOf(k); return i < 0 ? EOV_KEYS.length : i }
+  const keys = [...new Set([...by.keys(), ...(selected ? [selected] : [])])]
+    .sort((a, b) => (by.get(b) ?? 0) - (by.get(a) ?? 0) || order(a) - order(b) || a.localeCompare(b))
+  return [{ key: 'all', label: 'all', n: list.length }, ...keys.map((k) => ({ key: k, label: eovLabel(k), n: by.get(k) ?? 0 }))]
+}
+
+/** the species of one EOV group; null (or "all") keeps the list */
+export function filterEov<T extends Pick<ObisSpecies, 'eov'>>(list: readonly T[], eov: string | null): T[] {
+  return !eov || eov === 'all' ? [...list] : list.filter((s) => s.eov === eov)
+}
+
+/** is the taxon in the lineage (the aphiaid itself, then its ancestors)? */
+export const inLineage = (lineage: readonly (number | bigint)[] | null | undefined, taxonId: number) => !!lineage && lineage.some((x) => Number(x) === taxonId)
+
+/**
+ * the species in the subtree of a taxon: a name stays when the lineage of any of its aphiaids holds the taxon. `lineages`
+ * is by aphiaid (the lineage file's rows for the place's aphiaids); a name none of whose aphiaids has a lineage is not in any subtree
+ */
+export function filterTaxon<T extends Pick<ObisSpecies, 'aphiaIds'>>(list: readonly T[], lineages: ReadonlyMap<number, readonly (number | bigint)[]>, taxonId: number): T[] {
+  return list.filter((s) => s.aphiaIds.some((id) => inLineage(lineages.get(id), taxonId)))
+}
+
+/** a WoRMS record as the taxon box says it */
+export interface WormsTaxon { id: number; name: string; rank: string; typed: string; synonymOf: string | null }
+
+/** the WoRMS REST url for an exact name, any environment (the atlas's `wormsNameUrl`) */
+export const wormsNameUrl = (name: string) => `https://www.marinespecies.org/rest/AphiaRecordsByName/${encodeURIComponent(name.trim())}?like=false&marine_only=false&offset=1`
+
+/**
+ * the taxon a typed name stands for, from WoRMS's answer to `AphiaRecordsByName`: the records whose name equals the text
+ * (case aside), an accepted one first; a synonym stands for its accepted name (`valid_AphiaID`), so the subtree is that of the
+ * accepted taxon. null when no record has that name (WoRMS answers 204, or an array without it)
+ */
+export function pickWormsTaxon(json: unknown, typed: string): WormsTaxon | null {
+  if (!Array.isArray(json)) return null
+  const want = typed.trim().toLowerCase()
+  const recs = json.filter((r): r is Record<string, any> => isObj(r) && Number.isInteger(r.AphiaID) && typeof r.scientificname === 'string' && r.scientificname.toLowerCase() === want)
+  const r = recs.find((x) => x.status === 'accepted') ?? recs[0]
+  if (!r) return null
+  const valid = Number.isInteger(r.valid_AphiaID) && r.valid_AphiaID > 0 ? r.valid_AphiaID : r.AphiaID
+  const syn = valid !== r.AphiaID
+  return { id: valid, name: syn ? String(r.valid_name ?? r.scientificname) : r.scientificname, rank: String(r.rank ?? '').toLowerCase(), typed: typed.trim(), synonymOf: syn ? r.scientificname : null }
+}
+
+/** "Cetacea · infraorder", a synonym as "Delphinus capensis → Delphinus delphis · species" */
+export const taxonLabel = (t: WormsTaxon) => `${t.synonymOf ? `${t.synonymOf} → ` : ''}${t.name}${t.rank ? ` · ${t.rank}` : ''}`
+
 const sqlStr = (s: string) => `'${s.replaceAll("'", "''")}'`
 
 /** the Reproduce block's DuckDB query for the place's decade rows (the values behind the counts and the decade table) */
 export const obisValuesSql = (url: string, placeId: string) =>
   `SELECT * FROM ${sqlStr(url)}\nWHERE place_id = ${sqlStr(placeId)} ORDER BY eov, decade NULLS FIRST;`
 
-/** the Reproduce block's DuckDB query for the species list: the release's species file joined to its names, one row per name key */
-export const obisSpeciesSql = (speciesUrl: string, lookupUrl: string, placeId: string) =>
+/**
+ * the Reproduce block's DuckDB query for the species list: the release's species file joined to its names, one row per name key;
+ * with an EOV group and/or a taxon the same filters the page applies (the lookup holds `eov` and `lineage`)
+ */
+export const obisSpeciesSql = (speciesUrl: string, lookupUrl: string, placeId: string, o: { eov?: string | null; taxonId?: number | null } = {}) =>
   `SELECT s.name_key, any_value(l.species) AS species, sum(s.n) AS records, min(s.year_min) AS year_min, max(s.year_max) AS year_max\n` +
-  `FROM ${sqlStr(speciesUrl)} s\nLEFT JOIN ${sqlStr(lookupUrl)} l USING (aphiaid)\nWHERE s.place_id = ${sqlStr(placeId)}\nGROUP BY s.name_key ORDER BY records DESC;`
+  `FROM ${sqlStr(speciesUrl)} s\nLEFT JOIN ${sqlStr(lookupUrl)} l USING (aphiaid)\nWHERE s.place_id = ${sqlStr(placeId)}` +
+  `${o.eov ? `\n  AND l.eov = ${sqlStr(o.eov)}` : ''}${o.taxonId ? `\n  AND list_contains(l.lineage, ${Math.trunc(o.taxonId)})` : ''}\n` +
+  `GROUP BY s.name_key ORDER BY records DESC;`
 
 /** the list as CSV, one row per species name */
 export function placeSpeciesCsv(placeId: string, list: readonly ObisSpecies[]): string {
@@ -402,6 +483,18 @@ export function groupsHolding(meta: MetaLike, key: string, ids: readonly number[
     if (last && last.rowEnd === r.rowStart) last.rowEnd = r.rowEnd; else acc.push({ ...r })
     return acc
   }, [])
+}
+
+/** the row groups (index and row range) that lie within the row ranges `groupsHolding` / `groupsHoldingText` return */
+export function groupIndexes(meta: MetaLike, ranges: readonly { rowStart: number; rowEnd: number }[]): { index: number; rowStart: number; rowEnd: number }[] {
+  const out: { index: number; rowStart: number; rowEnd: number }[] = []
+  let start = 0
+  meta.row_groups.forEach((rg, index) => {
+    const end = start + Number(rg.num_rows)
+    if (ranges.some((r) => r.rowStart <= start && end <= r.rowEnd)) out.push({ index, rowStart: start, rowEnd: end })
+    start = end
+  })
+  return out
 }
 
 // ---- AquaMaps: the species of the place ----

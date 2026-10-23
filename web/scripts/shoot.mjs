@@ -2,7 +2,10 @@
 // and of the place page with the live catalogs: each place at 390 px and 1280 px, light and dark, in two parts:
 // the top of the page (title, map with its layer, the start of Indicators) -> docs/shots/place_<id>_<width>_<theme>.png,
 // and the sections after Indicators (Species, Layers, Reports) -> place_<id>_<width>_<theme>_sections.png. look at them.
-//   node scripts/shoot.mjs [--url http://localhost:5180/] [--only NMS:CINMS | --only home] [--out docs/shots]
+// the Species section alone is shot too (`_species.png`), and for CINMS again with the marine mammals chip and the taxon
+// Cetacea applied through the page's own controls (`_species_filtered.png`).
+//   node scripts/shoot.mjs [--url http://localhost:5180/] [--only NMS:CINMS | --only home] [--out docs/shots] [--resolve storage.oceanmetrics.io=188.114.96.7]
+// --resolve (or SHOOT_RESOLVE) pins a host to an address in the browser, for a machine whose resolver still returns an old record.
 // without --url it serves dist/ with `vite preview` (run `npm run build` first). headless Chrome through Playwright: the
 // installed Google Chrome (channel "chrome"), else Playwright's own chromium (`npx playwright install chromium`).
 import { spawn } from 'node:child_process'
@@ -17,7 +20,7 @@ const OUT = resolve(ROOT, arg('--out', 'docs/shots'))
 const ONLY = arg('--only', '')
 // the CPO task force's two sanctuaries (2026-11-16); CINMS with the layer under the map at a period
 const PLACES = [
-  { id: 'NMS:CINMS', query: '?layer=grid:jplMURSST41mday:sst&t=2024-07' },
+  { id: 'NMS:CINMS', query: '?layer=grid:jplMURSST41mday:sst&t=2024-07', filtered: true },
   { id: 'NMS:FGBNMS', query: '' },
 ]
 const WIDTHS = [390, 1280]
@@ -38,7 +41,9 @@ async function server() {
 }
 
 async function browser() {
-  try { return await chromium.launch({ channel: 'chrome' }) } catch { return chromium.launch() }
+  const r = arg('--resolve', process.env.SHOOT_RESOLVE ?? '')
+  const args = r ? [`--host-resolver-rules=MAP ${r.replace('=', ' ')}`] : []
+  try { return await chromium.launch({ channel: 'chrome', args }) } catch { return chromium.launch({ args }) }
 }
 
 const { url, stop } = await server()
@@ -69,7 +74,7 @@ try {
       await ctx.close()
     }
   }
-  for (const { id, query } of PLACES.filter((p) => !ONLY || p.id === ONLY)) {
+  for (const { id, query, filtered } of PLACES.filter((p) => !ONLY || p.id === ONLY)) {
     for (const width of WIDTHS) {
       for (const theme of THEMES) {
         const ctx = await b.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: 1, colorScheme: theme, isMobile: width < 600, hasTouch: width < 600 })
@@ -103,6 +108,26 @@ try {
           saved.push(relative(process.cwd(), more))
         }
         saved.push(relative(process.cwd(), top))
+        // the Species section alone
+        const species = async (name) => {
+          // boundingBox is relative to the viewport, which a click may have scrolled: add the scroll to get the page's y
+          const box = await page.locator('section#species').boundingBox()
+          if (!box) return
+          box.y += await page.evaluate(() => window.scrollY)
+          const f = resolve(OUT, `${base}_${name}.png`)
+          await page.screenshot({ path: f, fullPage: true, clip: { x: 0, y: Math.floor(box.y - 8), width, height: Math.ceil(box.height + 16) } })
+          saved.push(relative(process.cwd(), f))
+        }
+        await species('species')
+        if (filtered) {
+          await page.locator('.eovchip', { hasText: 'marine mammals' }).click()
+          await page.locator('.taxon input').fill('Cetacea')
+          await page.locator('.taxon input').press('Enter')
+          await page.waitForFunction(() => /Taxon .*Cetacea/.test(document.querySelector('section#species')?.textContent ?? '') && !document.querySelector('section#species .loading'), null, { timeout: 60000 })
+          console.log(`  ${id} ${width}px ${theme}: ${page.url()}`)
+          await page.waitForTimeout(500)
+          await species('species_filtered')
+        }
         await ctx.close()
       }
     }

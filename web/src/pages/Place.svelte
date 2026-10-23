@@ -76,6 +76,8 @@
   const murSst = $derived(erddap.find((l) => DEFAULT_LAYER.startsWith(`grid:${l.id}:`)) ?? null)
   const emptyThenNow = $derived(murSst ? compareHref({ place: id, layer: DEFAULT_LAYER, t: nowMonth(null, murSst.time), coll: ownColl }) : null)
   const addDefault = () => navigate(loc.path + buildSearch({ layer: DEFAULT_LAYER, t: null }, loc.search), { replace: true })
+  // the Species section's EOV chip and taxon box are the query's `eov=` and `taxon=` (a replace, like the layer: no history entry per click)
+  const setSpeciesFilter = (v: { eov?: string | null; taxon?: string | null }) => navigate(loc.path + buildSearch(v, loc.search) + location.hash, { replace: true })
   const bbox = $derived(((feature?.bbox ?? row?.bbox) as Box | undefined) ?? null)
 </script>
 
@@ -133,7 +135,7 @@
     <Indicators placeId={id} {layer} />
 
     {#if copiesRead}
-      <Species placeId={id} {name} geometry={feature && /Polygon$/.test(feature.geometry?.type ?? '') ? feature.geometry as never : null} {bbox} colls={placeColls} />
+      <Species placeId={id} {name} eov={view.eov} taxon={view.taxon} onfilter={setSpeciesFilter} geometry={feature && /Polygon$/.test(feature.geometry?.type ?? '') ? feature.geometry as never : null} {bbox} colls={placeColls} />
     {/if}
 
     <Layers placeId={id} {name} {bbox} {erddap} />

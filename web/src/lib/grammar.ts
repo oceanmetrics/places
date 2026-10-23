@@ -6,6 +6,11 @@
 //                                                grid:jplMURSST41mday:sst); absent = none
 //   &t=<period>                                  the period the layer is drawn at: 2024, 2024-07 or 2024-07-15; absent =
 //                                                the dataset's latest. the same `t` as the indicators app's hash
+//   &eov=<group>                                 the Species section's EOV chip: one of the seven groups of the OBIS release's
+//                                                lookup (fish, hardCorals, mangroves, marineMammals, seabirds, seagrasses,
+//                                                seaTurtles); absent = all
+//   &taxon=<name>                                the Species section's taxon box: a WoRMS name as typed ("Cetacea"); the page
+//                                                resolves it to the subtree; absent = no taxon
 // colour = 6 hex digits without `#` (a leading `#` is accepted), opacity 0..1 (2 dp), width 0.5..4 px (0.5 steps).
 
 export interface LayerSel {
@@ -24,6 +29,10 @@ export interface ViewState {
   layer : string | null
   /** the period of the layer: `2024`, `2024-07` or `2024-07-15`; null = the latest */
   t     : string | null
+  /** the Species section's EOV group, null = all */
+  eov   : string | null
+  /** the Species section's taxon, a WoRMS name as typed; null = none */
+  taxon : string | null
 }
 
 export type Projection = 'globe' | 'mercator'
@@ -73,12 +82,27 @@ export function parseLayerParam(v: string | null | undefined): string | null {
   return m ? `${m[1] === 'erddap' ? 'grid' : m[1]}:${m[2]}${m[3] ? `:${m[3]}` : ''}` : null
 }
 
+/** the seven EOV groups of the OBIS release's species lookup (`obis:species.eov.n` of the collection) */
+export const EOV_KEYS = ['fish', 'hardCorals', 'mangroves', 'marineMammals', 'seabirds', 'seagrasses', 'seaTurtles'] as const
+
+/** a key as `eov=` takes it: one of the seven, else null (absent and "all" are both null) */
+export function parseEov(v: string | null | undefined): string | null {
+  const k = (v ?? '').trim()
+  return (EOV_KEYS as readonly string[]).includes(k) ? k : null
+}
+
+/** a taxon as `taxon=` takes it: the typed name, trimmed and single-spaced, two to 100 characters, else null */
+export function parseTaxon(v: string | null | undefined): string | null {
+  const x = (v ?? '').trim().replace(/\s+/g, ' ')
+  return x.length >= 2 && x.length <= 100 ? x : null
+}
+
 /** read the view from a query string (with or without the leading `?`). */
 export function parseView(search: string): ViewState {
   const p = new URLSearchParams(search)
   return {
     layers: parseLayers(p.get('layers')), place: p.get('place') || null, proj: p.get('proj') === 'mercator' ? 'mercator' : 'globe',
-    layer : parseLayerParam(p.get('layer')), t: parsePeriod(p.get('t')),
+    layer : parseLayerParam(p.get('layer')), t: parsePeriod(p.get('t')), eov: parseEov(p.get('eov')), taxon: parseTaxon(p.get('taxon')),
   }
 }
 
@@ -124,6 +148,14 @@ export function buildSearch(view: Partial<ViewState>, current = ''): string {
   if ('t' in view) {
     const t = parsePeriod(view.t)
     if (t) p.set('t', t); else p.delete('t')
+  }
+  if ('eov' in view) {
+    const e = parseEov(view.eov)
+    if (e) p.set('eov', e); else p.delete('eov')
+  }
+  if ('taxon' in view) {
+    const x = parseTaxon(view.taxon)
+    if (x) p.set('taxon', x); else p.delete('taxon')
   }
   const s = p.toString().replace(/%3A/gi, ':').replace(/%2C/gi, ',')
   return s ? '?' + s : ''

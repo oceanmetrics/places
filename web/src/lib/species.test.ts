@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  bboxWkt, byGroup, cellAt, filterSpecies, groupOf, groupsHolding, groupsHoldingText, inRings, nextSort, obisColls, obisLine, obisLinks, obisSpeciesSql, obisSummary, obisValuesSql, parseCellSpecies, placeCells,
+  bboxWkt, byGroup, cellAt, eovChips, filterEov, filterSpecies, filterTaxon, inLineage, pickWormsTaxon, speciesLineageUrl, taxonLabel, wormsNameUrl, groupIndexes, groupOf, groupsHolding, groupsHoldingText, inRings, nextSort, obisColls, obisLine, obisLinks, obisSpeciesSql, obisSummary, obisValuesSql, parseCellSpecies, placeCells,
   placeExactUrl, placeSpecies, placeSpeciesCsv, placeSpeciesUrl, sdmCsv, sdmLine, sdmSpecies, sortSpecies, speciesCheck, speciesCountLine, speciesCounts,
   DEFAULT_SPECIES_SORT, speciesLookupUrl, tilesOf, type CellGrid, type MetaLike, type ObisLookupRow, type ObisRow, type PlaceSpeciesRow,
 } from './species'
@@ -336,5 +336,140 @@ describe('the row groups that can hold a place (the file is sorted by place_id)'
 
   it('reads a group without string statistics', () => {
     expect(groupsHoldingText({ row_groups: [{ num_rows: 7, columns: [] }] }, 'place_id', 'X')).toEqual([{ rowStart: 0, rowEnd: 7 }])
+  })
+})
+
+// ---- the EOV chips and the taxon filter ----
+
+describe('the names carry every aphiaid and an EOV group', () => {
+  it('lists the aphiaids of a name, most records first, and takes the EOV of the best, else of the next that has one', () => {
+    const r: PlaceSpeciesRow[] = [
+      { place_id: 'P', aphiaid: 5, name_key: 1, n: 90, year_min: 2000, year_max: 2001 },
+      { place_id: 'P', aphiaid: 6, name_key: 1, n: 10, year_min: 2000, year_max: 2001 },
+      { place_id: 'P', aphiaid: 7, name_key: 2, n: 3, year_min: 2000, year_max: 2001 },
+    ]
+    const l = placeSpecies(r, 'P', [{ aphiaid: 5, species: 'A a' }, { aphiaid: 6, species: 'A a', eov: 'fish' }, { aphiaid: 7, species: 'B b', eov: 'seabirds' }])
+    expect(l.map((s) => [s.name, s.aphiaIds, s.eov])).toEqual([['A a', [5, 6], 'fish'], ['B b', [7], 'seabirds']])
+  })
+})
+
+describe('the EOV chips', () => {
+  const sp = (eov: string | null) => ({ eov })
+  const list = [sp('fish'), sp('fish'), sp('fish'), sp('seabirds'), sp('seabirds'), sp('hardCorals'), sp(null), sp(null)]
+
+  it('puts "all" first with every name, then the groups that have species, most species first', () => {
+    expect(eovChips(list)).toEqual([
+      { key: 'all', label: 'all', n: 8 }, { key: 'fish', label: 'fish', n: 3 }, { key: 'seabirds', label: 'seabirds', n: 2 }, { key: 'hardCorals', label: 'hard corals', n: 1 },
+    ])
+  })
+
+  it('breaks a tie in the order of the seven keys', () => {
+    expect(eovChips([sp('seaTurtles'), sp('fish'), sp('mangroves')]).map((c) => c.key)).toEqual(['all', 'fish', 'mangroves', 'seaTurtles'])
+  })
+
+  it('keeps the selected group with a zero count so a link never hides the filter it carries, and has only "all" for a place without EOV species', () => {
+    expect(eovChips(list, 'mangroves').at(-1)).toEqual({ key: 'mangroves', label: 'mangroves', n: 0 })
+    expect(eovChips([sp(null)])).toEqual([{ key: 'all', label: 'all', n: 1 }])
+    expect(eovChips([])).toEqual([{ key: 'all', label: 'all', n: 0 }])
+  })
+
+  it('counts equal the species the filter keeps, and the chips of the seven sum to the names that have an EOV', () => {
+    const chips = eovChips(list)
+    for (const c of chips.slice(1)) expect(filterEov(list, c.key).length).toBe(c.n)
+    expect(chips.slice(1).reduce((a, c) => a + c.n, 0)).toBe(list.filter((s) => s.eov).length)
+  })
+
+  it('filters by one group, and keeps the whole list (a copy) for none or "all"', () => {
+    expect(filterEov(list, 'seabirds').length).toBe(2)
+    expect(filterEov(list, 'seagrasses')).toEqual([])
+    expect(filterEov(list, null)).toEqual(list)
+    expect(filterEov(list, 'all')).not.toBe(list)
+  })
+})
+
+describe('the taxon filter', () => {
+  // lineage: the aphiaid itself, then its ancestors up to the root (self first)
+  const L = new Map<number, number[]>([[11, [11, 100, 10, 1]], [12, [12, 100, 10, 1]], [13, [13, 200, 20, 1]], [14, [14, 300, 1]]])
+  const names = [{ aphiaIds: [11] }, { aphiaIds: [12, 13] }, { aphiaIds: [14] }, { aphiaIds: [99] }]
+
+  it('holds a taxon anywhere in the lineage, itself included, not only as the first element', () => {
+    expect(inLineage([11, 100, 10, 1], 100)).toBe(true)
+    expect(inLineage([11, 100, 10, 1], 11)).toBe(true)
+    expect(inLineage([11, 100, 10, 1], 12)).toBe(false)
+    expect(inLineage([11n, 100n], 100)).toBe(true)
+    expect(inLineage(undefined, 1)).toBe(false)
+  })
+
+  it('keeps the names with an aphiaid in the subtree, the order of the list', () => {
+    expect(filterTaxon(names, L, 100)).toEqual([names[0], names[1]])
+    expect(filterTaxon(names, L, 10)).toEqual([names[0], names[1]])
+    expect(filterTaxon(names, L, 1)).toEqual([names[0], names[1], names[2]])   // the root: every name with a lineage
+    expect(filterTaxon(names, L, 14)).toEqual([names[2]])
+  })
+
+  it('counts a name by any of its aphiaids (a synonym under another parent), and drops one without a lineage', () => {
+    expect(filterTaxon(names, L, 200)).toEqual([names[1]])
+    expect(filterTaxon(names, L, 99)).toEqual([])
+  })
+
+  it('finds the lineage file next to the release', () => {
+    expect(speciesLineageUrl({ base: 'https://x/obis-h3/v1' })).toBe('https://x/obis-h3/v1/species/lineage.parquet')
+  })
+})
+
+describe('a typed name to its WoRMS taxon', () => {
+  const accepted = { AphiaID: 148723, scientificname: 'Cetacea', rank: 'Infraorder', status: 'accepted', valid_AphiaID: 148723, valid_name: 'Cetacea' }
+  const syn = { AphiaID: 111, scientificname: 'Old name', rank: 'Species', status: 'unaccepted', valid_AphiaID: 222, valid_name: 'New name' }
+
+  it('takes the record whose name equals the text, case aside', () => {
+    expect(pickWormsTaxon([accepted], 'cetacea')).toEqual({ id: 148723, name: 'Cetacea', rank: 'infraorder', typed: 'cetacea', synonymOf: null })
+  })
+
+  it('prefers an accepted record over a synonym of the same name, and ignores records of other names', () => {
+    const other = { ...accepted, AphiaID: 5, scientificname: 'Cetaceae', valid_AphiaID: 5 }
+    expect(pickWormsTaxon([other, { ...accepted, AphiaID: 7, status: 'unaccepted', valid_AphiaID: 148723 }, accepted], 'Cetacea')?.id).toBe(148723)
+  })
+
+  it('stands a synonym for its accepted name', () => {
+    const t = pickWormsTaxon([syn], 'Old name')!
+    expect(t).toMatchObject({ id: 222, name: 'New name', synonymOf: 'Old name' })
+    expect(taxonLabel(t)).toBe('Old name → New name · species')
+    expect(taxonLabel(pickWormsTaxon([accepted], 'Cetacea')!)).toBe('Cetacea · infraorder')
+  })
+
+  it('is null when WoRMS has no such name (204 gives null, an array without it, an object)', () => {
+    expect(pickWormsTaxon(null, 'Cetacea')).toBeNull()
+    expect(pickWormsTaxon([], 'Cetacea')).toBeNull()
+    expect(pickWormsTaxon([accepted], 'Cetac')).toBeNull()
+    expect(pickWormsTaxon({ message: 'x' }, 'Cetacea')).toBeNull()
+  })
+
+  it('asks WoRMS for the exact name, encoded', () => {
+    expect(wormsNameUrl(' Thunnus albacares ')).toBe('https://www.marinespecies.org/rest/AphiaRecordsByName/Thunnus%20albacares?like=false&marine_only=false&offset=1')
+  })
+})
+
+describe('the Reproduce query follows the filters', () => {
+  const q = (o?: Parameters<typeof obisSpeciesSql>[3]) => obisSpeciesSql('https://x/s.parquet', 'https://x/l.parquet', 'NMS:CINMS', o)
+
+  it('is unchanged without a filter', () => {
+    expect(q()).not.toContain('AND')
+    expect(q()).toContain("WHERE s.place_id = 'NMS:CINMS'\nGROUP BY s.name_key ORDER BY records DESC;")
+  })
+
+  it('adds the EOV group and the taxon the way the page applies them (the lookup holds eov and lineage)', () => {
+    expect(q({ eov: 'fish' })).toContain("\n  AND l.eov = 'fish'\nGROUP BY")
+    expect(q({ taxonId: 148723 })).toContain('\n  AND list_contains(l.lineage, 148723)\nGROUP BY')
+    expect(q({ eov: 'fish', taxonId: 1 })).toContain("AND l.eov = 'fish'\n  AND list_contains(l.lineage, 1)")
+  })
+})
+
+describe('the row groups within a range', () => {
+  it('gives the index and the rows of each group a read covers', () => {
+    const meta: MetaLike = { row_groups: [10, 10, 10, 5].map((num_rows) => ({ num_rows, columns: [] })) }
+    expect(groupIndexes(meta, [{ rowStart: 10, rowEnd: 30 }, { rowStart: 30, rowEnd: 35 }])).toEqual([
+      { index: 1, rowStart: 10, rowEnd: 20 }, { index: 2, rowStart: 20, rowEnd: 30 }, { index: 3, rowStart: 30, rowEnd: 35 },
+    ])
+    expect(groupIndexes(meta, [])).toEqual([])
   })
 })

@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parquetWriteBuffer } from 'hyparquet-writer'
-import { countBytes, readPlaceSpeciesRows } from './speciesRead'
-import { placeSpecies, speciesCheck, speciesCounts, obisSummary, type ObisRow } from './species'
+import { countBytes, readLineage, readObisLookup, readPlaceSpeciesRows, readWormsTaxon } from './speciesRead'
+import { eovChips, filterEov, filterTaxon, placeSpecies, speciesCheck, speciesCounts, obisSummary, type ObisRow } from './species'
 
 // a tiny species.parquet as the release writes it (sorted by place_id), three row groups of 4 rows: SYN:B spans groups 0 and 1
 const R = (place_id: string, aphiaid: number, name_key: number, n: number, year_min: number, year_max: number) => ({ place_id, aphiaid, name_key, n, year_min, year_max })
@@ -79,5 +79,129 @@ describe('reading one place from a species.parquet of a collection', () => {
     const c = speciesCounts(list, sum.latest!.decade)
     expect([c.all, c.latest!.n]).toEqual([3, 1])
     expect(speciesCheck(c, sum)).toBeNull()
+  })
+})
+
+// ---- the lookup and the lineage file, read by row group over a stubbed fetch ----
+
+/** serves `files` by url with HEAD and Range, counting the bytes of the bodies */
+function serve(files: Record<string, ArrayBuffer>) {
+  const served = { bytes: 0, requests: 0 }
+  vi.stubGlobal('fetch', async (url: string, init?: { method?: string; headers?: Headers }) => {
+    const f = files[url]
+    if (!f) return new Response(null, { status: 404 })
+    if (init?.method === 'HEAD') return new Response(null, { status: 200, headers: { 'content-length': String(f.byteLength) } })
+    const m = /bytes=(\d+)-(\d*)/.exec(new Headers(init?.headers).get('Range') ?? '')
+    const body = m ? f.slice(Number(m[1]), m[2] ? Number(m[2]) + 1 : undefined) : f
+    served.bytes += body.byteLength
+    served.requests++
+    return new Response(body, { status: m ? 206 : 200 })
+  })
+  return served
+}
+afterEach(() => { vi.unstubAllGlobals() })
+
+// 40,000 species in 4 row groups of 10,000, aphiaid = 1000 + 3 i (sorted); the lineage is the aphiaid, then the ancestors 5 (its family, 20 per family), 4, 3, 2, 1
+const N = 40_000
+const ids = Array.from({ length: N }, (_, i) => 1000 + 3 * i)
+const lineageOf = (a: number) => [BigInt(a), BigInt(100_000 + Math.floor((a - 1000) / 60)), 4n, 3n, 2n, 1n]
+const lineageFile = parquetWriteBuffer({
+  columnData: [{ name: 'aphiaid', type: 'INT64', data: ids.map(BigInt) }, { name: 'name_key', type: 'INT32', data: ids.map((_, i) => i) }, { name: 'lineage', data: ids.map(lineageOf) }],
+  rowGroupSize: 10_000, codec: 'UNCOMPRESSED',
+})
+const lookupFile = parquetWriteBuffer({
+  columnData: [
+    { name: 'aphiaid', type: 'INT64', data: ids.map(BigInt) }, { name: 'name_key', type: 'INT32', data: ids.map((_, i) => i) },
+    { name: 'species', type: 'STRING', data: ids.map((a) => `Synthetica sp${a}`) }, { name: 'genus', type: 'STRING', data: ids.map((a) => `Genus${a % 97}`) },
+    { name: 'class', type: 'STRING', data: ids.map((a) => (a % 2 ? 'Teleostei' : 'Aves')) }, { name: 'eov', type: 'STRING', data: ids.map((a) => (a % 3000 === 1 ? 'fish' : null)) },
+    { name: 'lineage', data: ids.map(lineageOf) }, { name: 'records', type: 'INT64', data: ids.map((a) => BigInt(a)) },
+  ],
+  rowGroupSize: 10_000, codec: 'UNCOMPRESSED',
+})
+
+describe('the lineage file, read lazily by row group', () => {
+  it('reads only the row groups whose aphiaid range holds the place\'s, and returns their lineages (self first)', async () => {
+    const served = serve({ 'https://t/lin1.parquet': lineageFile })
+    const mine = [ids[10_500], ids[10_700], ids[19_999]]   // all in the second group
+    const r = await readLineage('https://t/lin1.parquet', mine)
+    expect([r.groups, r.groupsRead]).toEqual([4, 1])
+    expect([...r.lineages.keys()].sort((a, b) => a - b)).toEqual(mine)
+    expect(r.lineages.get(mine[0])).toEqual(lineageOf(mine[0]).map(Number))
+    expect(r.lineages.get(mine[0])![0]).toBe(mine[0])
+    expect(r.bytes).toBe(served.bytes)
+    expect(r.bytes).toBeLessThan(lineageFile.byteLength * 0.5)   // one group of four plus the footer, and no name_key column
+  })
+
+  it('reads the groups of ids that span the file, and not a group twice', async () => {
+    const served = serve({ 'https://t/lin2.parquet': lineageFile })
+    const mine = [ids[5], ids[12_000], ids[39_000]]
+    const a = await readLineage('https://t/lin2.parquet', mine)
+    expect(a.groupsRead).toBe(3)
+    const bytes = served.bytes
+    const b = await readLineage('https://t/lin2.parquet', [ids[6], ids[7]])   // group 0 again
+    expect(b.lineages.size).toBe(2)
+    expect(served.bytes).toBe(bytes)
+  })
+
+  it('narrows a list to a taxon with the lineages it read: 20 species of one family', async () => {
+    serve({ 'https://t/lin3.parquet': lineageFile })
+    const mine = ids.slice(100, 400)   // 300 species, 15 families of 20
+    const r = await readLineage('https://t/lin3.parquet', mine)
+    const names = mine.map((a) => ({ aphiaIds: [a] }))
+    const family = Number([...r.lineages.get(mine[45])!][1])
+    expect(filterTaxon(names, r.lineages, family).length).toBe(20)
+    expect(filterTaxon(names, r.lineages, 4).length).toBe(300)   // an ancestor of all
+    expect(filterTaxon(names, r.lineages, mine[45]).length).toBe(1)   // the species itself
+  })
+
+  it('has no lineage for an aphiaid the file lacks', async () => {
+    serve({ 'https://t/lin4.parquet': lineageFile })
+    const r = await readLineage('https://t/lin4.parquet', [2, 1001])
+    expect(r.lineages.size).toBe(0)
+  })
+})
+
+describe('the species lookup, read for the place\'s aphiaids', () => {
+  it('returns only the name columns (no lineage, no genus) of the groups that hold them', async () => {
+    const served = serve({ 'https://t/lk1.parquet': lookupFile })
+    const mine = [ids[30_100], ids[30_101]]
+    const r = await readObisLookup('https://t/lk1.parquet', mine)
+    expect([r.groups, r.groupsRead]).toEqual([4, 1])
+    expect(Object.keys(r.rows[0]).sort()).toEqual(['aphiaid', 'class', 'eov', 'species'])
+    expect(r.rows.find((x) => Number(x.aphiaid) === mine[0])).toMatchObject({ species: `Synthetica sp${mine[0]}` })
+    expect(r.bytes).toBe(served.bytes)
+    expect(r.bytes).toBeLessThan(lookupFile.byteLength * 0.3)
+  })
+
+  it('joins to the place\'s rows: the EOV chips count the names, the filter keeps them', async () => {
+    serve({ 'https://t/lk2.parquet': lookupFile })
+    const fish = ids.filter((a) => a % 3000 === 1)
+    const rows = [...fish.slice(0, 5), ids[7], ids[8]].map((a, i) => ({ place_id: 'P', aphiaid: a, name_key: i, n: 10 - i, year_min: 2000, year_max: 2001 }))
+    const lk = await readObisLookup('https://t/lk2.parquet', rows.map((r) => r.aphiaid))
+    const list = placeSpecies(rows, 'P', lk.rows)
+    expect(eovChips(list).map((c) => [c.key, c.n])).toEqual([['all', 7], ['fish', 5]])
+    expect(filterEov(list, 'fish').map((s) => s.aphiaId)).toEqual(fish.slice(0, 5))
+  })
+})
+
+describe('a typed name resolved by WoRMS', () => {
+  it('reads the record of the exact name, once per text, and says null for 204', async () => {
+    const calls: string[] = []
+    const f = (async (u: string) => {
+      calls.push(u)
+      if (u.includes('Nonexistus')) return new Response(null, { status: 204 })
+      return new Response(JSON.stringify([{ AphiaID: 148723, scientificname: 'Cetacea', rank: 'Infraorder', status: 'accepted', valid_AphiaID: 148723, valid_name: 'Cetacea' }]), { status: 200 })
+    }) as unknown as typeof fetch
+    expect(await readWormsTaxon('Cetacea', f)).toMatchObject({ id: 148723, rank: 'infraorder' })
+    expect(await readWormsTaxon('cetacea', f)).toMatchObject({ id: 148723 })
+    expect(calls.length).toBe(1)
+    expect(await readWormsTaxon('Nonexistus', f)).toBeNull()
+  })
+
+  it('throws on a server error and asks again next time', async () => {
+    let n = 0
+    const f = (async () => (++n === 1 ? new Response('x', { status: 503 }) : new Response('[]', { status: 200 }))) as unknown as typeof fetch
+    await expect(readWormsTaxon('Flakeus', f)).rejects.toThrow('HTTP 503')
+    expect(await readWormsTaxon('Flakeus', f)).toBeNull()
   })
 })
