@@ -1,7 +1,8 @@
 // pure helpers shared by the pages (kept free of the DOM and the map so they are unit-tested)
 import { isDerived, layerLabel, viaLayer, type DerivedPiece, type Layer } from '@oceanmetrics/places'
+import { store } from './storage'
 
-export const DEFAULT_BASE = 'https://storage.oceanmetrics.io/gazetteer/'
+export const DEFAULT_BASE = store('gazetteer/')
 export const REPO_URL     = 'https://github.com/oceanmetrics/places'
 export const CALCOFI_EXPLORE = 'https://calcofi.io/explore/'
 export const ERDDAP_PLACES   = 'https://oceanmetrics.io/erddap-places/'

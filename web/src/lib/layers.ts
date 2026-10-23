@@ -8,10 +8,11 @@
 // atlas collections' H3 twins.
 import type { ErddapLayer } from './map/gridLayer'
 import { isAuxVariable } from './map/gridLayer'
+import { store } from './storage'
 
 export const ATLAS_APP = 'https://oceanmetrics.io/atlas/'
-/** the atlas catalog at the bucket's path-style url (CORS for every read; the storage host 302s) */
-export const ATLAS_CATALOG = 'https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/atlas/catalog.json'
+/** the atlas catalog on the storage host */
+export const ATLAS_CATALOG = store('atlas/catalog.json')
 
 export type Box = [number, number, number, number]
 

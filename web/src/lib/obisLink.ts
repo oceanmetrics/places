@@ -15,9 +15,10 @@
 // - the hash `pl` is the place token, written the way the atlas writes a hash value (URLSearchParams, then `,`, `:` and
 //   `/` unescaped), so its `%` is `%25`.
 import { ATLAS_APP, placeToken } from './layers'
+import { store } from './storage'
 
 /** the OBIS H3 collection in the bucket. drop when `atlas/catalog.json` lists obis_h3 */
-export const OBIS_COLLECTION_HREF = 'https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/obis-h3/collection.json'
+export const OBIS_COLLECTION_HREF = store('obis-h3/collection.json')
 
 export interface PlaceObisLink {
   /** the gazetteer place_id (`NMS:CINMS`, `MRGID:8432`) */

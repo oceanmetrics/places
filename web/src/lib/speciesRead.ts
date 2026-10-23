@@ -2,6 +2,7 @@
 // species.ts; this fetches and hands rows over.
 import { asyncBufferFromUrl, cachedAsyncBuffer, parquetMetadataAsync, parquetReadObjects, type AsyncBuffer } from 'hyparquet'
 import { compressors } from 'hyparquet-compressors'
+import { store } from './storage'
 import {
   groupsHolding, groupsHoldingText, obisSummary, OBIS_LATEST, parseCellSpecies, placeCells, placeExactUrl, placeSpecies, placeSpeciesUrl, sdmSpecies,
   speciesLookupUrl, tilesOf,
@@ -9,8 +10,8 @@ import {
   type SdmSpecies, type SpeciesLookupRow,
 } from './species'
 
-/** the AquaMaps EOV collection of the atlas (the bucket's path-style url) */
-export const AQUAMAPS_EOV = 'https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/atlas/aquamaps_eov/collection.json'
+/** the AquaMaps EOV collection of the atlas */
+export const AQUAMAPS_EOV = store('atlas/aquamaps_eov/collection.json')
 
 async function readWhole(url: string, columns: string[]): Promise<Record<string, unknown>[]> {
   const r = await fetch(url)

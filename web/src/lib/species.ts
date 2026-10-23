@@ -15,11 +15,12 @@
 //   so only the groups whose cell range holds one of the place's cells are read. a species is listed when it is suitable
 //   (suitability 1 to 100) in at least one of them.
 // the reading is speciesRead.ts (hyparquet, a lazy chunk).
+import { store } from './storage'
 
 // ---- OBIS, exact ----
 
 /** obis-h3's pointer to the current release */
-export const OBIS_LATEST = 'https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/obis-h3/latest.json'
+export const OBIS_LATEST = store('obis-h3/latest.json')
 
 export interface ObisRelease { release: string; base: string; obis_snapshot?: string; worms_version?: string; built_at?: string }
 

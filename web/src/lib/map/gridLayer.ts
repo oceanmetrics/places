@@ -6,9 +6,10 @@
 // the slice is the place's own lobes (one ERDDAP request per lobe, each masked by the place itself, `placeLobes`), as the
 // indicators Map slices its places: never a box over the whole map.
 import { parseLayerParam } from '../grammar'
+import { store } from '../storage'
 
-/** the gazetteer's STAC root at the bucket's path-style url (answers CORS for every read; the storage host 302s) */
-export const GAZETTEER_STAC = 'https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/gazetteer/'
+/** the gazetteer's STAC root on the storage host */
+export const GAZETTEER_STAC = store('gazetteer/')
 export const erddapCollectionUrl = (datasetId: string, root = GAZETTEER_STAC) => `${root}erddap/${datasetId}/collection.json`
 
 export const hostOf = (url: string) => { try { return new URL(url).host } catch { return url } }

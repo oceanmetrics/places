@@ -2,6 +2,7 @@
 // for byte, a box across 180, the zoom clamps), plus the collection href that carries it until the atlas catalog lists obis_h3.
 import { describe, expect, it } from 'vitest'
 import { cameraForBbox, OBIS_COLLECTION_HREF, placeObisUrl } from './obisLink'
+import { store } from './storage'
 
 // what the atlas writes (placeObisUrl in oceanmetrics/atlas), without the interim collection
 const CINMS = 'https://oceanmetrics.io/atlas/?c=obis_h3&i=all&dim.indicator=es&dim.period=all&res=auto&map=-119.75,33.725,8.38#pl=p.NMS%253ACINMS.Channel%2520Islands'
@@ -13,10 +14,10 @@ describe('placeObisUrl', () => {
   })
 
   it('carries the OBIS collection href until the atlas catalog lists obis_h3, before the hash', () => {
-    expect(OBIS_COLLECTION_HREF).toBe('https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/obis-h3/collection.json')
+    expect(OBIS_COLLECTION_HREF).toBe(store('obis-h3/collection.json'))
     expect(placeObisUrl(cinms)).toBe(
       'https://oceanmetrics.io/atlas/?c=obis_h3&i=all&dim.indicator=es&dim.period=all&res=auto&map=-119.75,33.725,8.38' +
-      '&collection=https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/obis-h3/collection.json#pl=p.NMS%253ACINMS.Channel%2520Islands')
+      `&collection=${store('obis-h3/collection.json')}#pl=p.NMS%253ACINMS.Channel%2520Islands`)
     expect(placeObisUrl(cinms).split('#')[0]).toContain(`&collection=${OBIS_COLLECTION_HREF}`)
   })
 

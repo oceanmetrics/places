@@ -5,13 +5,14 @@
 import { BASEMAP_URL, DEFAULT_TILES, LAND_LAYER, baseStyle, composeStyle } from '@oceanmetrics/map'
 import type { BasemapTiles, Theme } from '@oceanmetrics/map'
 import type { StyleSpecification } from 'maplibre-gl'
+import { store } from '../storage'
 
 /**
  * where the GEBCO and OSM tiers are read from. the package's DEFAULT_TILES name storage.oceanmetrics.io/basemap/, which
  * answers 404 until the DNS cutover (`basemap` joins the storage host's allow-list: platform packages/map README,
  * "Open"); the same objects answer range reads at the bucket's path-style url. set this to BASEMAP_URL after the cutover.
  */
-export const BASEMAP_BUCKET = 'https://s3.us-east-1.amazonaws.com/oceanmetrics.io-public/basemap/'
+export const BASEMAP_BUCKET = store('basemap/')
 
 /** every tier url under `from` moved under `to` (the regional list too); a null tier stays null */
 export function tilesAt(tiles: Readonly<BasemapTiles> = DEFAULT_TILES, from: string = BASEMAP_URL, to: string = BASEMAP_BUCKET): BasemapTiles {

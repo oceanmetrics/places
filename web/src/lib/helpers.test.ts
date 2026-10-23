@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Layer } from '@oceanmetrics/places'
 import {
   authorityOf, calcofiLink, defaultColour, erddapLink, fmtDate, fmtN, fmtValue, geojsonSql, groupByAuthority,
-  derivedLine, drawable, keepsGeometry, layerForPlace, matchRoute, navSearchTarget, queryOf, pieceProps, viaTitle, parquetUrl, placePath, sanitizeHtml, stacRoot, withBase,
+  DEFAULT_BASE, derivedLine, drawable, keepsGeometry, layerForPlace, matchRoute, navSearchTarget, queryOf, pieceProps, viaTitle, parquetUrl, placePath, sanitizeHtml, stacRoot, withBase,
 } from './helpers'
 
 const L = (o: Partial<Layer>): Layer => ({
@@ -31,7 +31,7 @@ describe('routes', () => {
     expect(matchRoute('/places', '/places')).toEqual({ name: 'home' })
     expect(matchRoute('/places/credits', '/places')).toEqual({ name: 'credits' })
     expect(matchRoute('/places/p/NMS:PMNM', '/places')).toEqual({ name: 'place', id: 'NMS:PMNM' })
-    expect(withBase('/l/a', 'https://storage.oceanmetrics.io/gazetteer', undefined, '/places')).toBe('/places/l/a')
+    expect(withBase('/l/a', DEFAULT_BASE, undefined, '/places')).toBe('/places/l/a')
     expect(withBase('/?layers=a', 'http://h/', undefined, '/places')).toBe('/places/?layers=a&base=http://h/')
   })
 
@@ -54,7 +54,7 @@ describe('urls', () => {
   })
 
   it('carries a non-default base through internal links only', () => {
-    expect(withBase('/l/a', 'https://storage.oceanmetrics.io/gazetteer')).toBe('/l/a')
+    expect(withBase('/l/a', DEFAULT_BASE)).toBe('/l/a')
     expect(withBase('/l/a', 'http://localhost:8080/')).toBe('/l/a?base=http://localhost:8080/')
     expect(withBase('/?layers=a', 'http://h/')).toBe('/?layers=a&base=http://h/')
   })
