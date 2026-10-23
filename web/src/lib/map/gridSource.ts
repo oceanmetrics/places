@@ -9,13 +9,14 @@ import ehWasm from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url'
 import ehWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url'
 import mvpWasm from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url'
 import mvpWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url'
-import { Engine, connectBrowser, fetchTimeExtent, lobeAxes, lobeMasks, placeLobes, sliceSource, toDataset } from '@oceanmetrics/engine'
+import { Engine, connectBrowser, fetchTimeExtent, lobeAxes, lobeMasks, patientFetch, placeLobes, sliceSource, toDataset } from '@oceanmetrics/engine'
 import type { SliceSource } from '@oceanmetrics/engine'
 import { getPlace } from '@oceanmetrics/places'
-import { axisSteps, overBudget, patientFetch } from './gridLayer'
+import { axisSteps, overBudget } from './gridLayer'
 
-// every ERDDAP request of the slice asks again when the mirror drops it (gridLayer.ts `patientFetch`)
-const erddapFetch = patientFetch()
+// every ERDDAP request of the slice asks again when the mirror drops it (@oceanmetrics/engine `patientFetch`:
+// a network error, a 404 "unknown datasetID", a 429 or a 5xx is asked again, six tries). the engine's requests pass a url string
+const erddapFetch = ((input, init) => patientFetch(String(input), init)) as typeof fetch
 
 let engine: Engine | null = null
 const theEngine = () => (engine ??= new Engine(() => connectBrowser(duckdb, {

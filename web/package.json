@@ -15,7 +15,7 @@
   "dependencies": {
     "@duckdb/duckdb-wasm": "1.32.0",
     "@oceanmetrics/catalog": "^0.3.0",
-    "@oceanmetrics/engine": "^0.1.1",
+    "@oceanmetrics/engine": "^0.1.2",
     "@oceanmetrics/map": "^0.2.2",
     "@oceanmetrics/places": "^0.5.2",
     "apache-arrow": "^17.0.0",

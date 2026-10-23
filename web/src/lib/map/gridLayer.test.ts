@@ -1,7 +1,8 @@
+import { PatientFetchError } from '@oceanmetrics/engine'
 import { describe, expect, it } from 'vitest'
 import {
   axisSteps, boxCells, erddapEntries, gridCredit, gridKeyParts, gridTitle, isAuxVariable, layerChoices, legendLine, overBudget,
-  patientFetch, periodLabel, problemText, stepDate, toErddapLayer, unitLabel, withRetries,
+  periodLabel, problemText, stepDate, toErddapLayer, unitLabel, withRetries,
 } from './gridLayer'
 
 const MUR = toErddapLayer('jplMURSST41mday', {
@@ -108,6 +109,11 @@ describe('the legend line and the credit', () => {
     expect(problemText(new Error('https://erddap.oceanmetrics.io/erddap/griddap/jplMURSST41mday.json?latitude%5B(33.3):1:(34.2)%5D: 404'))).toBe('erddap.oceanmetrics.io did not answer (HTTP 404); try again later')
     expect(problemText(new Error('the place has no polygon'))).toBe('the place has no polygon')
   })
+
+  it('says a request the engine gave up on (PatientFetchError) in its own words: the host, the last status and the tries', () => {
+    const e = new PatientFetchError('erddap.oceanmetrics.io', 'HTTP 503 Service Unavailable', 6, 'https://erddap.oceanmetrics.io/erddap/griddap/jplMURSST41mday.parquet?x', 503)
+    expect(problemText(e)).toBe('erddap.oceanmetrics.io did not answer (HTTP 503 Service Unavailable, 6 tries)')
+  })
 })
 
 describe('a server that drops requests', () => {
@@ -124,32 +130,5 @@ describe('a server that drops requests', () => {
     const c = new AbortController()
     c.abort(new Error('gone'))
     await expect(withRetries(async () => 'never', 4, 0, c.signal)).rejects.toThrow('gone')
-  })
-})
-
-describe('a fetch that asks again', () => {
-  const answers = (codes: number[]) => {
-    let i = 0
-    const f = (async () => new Response('x', { status: codes[Math.min(i++, codes.length - 1)] })) as unknown as typeof fetch
-    return { f, n: () => i }
-  }
-  it('asks again after a 404 or a 5xx until it gets an answer', async () => {
-    const a = answers([404, 503, 200])
-    expect((await patientFetch(a.f, 6, 0)('https://e/x')).status).toBe(200)
-    expect(a.n()).toBe(3)
-  })
-  it('takes another 4xx as the answer, and gives the last answer after every try', async () => {
-    const a = answers([400])
-    expect((await patientFetch(a.f, 6, 0)('https://e/x')).status).toBe(400)
-    expect(a.n()).toBe(1)
-    const b = answers([404])
-    expect((await patientFetch(b.f, 3, 0)('https://e/x')).status).toBe(404)
-    expect(b.n()).toBe(3)
-  })
-  it('rethrows a network failure after every try', async () => {
-    let n = 0
-    const f = (async () => { n++; throw new TypeError('Failed to fetch') }) as unknown as typeof fetch
-    await expect(patientFetch(f, 2, 0)('https://e/x')).rejects.toThrow('Failed to fetch')
-    expect(n).toBe(2)
   })
 })

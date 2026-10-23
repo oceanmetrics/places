@@ -247,29 +247,3 @@ export function problemText(e: unknown): string {
   const status = /:\s*(\d{3})\b/.exec(m)?.[1]
   return url ? `${url[1]} did not answer${status ? ` (HTTP ${status})` : ''}; try again later` : m
 }
-
-/**
- * a fetch that asks again when the server drops the request (a 404 or a 5xx, or no answer): the ERDDAP mirror answers the
- * same url 404 and 200 by turns, so retrying each request on its own beats retrying the whole slice (with half the answers
- * dropped, six tries of one request fail one time in 64). the last answer is returned as it was; an abort stops at once
- */
-export function patientFetch(fetchFn: typeof fetch = fetch, tries = 6, ms = 300): typeof fetch {
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    let last: Response | null = null
-    let err: unknown = null
-    for (let i = 0; i < tries; i++) {
-      if (init?.signal?.aborted) throw init.signal.reason ?? new DOMException('aborted', 'AbortError')
-      try {
-        last = await fetchFn(input, init)
-        err = null
-        if (last.ok || (last.status !== 404 && last.status < 500)) return last
-      } catch (e) {
-        if (init?.signal?.aborted) throw e
-        err = e
-      }
-      if (i < tries - 1 && ms > 0) await new Promise((r) => setTimeout(r, ms * (i + 1)))
-    }
-    if (err) throw err
-    return last!
-  }) as typeof fetch
-}
