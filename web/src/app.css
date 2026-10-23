@@ -27,7 +27,7 @@
   --font: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --display: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --header-h: 52px;
+  --header-h: 48px;           /* the bar's own height (--om-nav-height) */
 }
 /* browsers without light-dark() get the light palette */
 @supports not (color: light-dark(#000, #fff)) {
@@ -68,20 +68,15 @@ input[type='color'] { padding: 0; width: 28px; height: 24px; border: 1px solid v
 .chip { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--bg-tint); border: 1px solid var(--border); color: var(--text-muted); }
 
 /* page frame ---- */
-.site-header { height: var(--header-h); flex: none; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--bg-card); border-bottom: 1px solid var(--border); }
-.site-header .brand { font-weight: 700; color: var(--text); text-decoration: none; display: flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 17px; line-height: 1; }
-.site-header .brand .om-mark { width: 26px; height: 26px; flex: none; color: var(--brand-text); transition: transform .18s ease-out; }
-.site-header .brand:hover .om-mark { transform: rotate(-8deg); }
-/* the wordmark pairs textures (brand/v1): fluid serif "Ocean" + mono "Metrics", then the product */
-.om-ocean { font-family: 'Fraunces', Georgia, var(--display); font-weight: 600; letter-spacing: -0.005em; color: var(--brand-text); }
-.om-metrics { font-family: var(--mono); font-weight: 500; font-size: .9em; letter-spacing: 0.005em; color: var(--text); margin-left: 1px; }
-.brand-product { font-family: var(--display); font-weight: 600; color: var(--text); border-left: 1px solid var(--border-strong); padding-left: 9px; margin-left: 3px; }
+/* the shared bar (@oceanmetrics/nav) wears these tokens; only the slotted controls are styled here ---- */
+om-nav { flex: none; --om-nav-bg: var(--bg-card); --om-nav-control: var(--bg-card); --om-nav-edge: var(--border-strong); --om-nav-focus: var(--focus); }
+om-nav:not(:defined) { display: block; min-height: var(--header-h); background: var(--bg-card); border-bottom: 1px solid var(--border); }
+.app-nav { display: flex; gap: 14px; align-items: center; }
+.app-nav a { color: var(--text-muted); text-decoration: none; padding: 4px 2px; border-bottom: 2px solid transparent; }
+.app-nav a[aria-current='page'] { color: var(--text); border-bottom-color: var(--accent); }
 .theme-toggle { display: inline-flex; align-items: center; justify-content: center; width: 2.15rem; height: 2.15rem; flex: none; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text); cursor: pointer; }
 .theme-toggle:hover { background: var(--bg-tint); color: var(--brand-text); border-color: var(--border-strong); }
 .theme-toggle svg { width: 16px; height: 16px; }
-.site-header nav { display: flex; gap: 14px; margin-left: auto; align-items: center; }
-.site-header nav a { color: var(--text-muted); text-decoration: none; padding: 4px 2px; border-bottom: 2px solid transparent; }
-.site-header nav a[aria-current='page'] { color: var(--text); border-bottom-color: var(--accent); }
 .page { width: 100%; max-width: 62rem; margin: 0 auto; padding: 20px 16px 40px; flex: 1; }
 .site-footer { flex: none; padding: 10px 16px; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border); background: var(--bg-card); }
 
@@ -95,9 +90,6 @@ table.kv td { word-break: break-word; }
 blockquote { margin: .4rem 0; padding: 6px 12px; border-left: 3px solid var(--border); color: var(--text-muted); }
 
 @media (max-width: 600px) {
-  .site-header { gap: 8px; padding: 0 10px; }
-  .site-header nav { gap: 10px; font-size: 14px; }
-  .om-ocean, .om-metrics { display: none; }                /* mark + product name only on a phone */
-  .brand-product { border-left: none; padding-left: 0; margin-left: 0; }
+  .app-nav { gap: 10px; font-size: 14px; }
   table.kv th { width: 7rem; }
 }

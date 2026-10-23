@@ -2,7 +2,7 @@
   import { getPlace, layerLabel, type IndexPlace, type PlaceFeature } from '@oceanmetrics/places'
   import { BASE, index, manifest, searchPlaces } from '../lib/data.svelte'
   import { buildSearch, parseView, type LayerSel } from '../lib/grammar'
-  import { collectionDir, defaultColour, derivedLine, drawable, fmtDate, fmtLonLat, fmtN, groupByAuthority, layerPath, placePath, sanitizeHtml, withBase } from '../lib/helpers'
+  import { collectionDir, defaultColour, derivedLine, drawable, fmtDate, fmtLonLat, fmtN, groupByAuthority, layerPath, placePath, queryOf, sanitizeHtml, withBase } from '../lib/helpers'
   import { loc, navigate } from '../lib/router.svelte'
 
   // the URL is the state: layers=… and place=… are read here and written back with replaceState ----
@@ -28,7 +28,13 @@
   // search: the places index when it is published, else the layer list is filtered by the same text ----
   // scope: '' = all layers, ON_MAP = the layers on the map, else one layer's slug
   const ON_MAP = '@map'
-  let q = $state('')
+  // the bar's place search arrives as ?q=<text>: it starts the field, and a new ?q= (the bar used again on this page) sets it
+  let q = $state(queryOf(loc.search))
+  let lastQ = queryOf(loc.search)
+  $effect(() => {
+    const next = queryOf(loc.search)
+    if (next !== lastQ) { lastQ = next; if (next) q = next }
+  })
   let scope = $state('')
   const scopeSlugs = $derived.by(() => {
     if (!scope) return undefined

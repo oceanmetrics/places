@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Layer } from '@oceanmetrics/places'
 import {
   authorityOf, calcofiLink, defaultColour, erddapLink, fmtDate, fmtN, fmtValue, geojsonSql, groupByAuthority,
-  derivedLine, drawable, keepsGeometry, layerForPlace, matchRoute, pieceProps, viaTitle, parquetUrl, placePath, sanitizeHtml, stacRoot, withBase,
+  derivedLine, drawable, keepsGeometry, layerForPlace, matchRoute, navSearchTarget, queryOf, pieceProps, viaTitle, parquetUrl, placePath, sanitizeHtml, stacRoot, withBase,
 } from './helpers'
 
 const L = (o: Partial<Layer>): Layer => ({
@@ -186,5 +186,26 @@ describe('derived layers', () => {
   it('a clicked FAO area stands for the derived place, not the FAO area', () => {
     expect(pieceProps({ place_id: 'FAOHS:21', source_id: 'FAO:21', name: 'High seas of FAO area 21', url: null, bbox: null }, hs))
       .toEqual({ name: 'High seas of FAO area 21', place_id: 'FAOHS:21', url: null, place_type: 'high_seas_piece' })
+  })
+})
+
+describe('the shared bar\'s place search', () => {
+  const here = 'https://oceanmetrics.io'
+  it('routes a url on this origin in-app, with its query', () => {
+    expect(navSearchTarget('https://oceanmetrics.io/places/?q=channel+islands', here, '/places')).toBe('/places/?q=channel+islands')
+    expect(navSearchTarget('http://localhost:5180/?q=fgb', 'http://localhost:5180', '')).toBe('/?q=fgb')
+  })
+  it('lets another origin fall through to the bar', () => {
+    expect(navSearchTarget('https://oceanmetrics.io/places/?q=x', 'http://localhost:5180', '/places')).toBeNull()
+    expect(navSearchTarget('https://example.org/places/?q=x', here, '/places')).toBeNull()
+  })
+  it('lets a same-origin url that is not one of this app\'s pages fall through, and a bad url too', () => {
+    expect(navSearchTarget('https://oceanmetrics.io/atlas/?q=x', here, '/places')).toBeNull()
+    expect(navSearchTarget('http://[bad', here, '/places')).toBeNull()
+  })
+  it('starts the home search from ?q=', () => {
+    expect(queryOf('?q=channel+islands&layers=nms')).toBe('channel islands')
+    expect(queryOf('?layers=nms')).toBe('')
+    expect(queryOf('')).toBe('')
   })
 })

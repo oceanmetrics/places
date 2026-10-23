@@ -6,3 +6,12 @@ interface ImportMetaEnv {
   /** indicators catalog root, default https://storage.oceanmetrics.io/indicators/ */
   readonly VITE_INDICATORS_BASE?: string
 }
+
+// the shared bar (@oceanmetrics/nav), a custom element: its attributes as Svelte sees them
+declare namespace svelteHTML {
+  interface IntrinsicElements {
+    'om-nav': import('svelte/elements').HTMLAttributes<HTMLElement> & {
+      current?: string; theme?: 'light' | 'dark'; 'changes-href'?: string; 'search-href'?: string; 'collapse-at'?: string | number; items?: string
+    }
+  }
+}

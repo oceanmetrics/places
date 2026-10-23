@@ -7,6 +7,12 @@ client-side routing. Data comes from the `@oceanmetrics/places` client (since 20
 [oceanmetrics/platform `packages/places`](https://github.com/oceanmetrics/platform/tree/main/packages/places), installed from npm;
 a client change is made and released there, then the range in `package.json` is bumped here), which reads `layers.json`, the places index, GeoParquet and PMTiles straight from object storage.
 
+The top bar is the shared Ocean Metrics bar, `<om-nav current="places">` from `@oceanmetrics/nav` (`src/App.svelte`: the doors Places / Indicators /
+Atlas, the place search, What changed, Docs; it collapses to the mark and a menu button below 860 px). The site's own links (Map, Credits, Data) and the
+theme toggle sit in its slot, styled in `src/app.css` (`.app-nav`, `.theme-toggle`); the bar follows `<html data-theme>` itself. Its search is
+cancelled in `App.svelte` (`navSearchTarget`, `helpers.ts`) and routed in-app to `/?q=<text>`, which the home page's search field starts from
+(`queryOf`); `changes-href` points at oceanmetrics.io/docs/ until the change feed page exists.
+
 | route | page |
 |---|---|
 | `/` | search + browse map with layer toggles; reads and writes `?layers=slug[:colour][:opacity][:width],…&place=<place_id>` |
@@ -25,14 +31,14 @@ npm test             # vitest: URL grammar, helpers, the indicators slot, the ma
 npm run check        # svelte-check
 npm run build        # dist/
 npm run size         # the size budget over dist/ (below); pages.yml runs it after the build
-node scripts/shoot.mjs [--url http://localhost:5180/] [--only NMS:CINMS]   # place page screenshots -> docs/shots/; look at them
+node scripts/shoot.mjs [--url http://localhost:5180/] [--only NMS:CINMS | home]   # home and place page screenshots -> docs/shots/; look at them
 ```
 
 `scripts/shoot.mjs` (Playwright, headless Google Chrome through `channel: "chrome"`, else Playwright's chromium after
 `npx playwright install chromium`) serves `dist/` with `vite preview` unless `--url` names a running server, opens the CPO
 task force's two sanctuaries, `/p/NMS:CINMS?layer=grid:jplMURSST41mday:sst&t=2024-07` (with the MUR SST slice of July
 2024 under the map) and `/p/NMS:FGBNMS`, at 390 px and 1280 px in light and dark (the theme is set as `localStorage`
-`om-theme` before load), waits until no section is loading and the slice is in, and saves two parts:
+`om-theme` before load), waits until no section is loading and the slice is in, and saves two parts (the home page too: `docs/shots/home_<width>_<theme>.png`, and at 390 px `..._menu.png` with the bar's menu open):
 `docs/shots/place_<id>_<width>_<theme>.png` (the top: title, map, layer, the first indicator cards) and
 `..._sections.png` (Species, Layers, Reports). It reads the live catalogs and warns when a page is wider than the window.
 The committed shots were made small with a palette (sharp `png({ palette: true, quality: 80 })`, run from a scratch
@@ -210,7 +216,7 @@ written here. Set on 2026-10-23 from a measurement, with about 10 % headroom:
 
 | line | what | measured | budget |
 |---|---|--:|--:|
-| entry JS | what `index.html` loads up front: router, pages, the places client with hyparquet and its codecs, the indicator cards | 155.8 kB | 172 kB |
+| entry JS | what `index.html` loads up front: router, pages, the places client with hyparquet and its codecs, the indicator cards | 161.2 kB (2026-10-23, with the shared bar `@oceanmetrics/nav`, about +3 kB) | 172 kB |
 | map JS | `PlacesMap.svelte`'s chunk: MapLibre 6, `@oceanmetrics/map`, the basemap and the slot | 299.3 kB | 330 kB |
 | engine JS | `map/gridSource.ts`: `@oceanmetrics/engine`, Apache Arrow, the mask, DuckDB-WASM's JS API (on the first slice) | 63.2 kB | 70 kB |
 | rest JS | the other lazy chunks: the species reader, the values download (hyparquet-writer) | 17.8 kB | 24 kB |

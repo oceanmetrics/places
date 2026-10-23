@@ -1,7 +1,8 @@
-// screenshots of the place page with the live catalogs: each place at 390 px and 1280 px, light and dark, in two parts:
+// screenshots of the home page (docs/shots/home_<width>_<theme>.png, with the shared bar's menu open at 390 px: home_390_<theme>_menu.png)
+// and of the place page with the live catalogs: each place at 390 px and 1280 px, light and dark, in two parts:
 // the top of the page (title, map with its layer, the start of Indicators) -> docs/shots/place_<id>_<width>_<theme>.png,
 // and the sections after Indicators (Species, Layers, Reports) -> place_<id>_<width>_<theme>_sections.png. look at them.
-//   node scripts/shoot.mjs [--url http://localhost:5180/] [--only NMS:CINMS] [--out docs/shots]
+//   node scripts/shoot.mjs [--url http://localhost:5180/] [--only NMS:CINMS | --only home] [--out docs/shots]
 // without --url it serves dist/ with `vite preview` (run `npm run build` first). headless Chrome through Playwright: the
 // installed Google Chrome (channel "chrome"), else Playwright's own chromium (`npx playwright install chromium`).
 import { spawn } from 'node:child_process'
@@ -45,6 +46,29 @@ const b = await browser()
 mkdirSync(OUT, { recursive: true })
 const saved = []
 try {
+  for (const width of ONLY && ONLY !== 'home' ? [] : WIDTHS) {
+    for (const theme of THEMES) {
+      const ctx = await b.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: 1, colorScheme: theme, isMobile: width < 600, hasTouch: width < 600 })
+      await ctx.addInitScript((t) => { try { localStorage.setItem('om-theme', t) } catch { /* no storage */ } }, theme)
+      const page = await ctx.newPage()
+      await page.goto(url, { waitUntil: 'domcontentloaded' })
+      await page.waitForFunction(() => document.querySelector('om-nav')?.shadowRoot?.querySelector('[part=bar]') && document.querySelector('.home input#q') && !document.querySelector('.loading'), null, { timeout: 120000 })
+      await page.waitForTimeout(2500)
+      const scrollW = await page.evaluate(() => document.documentElement.scrollWidth)
+      if (scrollW > width) console.warn(`  home ${width}px ${theme}: page is ${scrollW}px wide (horizontal overflow)`)
+      const shot = resolve(OUT, `home_${width}_${theme}.png`)
+      await page.screenshot({ path: shot })
+      saved.push(relative(process.cwd(), shot))
+      if (width < 600) {
+        await page.locator('om-nav').locator('[part=menu]').click()
+        await page.waitForTimeout(400)
+        const menu = resolve(OUT, `home_${width}_${theme}_menu.png`)
+        await page.screenshot({ path: menu })
+        saved.push(relative(process.cwd(), menu))
+      }
+      await ctx.close()
+    }
+  }
   for (const { id, query } of PLACES.filter((p) => !ONLY || p.id === ONLY)) {
     for (const width of WIDTHS) {
       for (const theme of THEMES) {

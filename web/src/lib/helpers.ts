@@ -20,6 +20,22 @@ export type Route =
   | { name: 'docs' }
   | { name: 'notfound' }
 
+/**
+ * the in-app url (path and query) an `om-nav-search` event should route to, or null to let the bar go there itself:
+ * only a url on this origin whose path is one of this app's pages is routed in-app; any other origin falls through.
+ */
+export function navSearchTarget(url: string, origin: string, appBase = APP_BASE): string | null {
+  let u: URL
+  try { u = new URL(url, origin) } catch { return null }
+  if (u.origin !== origin || matchRoute(u.pathname, appBase).name === 'notfound') return null
+  return u.pathname + u.search
+}
+
+/** the text of `?q=` (the bar's place search lands on the home page with it), '' when absent. */
+export function queryOf(search: string): string {
+  return new URLSearchParams(search).get('q') ?? ''
+}
+
 /** which page a pathname is. Place ids carry a colon (and sometimes a slash, encoded), so the rest of the path is the id. */
 export function matchRoute(pathname: string, appBase = APP_BASE): Route {
   if (appBase && pathname.startsWith(appBase)) pathname = pathname.slice(appBase.length)
