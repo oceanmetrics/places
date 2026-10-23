@@ -14,8 +14,9 @@
   import type { LegendSpec } from '@oceanmetrics/map'
   import { loadErddapLayers } from '../lib/map/gridKind'
   import type { ErddapLayer } from '../lib/map/gridLayer'
-  import { parseView } from '../lib/grammar'
-  import { loc } from '../lib/router.svelte'
+  import { buildSearch, parseView } from '../lib/grammar'
+  import { compareHref, DEFAULT_LAYER, EMPTY_LAYER_LINE, nowMonth, PAGE_ANCHORS } from '../lib/thenNow'
+  import { loc, navigate } from '../lib/router.svelte'
   import { placeTitle } from '../../scripts/shell-lib.mjs'
   import { BASE, manifest, loadManifest } from '../lib/data.svelte'
   import {
@@ -70,6 +71,11 @@
   const ownColl = $derived(feature?.collection ?? row?.collection ?? layer?.collection ?? null)
   // the gazetteer collections that hold the place (its own, then its copies'): the OBIS files and the report sets are by collection
   const placeColls = $derived(obisColls(ownColl, copies))
+  // the layer slot is offered on a polygon place; with none chosen the map says what can go under it, with one click to MUR SST
+  const polygon = $derived(!!feature && /Polygon$/.test(feature.geometry?.type ?? ''))
+  const murSst = $derived(erddap.find((l) => DEFAULT_LAYER.startsWith(`grid:${l.id}:`)) ?? null)
+  const emptyThenNow = $derived(murSst ? compareHref({ place: id, layer: DEFAULT_LAYER, t: nowMonth(null, murSst.time), coll: ownColl }) : null)
+  const addDefault = () => navigate(loc.path + buildSearch({ layer: DEFAULT_LAYER, t: null }, loc.search), { replace: true })
   const bbox = $derived(((feature?.bbox ?? row?.bbox) as Box | undefined) ?? null)
 </script>
 
@@ -77,6 +83,11 @@
   <p class="muted"><a href={withBase('/', BASE)}>Map</a> / place</p>
   <h1>{status === 'ok' ? name : id}</h1>
   <p class="muted">{id}{#if layer}{' '}· layer <a href={withBase(layerPath(layer.slug), BASE)}>{layerLabel(layer)}</a>{/if}</p>
+  {#if status === 'ok'}
+    <nav class="jump" aria-label="On this page">
+      {#each PAGE_ANCHORS as a, i (a.id)}{#if i}<span aria-hidden="true">{' · '}</span>{/if}<a href={`#${a.id}`}>{a.label}</a>{/each}
+    </nav>
+  {/if}
 
   {#if status === 'loading'}
     <p class="muted">Loading…</p>
@@ -94,16 +105,29 @@
       </p>
     {/if}
     {#if layer?.kind === 'derived'}<p class="muted">{derivedLine(layer, manifest.layers)}</p>{/if}
-    <div class="mapbox">
+    <div class="mapbox" id="map">
       {#await import('../lib/PlacesMap.svelte')}
         <p class="muted">Loading the map…</p>
       {:then m}
         <m.default highlight={feature} popups={false} selected={sel} layers={manifest.layers} fit={!feature && row ? row.bbox : null}
           layerKey={feature ? view.layer : null} t={view.t} slicePlace={feature ? id : null} onlegend={(l) => { legend = l }} />
       {/await}
+      {#if polygon && !view.layer}
+        <div class="empty" role="note">
+          <span>{EMPTY_LAYER_LINE}</span>
+          {#if murSst}
+            <span class="acts">
+              <button class="btn small" type="button" onclick={addDefault}>MUR SST, latest month</button>
+              {#if emptyThenNow}<a class="btn secondary small" href={emptyThenNow} target="_blank" rel="noopener">Then vs Now ↗</a>{/if}
+            </span>
+          {:else}
+            <a href="#layer-under">choose one below</a>
+          {/if}
+        </div>
+      {/if}
     </div>
-    {#if feature && /Polygon$/.test(feature.geometry?.type ?? '')}
-      <LayerUnder layers={erddap} layerKey={view.layer} t={view.t} {legend} />
+    {#if polygon}
+      <LayerUnder layers={erddap} layerKey={view.layer} t={view.t} {legend} placeId={id} coll={ownColl} />
     {/if}
 
     <Indicators placeId={id} {layer} />
@@ -183,6 +207,15 @@
 <style>
   .copies { margin: 0 0 8px; padding-left: 1.2rem; }
   .source { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 4px 0 0; }
+  .jump { margin: 2px 0 0; font-size: 14px; color: var(--text-muted); }
   .mapbox { position: relative; height: 22rem; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 12px 0; }
-  @media (max-width: 600px) { .mapbox { height: 16rem; } }
+  /* the map's empty state: what can go under it, on the card surface over the top left of the map */
+  .empty {
+    position: absolute; top: 10px; left: 10px; z-index: 2; max-width: min(24rem, calc(100% - 70px)); display: flex; flex-direction: column; gap: 6px;
+    padding: 8px 10px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 1px 4px rgb(0 0 0 / 0.18);
+    font-size: 13.5px; line-height: 1.35; color: var(--text);
+  }
+  .empty .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+  :global(section[id]), .mapbox { scroll-margin-top: 12px; }
+  @media (max-width: 600px) { .mapbox { height: 16rem; } .empty { font-size: 12.5px; padding: 6px 8px; } }
 </style>

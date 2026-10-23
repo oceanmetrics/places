@@ -20,7 +20,7 @@
   const underHref = (key: string) => loc.path + buildSearch({ layer: key }, loc.search)
 </script>
 
-<section aria-labelledby="layers-h">
+<section id="layers" aria-labelledby="layers-h">
   <h2 id="layers-h">Layers that cover this place</h2>
   {#if phase === 'loading'}
     <p class="muted loading" aria-live="polite">Reading the atlas and ERDDAP catalogs…</p>

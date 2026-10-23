@@ -59,7 +59,7 @@
   const int = (n: number) => n.toLocaleString('en-US')
 </script>
 
-<section aria-labelledby="species-h">
+<section id="species" aria-labelledby="species-h">
   <h2 id="species-h">Species</h2>
 
   <h3>OBIS records in the place</h3>

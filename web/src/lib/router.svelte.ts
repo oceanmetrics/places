@@ -1,6 +1,7 @@
 // a tiny history router: the URL is the single source of truth (path = page, query = map state)
 import { carryView } from './grammar'
 import { matchRoute, type Route } from './helpers'
+import { inPageAnchor } from './thenNow'
 
 export const loc = $state({ path: location.pathname, search: location.search })
 
@@ -26,6 +27,7 @@ export function startRouter() {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
     const a = (e.target as Element | null)?.closest?.('a')
     if (!a || a.target || a.hasAttribute('download') || a.origin !== location.origin) return
+    if (inPageAnchor(a, location)) return   // a part of this page (the hero line's anchors): the browser scrolls to it
     e.preventDefault()
     navigate(a.pathname + a.search + a.hash)
   })

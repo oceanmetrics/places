@@ -1,13 +1,17 @@
 <script lang="ts">
   // the "Layer under the map" control of the place page: the select (none, then each variable of the gazetteer's gridded
   // ERDDAP collections, map/gridLayer.ts `layerChoices`), the period, and the legend line with the ramp. it writes
-  // `layer=` and `t=` into the query (grammar.ts); the map reads them back. no rules here.
+  // `layer=` and `t=` into the query (grammar.ts); the map reads them back. beside the month, "Then vs Now" opens the
+  // indicators Map at the place with compare on (thenNow.ts `compareHref`). no rules here.
   import type { LegendSpec } from '@oceanmetrics/map'
   import { buildSearch } from './grammar'
   import { layerChoices, legendLine, type ErddapLayer } from './map/gridLayer'
   import { loc, navigate } from './router.svelte'
+  import { compareHref, nowMonth } from './thenNow'
 
-  let { layers, layerKey, t, legend }: { layers: ErddapLayer[]; layerKey: string | null; t: string | null; legend: LegendSpec | null } = $props()
+  let { layers, layerKey, t, legend, placeId, coll = null }: {
+    layers: ErddapLayer[]; layerKey: string | null; t: string | null; legend: LegendSpec | null; placeId: string; coll?: string | null
+  } = $props()
 
   const choices = $derived(layerChoices(layers, layerKey))
   const groups = $derived([...new Set(choices.slice(1).map((c) => c.group ?? ''))])
@@ -15,10 +19,11 @@
   const month = $derived(!t ? '' : t.length >= 7 ? t.slice(0, 7) : `${t}-01`)
   const bounds = $derived(current ? [current.time[0]?.slice(0, 7) ?? '', current.time[1]?.slice(0, 7) ?? ''] : ['', ''])
   const set = (v: { layer?: string | null; t?: string | null }) => navigate(loc.path + buildSearch(v, loc.search), { replace: true })
+  const thenNow = $derived(layerKey ? compareHref({ place: placeId, layer: layerKey, t: nowMonth(t, current?.time), coll }) : null)
   const gradient = $derived(legend?.ramp ? `linear-gradient(to right, ${legend.ramp.colors.join(', ')})` : '')
 </script>
 
-<div class="under">
+<div class="under" id="layer-under">
   <label>
     <span>Layer under the map</span>
     <select value={layerKey ?? ''} onchange={(e) => set({ layer: (e.currentTarget as HTMLSelectElement).value || null })}>
@@ -37,6 +42,9 @@
         onchange={(e) => set({ t: (e.currentTarget as HTMLInputElement).value || null })} />
     </label>
     {#if t}<button class="btn secondary small" type="button" onclick={() => set({ t: null })}>Latest</button>{/if}
+    {#if thenNow}
+      <a class="btn small thennow" href={thenNow} target="_blank" rel="noopener" title="Open the indicators Map at this place: the layer now and eight years before, with a swipe">Then vs Now ↗</a>
+    {/if}
   {/if}
 </div>
 {#if legend}

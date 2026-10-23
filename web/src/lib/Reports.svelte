@@ -15,7 +15,7 @@
   const sw = $derived(swBundleHref(placeId))
 </script>
 
-<section aria-labelledby="reports-h">
+<section id="reports" aria-labelledby="reports-h">
   <h2 id="reports-h">Reports</h2>
   {#if failed}
     <p class="notice">The indicators catalog could not be read, so the reports that include this place cannot be listed.</p>

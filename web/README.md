@@ -55,7 +55,9 @@ the client repo's `packages/places/test/fixtures/` (oceanmetrics/platform) with 
 `/p/<place_id>` (`src/pages/Place.svelte`) is the front door of the vision ("The Place page as the front door"): one URL
 per gazetteer id, the sections in this order, each a component that only draws, with its rules in a plain tested `.ts`:
 
-1. **Title** and the source link.
+1. **Title** and the source link, and the hero line under them: in-page anchors to the parts of the page,
+   "map · indicators · species · layers · reports" (`src/lib/thenNow.ts` `PAGE_ANCHORS`; the router leaves a same-page
+   `#` link to the browser, `inPageAnchor`).
 2. **The map** (`src/lib/PlacesMap.svelte`, shared with the home and layer pages): MapLibre 6 through `@oceanmetrics/map`
    `setupMapLibre`, once a page (`src/lib/map/setup.ts`; the worker chunk is `.mjs`, `vite.config.ts` `worker`), the style
    `composeStyle` builds (`src/lib/map/basemap.ts`): CARTO's positron or dark-matter with the GEBCO 2025 sea floor,
@@ -77,6 +79,13 @@ per gazetteer id, the sections in this order, each a component that only draws, 
    chunk `src/lib/map/gridSource.ts`, loaded on the first slice. A place over the cell budget (250,000 cells a request,
    600,000 a step) says so. The ERDDAP mirror at erddap.oceanmetrics.io answered the same url 404 and 200 by turns on
    2026-10-23, so every slice request goes through `patientFetch` (asks again after a 404 or a 5xx, six tries).
+   **Finding it** (Ben 2026-10-23: he could not find the layer or Then vs Now without asking; `src/lib/thenNow.ts`): with no
+   layer chosen, the map of a polygon place says "Add a layer under the map: sea surface temperature, chlorophyll, …" over
+   its top left, with one click to MUR SST at the latest month (`DEFAULT_LAYER`, `grid:jplMURSST41mday:sst`, no `t`) and a
+   Then vs Now link. Beside the month picker, **Then vs Now ↗** opens the indicators Map at the place with compare on
+   (`compareHref`: `#view=map&ind=erddap:dhw_5km:CRW_SST:mean&pi=coll:places&grain=month&t=<now>&t2=<now - 8 years>&layer=<the
+   layer>&place=<id>`; Now is the picker's month, else the layer's latest; a place outside the sanctuaries opens over itself,
+   `pi=<id>`). The swipe, the difference and the year-range Then live there, not here.
 3. **Indicators** (below): led by the roll-up line (`src/lib/reports.ts` `summaryLine` over `@oceanmetrics/catalog`
    `rollups`): "N indicators with a value: a above, w within, b below the place's own record, n without a status; latest
    <period>".

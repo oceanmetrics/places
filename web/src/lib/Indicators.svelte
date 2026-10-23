@@ -32,7 +32,7 @@
   const shown = $derived(slot ? (expanded ? slot.cards : slot.cards.slice(0, slot.first)) : [])
 </script>
 
-<section class="indicators" aria-labelledby="indicators-h">
+<section id="indicators" class="indicators" aria-labelledby="indicators-h">
   <h2 id="indicators-h">Indicators</h2>
   {#if phase === 'loading'}
     <p class="notice loading" aria-live="polite">Loading the indicators of this place…</p>
