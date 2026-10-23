@@ -191,6 +191,55 @@ export function speciesCheck(c: ObisSpeciesCounts, s: Pick<ObisSummary, 'all' | 
 /** the group the table shows: the EOV group when the lookup gives one, else the OBIS class, else "other" */
 export const groupOf = (s: Pick<ObisSpecies, 'eov' | 'cls'>) => (s.eov ? eovLabel(s.eov) : s.cls ?? 'other')
 
+/** the columns the species table sorts by: records (the default, most first), the name, the group, the last year with a record */
+export type SpeciesSort = { key: 'records' | 'name' | 'group' | 'last'; dir: 'asc' | 'desc' }
+export const DEFAULT_SPECIES_SORT: SpeciesSort = { key: 'records', dir: 'desc' }
+
+/**
+ * the species whose name, group (EOV or class) or red list code contains every word of `query`, case-insensitively;
+ * an empty query keeps the whole list, in its order. a word may be a fragment ("delph", "EN", "seabird")
+ */
+export function filterSpecies<T extends Pick<ObisSpecies, 'name' | 'eov' | 'cls' | 'redlist'>>(list: readonly T[], query: string): T[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (!words.length) return [...list]
+  return list.filter((s) => {
+    const hay = [s.name, groupOf(s), s.cls ?? '', s.redlist ? `iucn ${s.redlist}` : ''].join(' ').toLowerCase()
+    return words.every((w) => hay.includes(w))
+  })
+}
+
+/**
+ * the list sorted by a column. a species without a value (no year) goes last in either direction; ties are broken by
+ * records (most first), then the name, so the order is the same on every run
+ */
+export function sortSpecies<T extends Pick<ObisSpecies, 'name' | 'eov' | 'cls' | 'n' | 'yearMax'>>(list: readonly T[], sort: SpeciesSort = DEFAULT_SPECIES_SORT): T[] {
+  const sign = sort.dir === 'asc' ? 1 : -1
+  const value = (s: T): string | number | null => (sort.key === 'records' ? s.n : sort.key === 'name' ? s.name.toLowerCase() : sort.key === 'group' ? groupOf(s).toLowerCase() : s.yearMax)
+  return [...list].sort((a, b) => {
+    const x = value(a), y = value(b)
+    if (x == null || y == null) { if (x != null) return -1; if (y != null) return 1 }
+    else if (x !== y) return (x < y ? -1 : 1) * sign
+    return b.n - a.n || a.name.localeCompare(b.name)
+  })
+}
+
+/** the column header click: the same column flips the direction; a new one starts as the table's natural order (records and last year most first, text A to Z) */
+export function nextSort(sort: SpeciesSort, key: SpeciesSort['key']): SpeciesSort {
+  if (sort.key === key) return { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
+  return { key, dir: key === 'name' || key === 'group' ? 'asc' : 'desc' }
+}
+
+const sqlStr = (s: string) => `'${s.replaceAll("'", "''")}'`
+
+/** the Reproduce block's DuckDB query for the place's decade rows (the values behind the counts and the decade table) */
+export const obisValuesSql = (url: string, placeId: string) =>
+  `SELECT * FROM ${sqlStr(url)}\nWHERE place_id = ${sqlStr(placeId)} ORDER BY eov, decade NULLS FIRST;`
+
+/** the Reproduce block's DuckDB query for the species list: the release's species file joined to its names, one row per name key */
+export const obisSpeciesSql = (speciesUrl: string, lookupUrl: string, placeId: string) =>
+  `SELECT s.name_key, any_value(l.species) AS species, sum(s.n) AS records, min(s.year_min) AS year_min, max(s.year_max) AS year_max\n` +
+  `FROM ${sqlStr(speciesUrl)} s\nLEFT JOIN ${sqlStr(lookupUrl)} l USING (aphiaid)\nWHERE s.place_id = ${sqlStr(placeId)}\nGROUP BY s.name_key ORDER BY records DESC;`
+
 /** the list as CSV, one row per species name */
 export function placeSpeciesCsv(placeId: string, list: readonly ObisSpecies[]): string {
   const head = ['place_id', 'aphiaid', 'name_key', 'scientific_name', 'eov', 'class', 'redlist_code', 'records', 'year_min', 'year_max', 'worms_url']

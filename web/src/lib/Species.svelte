@@ -5,7 +5,8 @@
   import CopyButton from './CopyButton.svelte'
   import { atlasHref } from './layers'
   import { placeObisUrl } from './obisLink'
-  import { eovLabel, groupOf, obisLine, obisLinks, placeSpeciesCsv, sdmCsv, sdmLine, speciesCheck, speciesCountLine, speciesCounts, speciesLookupUrl } from './species'
+  import { DEFAULT_SPECIES_SORT, eovLabel, filterSpecies, groupOf, nextSort, obisLine, obisLinks, obisSpeciesSql, obisValuesSql, placeSpeciesCsv, sdmCsv, sdmLine, sortSpecies, speciesCheck, speciesCountLine, speciesCounts, speciesLookupUrl } from './species'
+  import type { SpeciesSort } from './species'
   import type { ObisResult, ObisSpeciesResult, SdmResult } from './speciesRead'
 
   let { placeId, name, geometry, bbox, colls }: {
@@ -17,6 +18,8 @@
   let sdm = $state<{ phase: 'loading' | 'ok' | 'large' | 'error'; r: SdmResult | null; msg: string }>({ phase: 'loading', r: null, msg: '' })
   let all = $state(false)
   let allObis = $state(false)
+  let query = $state('')
+  let sort = $state<SpeciesSort>(DEFAULT_SPECIES_SORT)
   const SHOWN = 20
 
   $effect(() => {
@@ -38,12 +41,15 @@
 
   const links = $derived(bbox ? obisLinks(bbox) : null)
   const mapHref = $derived(placeObisUrl({ placeId, name, bbox }))
-  const sql = $derived(obis.r ? `SELECT * FROM '${obis.r.url}'\nWHERE place_id = '${placeId.replaceAll("'", "''")}' ORDER BY eov, decade NULLS FIRST;` : '')
-  const spSql = $derived(obis.r && osp.r
-    ? `SELECT s.name_key, any_value(l.species) AS species, sum(s.n) AS records, min(s.year_min) AS year_min, max(s.year_max) AS year_max\nFROM '${osp.r.url}' s\nLEFT JOIN '${speciesLookupUrl(obis.r.release)}' l USING (aphiaid)\nWHERE s.place_id = '${placeId.replaceAll("'", "''")}'\nGROUP BY s.name_key ORDER BY records DESC;` : '')
+  const sql = $derived(obis.r ? obisValuesSql(obis.r.url, placeId) : '')
+  const spSql = $derived(obis.r && osp.r ? obisSpeciesSql(osp.r.url, speciesLookupUrl(obis.r.release), placeId) : '')
   const counts = $derived(obis.r && osp.r ? speciesCounts(osp.r.list, obis.r.summary.latest?.decade ?? null) : null)
   const warn = $derived(obis.r && counts ? speciesCheck(counts, obis.r.summary) : null)
-  const obisShown = $derived(osp.r ? (allObis ? osp.r.list : osp.r.list.slice(0, SHOWN)) : [])
+  // the filter and the sort act on the whole list; the first SHOWN of what is left are drawn until "Show all"
+  const matched = $derived(osp.r ? sortSpecies(filterSpecies(osp.r.list, query), sort) : [])
+  const obisShown = $derived(allObis ? matched : matched.slice(0, SHOWN))
+  const arrow = (k: SpeciesSort['key']) => (sort.key === k ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '')
+  const ariaSort = (k: SpeciesSort['key']) => (sort.key === k ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none')
   const obisCsvHref = $derived(osp.r ? URL.createObjectURL(new Blob([placeSpeciesCsv(placeId, osp.r.list)], { type: 'text/csv' })) : '')
   const obisCsvName = $derived(`obis_species_${placeId.replace(/[^\w.-]+/g, '_')}.csv`)
   const kb = (b: number) => (b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.round(b / 1e3)} kB`)
@@ -91,10 +97,18 @@
     {:else}
       <p>{speciesCountLine(counts)}</p>
       {#if warn}<p class="notice" role="status">{warn}</p>{/if}
+      {#if osp.r.list.length > 1}
+        <p class="filter"><label>Filter <input type="search" bind:value={query} placeholder="name, group or IUCN code" aria-controls="obis-species" /></label>
+          {#if query.trim()}<span class="muted" role="status">{int(matched.length)} of {int(osp.r.list.length)}</span>{/if}</p>
+      {/if}
       {#if obisShown.length}
         <div class="scroll">
-          <table class="kv sp osp">
-            <thead><tr><th>Species</th><th>Records</th><th>First–last year</th></tr></thead>
+          <table class="kv sp osp" id="obis-species">
+            <thead><tr>
+              <th aria-sort={ariaSort('name')}><button class="sortb" type="button" onclick={() => (sort = nextSort(sort, 'name'))}>Species{arrow('name')}</button></th>
+              <th aria-sort={ariaSort('records')}><button class="sortb" type="button" onclick={() => (sort = nextSort(sort, 'records'))}>Records{arrow('records')}</button></th>
+              <th aria-sort={ariaSort('last')}><button class="sortb" type="button" onclick={() => (sort = nextSort(sort, 'last'))}>First–last year{arrow('last')}</button></th>
+            </tr></thead>
             <tbody>
               {#each obisShown as s (s.nameKey)}
                 <tr>
@@ -106,9 +120,11 @@
             </tbody>
           </table>
         </div>
+      {:else if query.trim()}
+        <p class="muted">No species match “{query.trim()}”.</p>
       {/if}
       <div class="row">
-        {#if osp.r.list.length > SHOWN}<button class="btn secondary small" type="button" aria-expanded={allObis} onclick={() => (allObis = !allObis)}>{allObis ? `Show the first ${SHOWN}` : `Show all ${int(osp.r.list.length)}`}</button>{/if}
+        {#if matched.length > SHOWN}<button class="btn secondary small" type="button" aria-expanded={allObis} onclick={() => (allObis = !allObis)}>{allObis ? `Show the first ${SHOWN}` : `Show all ${int(matched.length)}`}</button>{/if}
         <a class="btn secondary small" href={obisCsvHref} download={obisCsvName}>Species list (CSV)</a>
         {#if links}<a class="btn secondary small" href={links.mapper} target="_blank" rel="noopener noreferrer">Explore in OBIS ↗</a>
           <a class="btn secondary small" href={links.checklist} target="_blank" rel="noopener noreferrer">OBIS checklist for the box (JSON) ↗</a>{/if}
@@ -178,6 +194,10 @@
   .sp { width: 100%; }
   .sp .n { white-space: nowrap; }
   .osp .grp { display: block; }
+  .filter { margin: 4px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .filter label { display: flex; gap: 8px; align-items: center; flex: 1 1 260px; max-width: 420px; }
+  .sortb { all: unset; cursor: pointer; font-weight: inherit; color: var(--link); }
+  .sortb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .maplink { margin: 4px 0 8px; }
   .repro { font-size: 12.5px; }
   .repro summary { cursor: pointer; color: var(--link); }

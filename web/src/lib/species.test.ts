@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  bboxWkt, byGroup, cellAt, groupOf, groupsHolding, groupsHoldingText, inRings, obisColls, obisLine, obisLinks, obisSummary, parseCellSpecies, placeCells,
-  placeExactUrl, placeSpecies, placeSpeciesCsv, placeSpeciesUrl, sdmCsv, sdmLine, sdmSpecies, speciesCheck, speciesCountLine, speciesCounts,
-  speciesLookupUrl, tilesOf, type CellGrid, type MetaLike, type ObisLookupRow, type ObisRow, type PlaceSpeciesRow,
+  bboxWkt, byGroup, cellAt, filterSpecies, groupOf, groupsHolding, groupsHoldingText, inRings, nextSort, obisColls, obisLine, obisLinks, obisSpeciesSql, obisSummary, obisValuesSql, parseCellSpecies, placeCells,
+  placeExactUrl, placeSpecies, placeSpeciesCsv, placeSpeciesUrl, sdmCsv, sdmLine, sdmSpecies, sortSpecies, speciesCheck, speciesCountLine, speciesCounts,
+  DEFAULT_SPECIES_SORT, speciesLookupUrl, tilesOf, type CellGrid, type MetaLike, type ObisLookupRow, type ObisRow, type PlaceSpeciesRow,
 } from './species'
 
 // ---- OBIS ----
@@ -247,6 +247,76 @@ describe('OBIS exact: the species of the place', () => {
   it('finds the files next to the release', () => {
     expect(placeSpeciesUrl({ base: 'https://x/obis-h3/v1' }, 'places')).toBe('https://x/obis-h3/v1/place_exact/coll=places/species.parquet')
     expect(speciesLookupUrl({ base: 'https://x/obis-h3/v1/' })).toBe('https://x/obis-h3/v1/species/species.parquet')
+  })
+})
+
+// the species table of the Place page: filter, sort, the Reproduce text (parity rows 64 and 70)
+describe('OBIS exact: filter and sort the species table', () => {
+  const list = placeSpecies(spRows, 'SYN:A', spLookup)   // alpha 500 (Teleostei), beta 100 (seabirds, EN), gamma 70 (other), AphiaID 15 1 (no years)
+
+  it('an empty query keeps the whole list in its order, a copy', () => {
+    expect(filterSpecies(list, '  ').map((s) => s.name)).toEqual(list.map((s) => s.name))
+    expect(filterSpecies(list, '')).not.toBe(list)
+  })
+
+  it('matches a fragment of the name, the group or the IUCN code, any case, every word', () => {
+    expect(filterSpecies(list, 'BETA').map((s) => s.nameKey)).toEqual([2])
+    expect(filterSpecies(list, 'seabird').map((s) => s.nameKey)).toEqual([2])
+    expect(filterSpecies(list, 'teleo').map((s) => s.nameKey)).toEqual([1])
+    expect(filterSpecies(list, 'iucn en').map((s) => s.nameKey)).toEqual([2])
+    expect(filterSpecies(list, 'synthetica alpha').map((s) => s.nameKey)).toEqual([1])
+    expect(filterSpecies(list, 'synthetica nothing')).toEqual([])
+  })
+
+  it('records, most first, is the default and the order the list arrives in', () => {
+    expect(DEFAULT_SPECIES_SORT).toEqual({ key: 'records', dir: 'desc' })
+    expect(sortSpecies(list).map((s) => s.n)).toEqual([500, 100, 70, 1])
+    expect(sortSpecies(list, { key: 'records', dir: 'asc' }).map((s) => s.n)).toEqual([1, 70, 100, 500])
+  })
+
+  it('sorts by name and by group, A to Z or Z to A, ignoring case', () => {
+    expect(sortSpecies(list, { key: 'name', dir: 'asc' }).map((s) => s.name)).toEqual(['AphiaID 15', 'Synthetica alpha', 'Synthetica beta', 'Synthetica gamma'])
+    expect(sortSpecies(list, { key: 'name', dir: 'desc' }).map((s) => s.name)[0]).toBe('Synthetica gamma')
+    expect(sortSpecies(list, { key: 'group', dir: 'asc' }).map(groupOf)).toEqual(['other', 'other', 'seabirds', 'Teleostei'])
+  })
+
+  it('sorts by the last year, and a species with no year is last in both directions', () => {
+    expect(sortSpecies(list, { key: 'last', dir: 'desc' }).map((s) => s.yearMax)).toEqual([2024, 2021, 2011, null])
+    expect(sortSpecies(list, { key: 'last', dir: 'asc' }).map((s) => s.yearMax)).toEqual([2011, 2021, 2024, null])
+  })
+
+  it('breaks a tie by records, then the name; leaves its input alone', () => {
+    const before = list.map((s) => s.name)
+    const byGroupAsc = sortSpecies(list, { key: 'group', dir: 'asc' })
+    expect(byGroupAsc.slice(0, 2).map((s) => s.name)).toEqual(['Synthetica gamma', 'AphiaID 15'])   // both "other": 70 records before 1
+    expect(list.map((s) => s.name)).toEqual(before)
+  })
+
+  it('a header click flips the sorted column, and starts a new one in its natural order', () => {
+    expect(nextSort(DEFAULT_SPECIES_SORT, 'records')).toEqual({ key: 'records', dir: 'asc' })
+    expect(nextSort(DEFAULT_SPECIES_SORT, 'name')).toEqual({ key: 'name', dir: 'asc' })
+    expect(nextSort({ key: 'name', dir: 'asc' }, 'name')).toEqual({ key: 'name', dir: 'desc' })
+    expect(nextSort({ key: 'name', dir: 'asc' }, 'last')).toEqual({ key: 'last', dir: 'desc' })
+    expect(nextSort({ key: 'name', dir: 'asc' }, 'group')).toEqual({ key: 'group', dir: 'asc' })
+  })
+})
+
+describe('the Reproduce text of the Species section', () => {
+  const base = 'https://x/obis-h3/v1/'
+  it('names the values file and the place, in order of eov and decade', () => {
+    expect(obisValuesSql(placeExactUrl({ base }, 'sanctuaries'), 'NMS:CINMS')).toBe(
+      "SELECT * FROM 'https://x/obis-h3/v1/place_exact/coll=sanctuaries/indicators.parquet'\nWHERE place_id = 'NMS:CINMS' ORDER BY eov, decade NULLS FIRST;")
+  })
+  it('names the species file, the names file and the place, one row per name key, most records first', () => {
+    const sql = obisSpeciesSql(placeSpeciesUrl({ base }, 'sanctuaries'), speciesLookupUrl({ base }), 'NMS:CINMS')
+    expect(sql).toContain("FROM 'https://x/obis-h3/v1/place_exact/coll=sanctuaries/species.parquet' s")
+    expect(sql).toContain("LEFT JOIN 'https://x/obis-h3/v1/species/species.parquet' l USING (aphiaid)")
+    expect(sql).toContain("WHERE s.place_id = 'NMS:CINMS'")
+    expect(sql).toContain('GROUP BY s.name_key ORDER BY records DESC;')
+  })
+  it('doubles a quote in a place id, so an id cannot end the string', () => {
+    expect(obisValuesSql('https://x/f.parquet', "A'B")).toContain("place_id = 'A''B'")
+    expect(obisSpeciesSql('https://x/s.parquet', 'https://x/l.parquet', "A'B")).toContain("s.place_id = 'A''B'")
   })
 })
 
