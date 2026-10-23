@@ -52,3 +52,28 @@ export function preconditionStatus(headers: Headers, etag: string): 304 | 412 | 
   }
   return null
 }
+
+/** If-Range (RFC 9110 13.1.5): may the Range be honoured? An entity tag compares strongly with the current ETag (a weak
+ *  one never matches); an HTTP date must equal Last-Modified. Absent header: yes. A mismatch means the full 200. */
+export function ifRangeAllows(headers: Headers, etag: string, lastModified: string): boolean {
+  const v = headers.get('if-range')?.trim()
+  if (!v) return true
+  if (v.startsWith('W/')) return false
+  if (v.startsWith('"')) return v === etag
+  const t = Date.parse(v)
+  return !Number.isNaN(t) && t === Date.parse(lastModified)
+}
+
+/** all four preconditions against a stored ETag and Last-Modified (what R2's `onlyIf` evaluates, for a response that
+ *  does not come from R2): If-Match / If-None-Match first, the dates only when the matching tag header is absent */
+export function conditionalStatus(headers: Headers, etag: string, lastModified: string): 304 | 412 | null {
+  const tag = preconditionStatus(headers, etag)
+  if (tag) return tag
+  const lm = Date.parse(lastModified)
+  if (Number.isNaN(lm)) return null
+  const ius = headers.get('if-unmodified-since')
+  if (ius && !headers.has('if-match') && !Number.isNaN(Date.parse(ius)) && lm > Date.parse(ius)) return 412
+  const ims = headers.get('if-modified-since')
+  if (ims && !headers.has('if-none-match') && !Number.isNaN(Date.parse(ims)) && lm <= Date.parse(ims)) return 304
+  return null
+}

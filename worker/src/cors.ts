@@ -1,7 +1,7 @@
 // CORS ----
 
 export const ALLOW_HEADERS  = 'range, if-match, if-none-match'
-export const EXPOSE_HEADERS = 'etag, content-range, accept-ranges, content-length, link, retry-after, x-om-usage, x-om-warn'
+export const EXPOSE_HEADERS = 'etag, content-range, accept-ranges, content-length, link, retry-after, x-om-usage, x-om-warn, x-om-cache'
 
 /** does `origin` match any allow-list pattern? `*` alone matches anything; `*` inside a pattern is a wildcard. */
 export function originAllowed(origin: string, patterns: string[] | undefined): boolean {

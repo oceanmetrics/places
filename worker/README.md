@@ -50,16 +50,65 @@ multi-range and malformed `Range` are ignored per RFC 9110, giving a 200); suffi
 duckdb-wasm's reliable-HEAD check needs); `ETag` passthrough, `If-Match` (412) and `If-None-Match` (304). CORS is on every
 response including 403/429/404/416: `Access-Control-Allow-Origin` is the request Origin when a valid key's allow-list matches
 (with `Vary: Origin`), otherwise `*`; allows `range, if-match, if-none-match`; exposes
-`etag, content-range, accept-ranges, content-length, link, retry-after, x-om-usage, x-om-warn`. Gazetteer responses
+`etag, content-range, accept-ranges, content-length, link, retry-after, x-om-usage, x-om-warn, x-om-cache`. Gazetteer responses
 (public and unlisted) carry `Link: <https://storage.oceanmetrics.io/gazetteer/credits>; rel="license"` (upload an object at
 `gazetteer/credits`); another prefix carries `Link: <.../<prefix>/index/credits>` only when that object exists (looked up
 once per isolate per 10 minutes), and the root files none. `Content-Type` is the stored one unless it is missing or generic
 (`application/octet-stream`, `binary/octet-stream`), then the extension guess (`.pmtiles` is `application/vnd.pmtiles`,
-`.tif` `image/tiff`, `.parquet` `application/vnd.apache.parquet`). `Cache-Control` defaults to 60 s for json and html,
-300 s otherwise.
-`If-Range` is not implemented (neither client sends it).
+`.tif` `image/tiff`, `.parquet` `application/vnd.apache.parquet`). `Cache-Control` is the stored one, else 60 s for json
+and html and 300 s otherwise; an immutable key (next section) always gets `public, max-age=31536000, immutable`.
+`If-Range` (since 2026-10-23): a Range with an `If-Range` that is not the current strong ETag or the exact
+`Last-Modified` date is answered with the whole 200.
 
 Keys are low-grade, rotatable attribution keys, not secrets: they sit in URLs, history and logs.
+
+## Edge cache
+
+R2 is in ENAM, so a reader in Europe paid a transatlantic round trip on every request (the atlas Cell pane's one 200 KB
+range took 0.19 to 0.85 s from Italy). Objects whose key names their content are now kept at the Cloudflare data center
+that served them (`src/edge.ts`, the Cache API `caches.default`).
+
+Which keys: `isImmutable(key, store)` in `src/paths.ts`, a pure function with a table of cases in `test/edge.test.ts`.
+Only public data files (`.parquet`, `.pmtiles`, `.tif`/`.tiff`, `.fgb`), and only these layouts (read from the bucket
+on 2026-10-23):
+
+| immutable | why |
+|---|---|
+| `obis-h3/v<digits>/**` | a release folder (`v20261012/species_flat/res=3/p=<cell>.parquet`, `files.parquet`) |
+| `marine-atlas/**/<hash>.tif\|.pmtiles`, `marine-atlas/**/<hash>_3857.tif` | content-addressed (`cog/`, `native/`, `cog_3857/`, `v7/cog_3857/`; the marine-atlas README) |
+| `atlas/<collection>/**/v<digits>/**` | a versioned folder below the collection (`aquamaps_native/registry/v2/registry.parquet`) |
+| `basemap/<set>/**/v<digits>/**` | a versioned folder; **none exists yet** |
+
+Never: any JSON or other metadata type (`latest.json`, `collection.json`, `release.json`, `catalog.json`, `layers.json`,
+`indicators.json`, `changes/latest.json`, the `feeds/` Atom files), `_history/`, `gazetteer/` (`<slug>/places.parquet` is
+replaced per version; there is no `<slug>/<semver>/` folder), `basemap/gebco/*.pmtiles` and `basemap/osm/land.pmtiles`
+(`build_gebco.sh` rebuilds them in place under the same names), `indicators/`, `issues/`, the root files,
+`atlas-restricted/` and the whole unlisted bucket. These keep their headers above.
+
+**The contract for publishers**: a key that matches is never rewritten with other bytes. An amendment adds files or
+starts a new version folder (`obis-h3/v<next>/`). The release `v20261012` was amended in place twice on 2026-10-23
+(obisindicators 0.11 and 0.12) before this cache existed; after it, a browser keeps such a file for a year. A mistake at
+the edge is fixable (Cloudflare dashboard, Caching > Purge, by URL: the cache key is the public URL without the query,
+`https://storage.oceanmetrics.io/<key>`, or Purge Everything); a browser's copy is not.
+
+How (for an immutable key, after the key, Origin, limit and cap checks, which are unchanged; so a copy is only ever
+served to a request that passed them, and every hit writes its Analytics Engine row like any other response):
+
+- The response carries `Cache-Control: public, max-age=31536000, immutable` and `X-OM-Cache: hit | miss | pass`
+  (exposed to CORS). `cf-cache-status` is not set: Cloudflare does not cache a Worker's own responses.
+- Lookup of the whole object under its public URL. A hit answers GET and HEAD from the copy: `If-None-Match`/`If-Match`
+  and the date preconditions, `If-Range`, single ranges (open-ended, suffix, 416) sliced from the copy, the same
+  headers as from R2, CORS applied after (so the echoed Origin of a key is never stored).
+- A miss answers from R2 as before. When the object is at most `EDGE_CACHE_MAX_BYTES` (8 MiB) the whole object is
+  stored after the response (`ctx.waitUntil`): an un-ranged GET tees its body into the cache, a ranged GET or a HEAD
+  fetches the whole object from R2 in the background (skipped if its ETag changed; one fill per key per isolate).
+- Over the cap: ranges pass through to R2 every time (`X-OM-Cache: pass`), with the immutable header, so only the
+  browser keeps them.
+- Off on the workers.dev preview (its Cache API stores nothing, so a fill would only add R2 reads): the preview sends
+  the immutable header and `X-OM-Cache: pass`, and its timings are the R2 baseline.
+
+The cache is per data center and Cloudflare evicts what is not read, so the first reader of a file at a data center
+pays the R2 round trip and the next ones do not.
 
 ## Metering
 
@@ -85,7 +134,7 @@ Consequence: a cap is enforced with up to ~15 minutes of lag, and it is a billin
 ```sh
 cd worker
 npm install
-npm test            # vitest + @cloudflare/vitest-plugin (workerd via miniflare), 139 tests
+npm test            # vitest + @cloudflare/vitest-plugin (workerd via miniflare), 221 tests
 npm run typecheck
 ```
 

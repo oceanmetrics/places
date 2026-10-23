@@ -1,8 +1,9 @@
 // storage front: keys, CORS, ranges, metering over the R2 buckets ----
 import type { Env, KeyConfig } from './env'
 import { applyCors, originAllowed } from './cors'
-import { classify, creditsKey, GENERIC_TYPES, guessContentType, LICENSE_LINK, SERVED_MESSAGE, target } from './paths'
-import { parseRange, preconditionStatus, resolveRange, type ByteRange } from './range'
+import { classify, creditsKey, GENERIC_TYPES, guessContentType, isImmutable, LICENSE_LINK, SERVED_MESSAGE, target } from './paths'
+import { conditionalStatus, ifRangeAllows, parseRange, preconditionStatus, resolveRange, type ByteRange } from './range'
+import { CACHE_STATUS_HEADER, EDGE_CACHE_MAX_BYTES, IMMUTABLE_CACHE_CONTROL, lookup, SIZE_HEADER, storeCopy, type Edge } from './edge'
 import { evaluateCap, getUsage, rollupUsage, secondsToNextMonth, writeMetric, type Metric } from './meter'
 
 const KEY_RE        = /^[A-Za-z0-9_-]{8,64}$/
@@ -35,8 +36,25 @@ function firstSegment(pathname: string): string {
   return p.replace(/^\/+/, '').split('/')[0].slice(0, 64)
 }
 
+/** what `handle` needs from the runtime besides the bindings: the request's `waitUntil` and the Cache API cache
+ *  (default `caches.default`). Without a ctx the edge cache is off (the immutable header still applies). */
+export interface HandleOptions {
+  ctx?:   Pick<ExecutionContext, 'waitUntil'>
+  cache?: Cache | null
+}
+
+/** the edge cache for this request, or null: off without a ctx or Cache API, and on the workers.dev preview (its Cache
+ *  API stores nothing, so a fill would only add R2 reads) */
+function edgeFor(url: URL, opts: HandleOptions): Edge | null {
+  if (!opts.ctx || url.hostname.endsWith('.workers.dev')) return null
+  const cache = opts.cache !== undefined ? opts.cache : (typeof caches !== 'undefined' ? caches.default : null)
+  if (!cache) return null
+  const ctx = opts.ctx
+  return { cache, waitUntil: p => ctx.waitUntil(p) }
+}
+
 /** the whole request flow; `now` is injectable for tests */
-export async function handle(request: Request, env: Env, now: Date = new Date()): Promise<Response> {
+export async function handle(request: Request, env: Env, now: Date = new Date(), opts: HandleOptions = {}): Promise<Response> {
   const url    = new URL(request.url)
   const origin = request.headers.get('origin') ?? ''
   const m: Metric = { key: '', app: '', cls: 'other', origin, tier: 'open', method: request.method, path: url.pathname, status: 0, bytes: 0,
@@ -130,7 +148,10 @@ export async function handle(request: Request, env: Env, now: Date = new Date())
   }
 
   // object (serve() reclassifies m.cls to `fullfile` for a flagged un-ranged parquet read) ----
-  const served = await serve(request, bucket, objKey, m, env, await linkP)
+  // immutable keys (public data whose key names its content) go through the edge cache; key and limit checks are above,
+  // so a copy is only ever served to a request that passed them, and the unlisted bucket is never cached
+  const immutable = isImmutable(objKey, t.store)
+  const served = await serve(request, bucket, objKey, m, env, await linkP, immutable, immutable ? edgeFor(url, opts) : null)
   // anonymous full-file reads (flagged by serve) draw on their own, lower budget on top of the general one
   if (m.tier === 'anonymous' && (m.cls as string) === 'fullfile' && env.ANON_FULLFILE_LIMITER) {
     const ip = request.headers.get('cf-connecting-ip') ?? 'unknown'
@@ -149,13 +170,14 @@ export async function handle(request: Request, env: Env, now: Date = new Date())
 
 interface Served { res: Response, bytes: number }
 
-function baseHeaders(obj: R2Object, objKey: string, link: string | null): Headers {
+function baseHeaders(obj: R2Object, objKey: string, link: string | null, immutable = false): Headers {
   const h = new Headers()
   obj.writeHttpMetadata(h)
   // a missing or generic stored type (rclone's octet-stream) gives way to the extension guess
   const stored = (h.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
   if (!stored || GENERIC_TYPES.has(stored)) h.set('content-type', guessContentType(objKey))
-  if (!h.has('cache-control')) h.set('cache-control', /\.(json|html)$/i.test(objKey) ? 'public, max-age=60' : 'public, max-age=300')
+  if (immutable) h.set('cache-control', IMMUTABLE_CACHE_CONTROL)
+  else if (!h.has('cache-control')) h.set('cache-control', /\.(json|html)$/i.test(objKey) ? 'public, max-age=60' : 'public, max-age=300')
   h.set('etag', obj.httpEtag)
   h.set('accept-ranges', 'bytes')
   h.set('last-modified', obj.uploaded.toUTCString())
@@ -174,16 +196,78 @@ function unsatisfiable(size: number): Served {
   return { res: new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}`, 'accept-ranges': 'bytes' } }), bytes: 0 }
 }
 
-async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metric, env: Env, link: string | null): Promise<Served> {
+/** the un-ranged duckdb-wasm >= 1.30 whole-file signature is observable, not blocked
+ *  (an unlisted parquet keeps its `unlisted` class but gets the same warning) */
+function flagFullFile(m: Metric, env: Env, objKey: string, size: number, h: Headers): void {
+  const limit = Number(env.FULLFILE_BYTES ?? FULLFILE_DEFAULT)
+  if ((m.cls === 'parquet' || (m.cls === 'unlisted' && objKey.toLowerCase().endsWith('.parquet'))) && size > limit) {
+    if (m.cls === 'parquet') m.cls = 'fullfile'
+    h.set('x-om-warn', 'full-file-read; send a Range header (duckdb-wasm >=1.30: db.open({filesystem:{forceFullHTTPReads:false}}))')
+  }
+}
+
+/** a GET or HEAD answered from the edge copy: the same preconditions, If-Range, Range and headers as from R2 */
+async function fromCopy(request: Request, copy: Response, objKey: string, m: Metric, env: Env, link: string | null): Promise<Served> {
+  const h = new Headers(copy.headers)
+  const size = Number(h.get(SIZE_HEADER))
+  h.delete(SIZE_HEADER)
+  h.set('cache-control', IMMUTABLE_CACHE_CONTROL)
+  h.set(CACHE_STATUS_HEADER, 'hit')
+  if (link) h.set('link', link); else h.delete('link')
+  const etag = h.get('etag') ?? ''
+  const lastModified = h.get('last-modified') ?? ''
+  const drop = async () => { await copy.body?.cancel() }
+
+  const pre = conditionalStatus(request.headers, etag, lastModified)
+  if (pre) { await drop(); h.delete('content-length'); return { res: new Response(null, { status: pre, headers: h }), bytes: 0 } }
+
+  let range = parseRange(request.headers.get('range'))
+  if (range && !ifRangeAllows(request.headers, etag, lastModified)) range = null
   const isHead = request.method === 'HEAD'
-  const range  = parseRange(request.headers.get('range'))
+  if (range) {
+    const r = resolveRange(range, size)
+    if (r === 'unsatisfiable') { await drop(); return unsatisfiable(size) }
+    const len = r.end - r.start + 1
+    h.set('content-range', `bytes ${r.start}-${r.end}/${size}`)
+    h.set('content-length', String(len))
+    if (isHead) { await drop(); return { res: new Response(null, { status: 206, headers: h }), bytes: 0 } }
+    const buf = await copy.arrayBuffer()
+    return { res: new Response(buf.slice(r.start, r.end + 1), { status: 206, headers: h }), bytes: len }
+  }
+  h.set('content-length', String(size))
+  if (isHead) { await drop(); return { res: new Response(null, { status: 200, headers: h }), bytes: 0 } }
+  flagFullFile(m, env, objKey, size, h)
+  return { res: new Response(copy.body, { status: 200, headers: h }), bytes: size }
+}
+
+async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metric, env: Env, link: string | null,
+  immutable = false, edge: Edge | null = null): Promise<Served> {
+  const isHead = request.method === 'HEAD'
+  let range    = parseRange(request.headers.get('range'))
+
+  if (edge) {
+    const copy = await lookup(edge, objKey)
+    if (copy) return fromCopy(request, copy, objKey, m, env, link)
+  }
+  // edge status of an R2 answer for an immutable key; a copy is stored after the response for an object within the cap
+  const cacheStatus = (size: number): string => edge && size <= EDGE_CACHE_MAX_BYTES ? 'miss' : 'pass'
+  const fillLater = (obj: R2Object, h: Headers) => {
+    if (edge && obj.size <= EDGE_CACHE_MAX_BYTES) storeCopy(edge, objKey, h, obj.size, async () => {
+      const full = await bucket.get(objKey)
+      if (!full || !('body' in full)) return null
+      if (full.httpEtag !== obj.httpEtag) { await full.body.cancel(); return null }   // replaced meanwhile: no copy
+      return full.body
+    })
+  }
 
   if (isHead) {
     const obj = await bucket.head(objKey)
     if (!obj) return notFound()
-    const h = baseHeaders(obj, objKey, link)
+    const h = baseHeaders(obj, objKey, link, immutable)
+    if (immutable) { h.set(CACHE_STATUS_HEADER, cacheStatus(obj.size)); fillLater(obj, h) }
     const pre = preconditionStatus(request.headers, obj.httpEtag)
     if (pre) return { res: new Response(null, { status: pre, headers: h }), bytes: 0 }
+    if (range && !ifRangeAllows(request.headers, obj.httpEtag, obj.uploaded.toUTCString())) range = null
     if (range) {
       const r = resolveRange(range, obj.size)
       if (r === 'unsatisfiable') return unsatisfiable(obj.size)
@@ -193,6 +277,12 @@ async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metr
     }
     h.set('content-length', String(obj.size))
     return { res: new Response(null, { status: 200, headers: h }), bytes: 0 }
+  }
+
+  // If-Range: R2 does not evaluate it, so a ranged request carrying one checks the validator first
+  if (range && request.headers.has('if-range')) {
+    const head = await bucket.head(objKey)
+    if (head && !ifRangeAllows(request.headers, head.httpEtag, head.uploaded.toUTCString())) range = null
   }
 
   let obj: R2Object | R2ObjectBody | null
@@ -206,7 +296,8 @@ async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metr
   }
   if (!obj) return notFound()
 
-  const h = baseHeaders(obj, objKey, link)
+  const h = baseHeaders(obj, objKey, link, immutable)
+  if (immutable) h.set(CACHE_STATUS_HEADER, cacheStatus(obj.size))
   if (!('body' in obj)) {
     // precondition failed inside R2: say which one
     const pre = preconditionStatus(request.headers, obj.httpEtag) ?? 304
@@ -221,23 +312,25 @@ async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metr
     const len = r.end - r.start + 1
     h.set('content-range', `bytes ${r.start}-${r.end}/${obj.size}`)
     h.set('content-length', String(len))
+    if (immutable) fillLater(obj, h)
     return { res: new Response(obj.body, { status: 206, headers: h }), bytes: len }
   }
 
-  // un-ranged: the duckdb-wasm >= 1.30 whole-file signature is observable, not blocked
-  // (an unlisted parquet keeps its `unlisted` class but gets the same warning)
-  const limit = Number(env.FULLFILE_BYTES ?? FULLFILE_DEFAULT)
-  if ((m.cls === 'parquet' || (m.cls === 'unlisted' && objKey.toLowerCase().endsWith('.parquet'))) && obj.size > limit) {
-    if (m.cls === 'parquet') m.cls = 'fullfile'
-    h.set('x-om-warn', 'full-file-read; send a Range header (duckdb-wasm >=1.30: db.open({filesystem:{forceFullHTTPReads:false}}))')
-  }
   h.set('content-length', String(obj.size))
-  return { res: new Response(obj.body, { status: 200, headers: h }), bytes: obj.size }
+  flagFullFile(m, env, objKey, obj.size, h)
+  let body: ReadableStream = obj.body
+  if (immutable && edge && obj.size <= EDGE_CACHE_MAX_BYTES) {
+    // the whole object is already on its way: one branch to the client, one into the cache
+    const [toClient, toCache] = obj.body.tee()
+    body = toClient
+    storeCopy(edge, objKey, h, obj.size, toCache)
+  }
+  return { res: new Response(body, { status: 200, headers: h }), bytes: obj.size }
 }
 
 export default {
-  fetch(request: Request, env: Env): Promise<Response> {
-    return handle(request, env)
+  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    return handle(request, env, new Date(), { ctx })
   },
   // cron: */15 * * * *  (monthly byte totals into KV; stub until the Cloudflare account exists)
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {

@@ -120,3 +120,39 @@ export function guessContentType(key: string): string {
 
 /** stored content types that say nothing; the extension guess replaces them */
 export const GENERIC_TYPES = new Set(['application/octet-stream', 'binary/octet-stream'])
+
+// immutable keys (the edge cache) ----
+
+/** data types that may be immutable; JSON, html, md, txt, csv, xml/atom (catalogs, manifests, feeds) never are */
+export const IMMUTABLE_EXT = new Set(['parquet', 'pmtiles', 'tif', 'tiff', 'fgb'])
+
+/** a content-addressed marine-atlas file name: the hash, optionally `_3857` (the Web Mercator copy of the same hash) */
+const HASH_NAME = /^[0-9a-f]{16,64}(_3857)?\.(tif|tiff|pmtiles)$/
+
+/** a release or schema version folder: `v20261012`, `v2` */
+const VERSION_DIR = /^v\d+$/
+
+/** may this object be served with `Cache-Control: public, max-age=31536000, immutable` and kept in the edge cache?
+ *  Only public data files whose key names their content, from the catalogs' publish layouts (2026-10-23):
+ *    obis-h3/v<digits>/**             a release folder (`obis-h3/v20261012/species_flat/res=3/p=<cell>.parquet`)
+ *    marine-atlas/**\/<hash>.tif|pmtiles, <hash>_3857.tif   content-addressed (`cog/`, `native/`, `cog_3857/`, `v7/cog_3857/`)
+ *    atlas/<collection>/**\/v<digits>/**  a versioned folder below the collection (`aquamaps_native/registry/v2/registry.parquet`)
+ *    basemap/<set>/**\/v<digits>/**      a versioned folder (none yet: `basemap/gebco/core.pmtiles` is rebuilt in place)
+ *  Never: any JSON or other metadata type (`latest.json`, `collection.json`, `release.json`, `layers.json`, feeds),
+ *  `_history/`, `gazetteer/` (`<slug>/places.parquet` is replaced per version, no version folder), `indicators/`,
+ *  `issues/`, the root files, `atlas-restricted/` and the unlisted bucket. The contract this sets for publishers: a key
+ *  that matches is never rewritten with other bytes (an amendment adds files or starts a new version folder). */
+export function isImmutable(key: string, store: Store = 'public'): boolean {
+  if (store !== 'public') return false
+  const segs = key.split('/')
+  if (segs.length < 3 || segs.some(s => s === '' || s === '_history')) return false
+  if (!IMMUTABLE_EXT.has(extOf(key))) return false
+  const dirs = segs.slice(1, -1)
+  switch (segs[0]) {
+    case 'obis-h3':      return VERSION_DIR.test(segs[1])
+    case 'marine-atlas': return HASH_NAME.test(segs[segs.length - 1])
+    case 'atlas':
+    case 'basemap':      return dirs.slice(1).some(d => VERSION_DIR.test(d))
+    default:             return false
+  }
+}
