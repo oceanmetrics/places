@@ -1,25 +1,35 @@
 <script lang="ts">
-  // the Species section: OBIS records counted on the place's own polygon (the obis-h3 release's place_exact), and the
-  // AquaMaps species suitable in the place's 0.05 degree cells (the atlas's `atlas:cell_species` tiles). the rules are
+  // the Species section: OBIS records and species counted on the place's own polygon (the obis-h3 release's place_exact:
+  // indicators.parquet and the per-species species.parquet), and the AquaMaps species suitable in the place's 0.05 degree cells (the atlas's `atlas:cell_species` tiles). the rules are
   // species.ts (tested); the reads are speciesRead.ts, a lazy chunk. this only draws.
   import CopyButton from './CopyButton.svelte'
   import { atlasHref } from './layers'
-  import { eovLabel, obisLine, obisLinks, sdmCsv, sdmLine } from './species'
-  import type { ObisResult, SdmResult } from './speciesRead'
+  import { eovLabel, groupOf, obisLine, obisLinks, placeSpeciesCsv, sdmCsv, sdmLine, speciesCheck, speciesCountLine, speciesCounts, speciesLookupUrl } from './species'
+  import type { ObisResult, ObisSpeciesResult, SdmResult } from './speciesRead'
 
   let { placeId, name, geometry, bbox, colls }: {
     placeId: string; name: string; geometry: { type: string; coordinates: unknown } | null; bbox: number[] | null; colls: string[]
   } = $props()
 
   let obis = $state<{ phase: 'loading' | 'ok' | 'none' | 'error'; r: ObisResult | null; msg: string }>({ phase: 'loading', r: null, msg: '' })
+  let osp = $state<{ phase: 'loading' | 'ok' | 'none' | 'error'; r: ObisSpeciesResult | null; msg: string }>({ phase: 'loading', r: null, msg: '' })
   let sdm = $state<{ phase: 'loading' | 'ok' | 'large' | 'error'; r: SdmResult | null; msg: string }>({ phase: 'loading', r: null, msg: '' })
   let all = $state(false)
+  let allObis = $state(false)
   const SHOWN = 20
 
   $effect(() => {
     const id = placeId, cs = colls, g = geometry
     void import('./speciesRead').then((m) => {
-      m.readObis(id, cs).then((r) => { obis = { phase: r ? 'ok' : 'none', r, msg: '' } }).catch((e) => { obis = { phase: 'error', r: null, msg: String(e?.message ?? e) } })
+      osp = { phase: 'loading', r: null, msg: '' }
+      m.readObis(id, cs).then((r) => {
+        obis = { phase: r ? 'ok' : 'none', r, msg: '' }
+        if (!r) return
+        // the exact list of the same release and collection as the counts above
+        m.readObisSpecies(r.release, r.coll, id)
+          .then((l) => { osp = { phase: l ? 'ok' : 'none', r: l, msg: '' } })
+          .catch((e) => { osp = { phase: 'error', r: null, msg: String(e?.message ?? e) } })
+      }).catch((e) => { obis = { phase: 'error', r: null, msg: String(e?.message ?? e) } })
       if (!g) { sdm = { phase: 'large', r: null, msg: '' }; return }
       m.readSdm(g).then((r) => { sdm = r ? { phase: 'ok', r, msg: '' } : { phase: 'large', r: null, msg: '' } }).catch((e) => { sdm = { phase: 'error', r: null, msg: String(e?.message ?? e) } })
     })
@@ -27,6 +37,14 @@
 
   const links = $derived(bbox ? obisLinks(bbox) : null)
   const sql = $derived(obis.r ? `SELECT * FROM '${obis.r.url}'\nWHERE place_id = '${placeId.replaceAll("'", "''")}' ORDER BY eov, decade NULLS FIRST;` : '')
+  const spSql = $derived(obis.r && osp.r
+    ? `SELECT s.name_key, any_value(l.species) AS species, sum(s.n) AS records, min(s.year_min) AS year_min, max(s.year_max) AS year_max\nFROM '${osp.r.url}' s\nLEFT JOIN '${speciesLookupUrl(obis.r.release)}' l USING (aphiaid)\nWHERE s.place_id = '${placeId.replaceAll("'", "''")}'\nGROUP BY s.name_key ORDER BY records DESC;` : '')
+  const counts = $derived(obis.r && osp.r ? speciesCounts(osp.r.list, obis.r.summary.latest?.decade ?? null) : null)
+  const warn = $derived(obis.r && counts ? speciesCheck(counts, obis.r.summary) : null)
+  const obisShown = $derived(osp.r ? (allObis ? osp.r.list : osp.r.list.slice(0, SHOWN)) : [])
+  const obisCsvHref = $derived(osp.r ? URL.createObjectURL(new Blob([placeSpeciesCsv(placeId, osp.r.list)], { type: 'text/csv' })) : '')
+  const obisCsvName = $derived(`obis_species_${placeId.replace(/[^\w.-]+/g, '_')}.csv`)
+  const kb = (b: number) => (b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.round(b / 1e3)} kB`)
   const csvHref = $derived(sdm.r ? URL.createObjectURL(new Blob([sdmCsv(placeId, sdm.r.species)], { type: 'text/csv' })) : '')
   const csvName = $derived(`aquamaps_species_${placeId.replace(/[^\w.-]+/g, '_')}.csv`)
   const shown = $derived(sdm.r ? (all ? sdm.r.species : sdm.r.species.slice(0, SHOWN)) : [])
@@ -58,14 +76,54 @@
     {/if}
     {#if s.byEov.length}<p class="muted">By EOV group, every year: {s.byEov.map((e) => `${eovLabel(e.eov)} ${int(e.sp)} species`).join(', ')}.</p>{/if}
     <p class="muted">Counted point-in-polygon on this place's own boundary (exact, not by hexagon) from obis-h3 release {obis.r.release.release}
-      (OBIS snapshot {obis.r.release.obis_snapshot ?? '–'}, WoRMS {obis.r.release.worms_version ?? '–'}). The list of species by name is not in the release:
-      {#if links}<a href={links.mapper} target="_blank" rel="noopener noreferrer">the OBIS mapper for the place's box ↗</a> ·
-        <a href={links.checklist} target="_blank" rel="noopener noreferrer">the OBIS checklist for the box (JSON) ↗</a>{/if}</p>
+      (OBIS snapshot {obis.r.release.obis_snapshot ?? '–'}, WoRMS {obis.r.release.worms_version ?? '–'}).</p>
+
+    <h4>Species with records in the place</h4>
+    {#if osp.phase === 'loading'}
+      <p class="muted loading" aria-live="polite">Reading the species list…</p>
+    {:else if osp.phase === 'error'}
+      <p class="notice">The species list of the release could not be read: {osp.msg}</p>
+    {:else if osp.phase === 'none' || !osp.r || !counts}
+      <p class="notice">The release has no species file for this collection yet ({obis.r.coll}).</p>
+    {:else}
+      <p>{speciesCountLine(counts)}</p>
+      {#if warn}<p class="notice" role="status">{warn}</p>{/if}
+      {#if obisShown.length}
+        <div class="scroll">
+          <table class="kv sp osp">
+            <thead><tr><th>Species</th><th>Records</th><th>First–last year</th></tr></thead>
+            <tbody>
+              {#each obisShown as s (s.nameKey)}
+                <tr>
+                  <td><a href={s.worms} target="_blank" rel="noopener noreferrer"><i>{s.name}</i></a><span class="muted grp">{groupOf(s)}{#if s.redlist}{' · '}IUCN {s.redlist}{/if}</span></td>
+                  <td class="n">{int(s.n)}</td>
+                  <td class="n">{s.yearMin == null ? '–' : s.yearMin === s.yearMax ? s.yearMin : `${s.yearMin}–${s.yearMax ?? ''}`}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+      <div class="row">
+        {#if osp.r.list.length > SHOWN}<button class="btn secondary small" type="button" aria-expanded={allObis} onclick={() => (allObis = !allObis)}>{allObis ? `Show the first ${SHOWN}` : `Show all ${int(osp.r.list.length)}`}</button>{/if}
+        <a class="btn secondary small" href={obisCsvHref} download={obisCsvName}>Species list (CSV)</a>
+        {#if links}<a class="btn secondary small" href={links.mapper} target="_blank" rel="noopener noreferrer">Explore in OBIS ↗</a>
+          <a class="btn secondary small" href={links.checklist} target="_blank" rel="noopener noreferrer">OBIS checklist for the box (JSON) ↗</a>{/if}
+      </div>
+      <p class="muted">Ranked by records; a name that carries several AphiaIDs is one species, as in the counts above. The group is the OBIS class (the release's species table has no EOV group or red list code yet).
+        Read {kb(osp.r.rowBytes)} of the {obis.r.coll} species file ({osp.r.groupsRead} of {osp.r.groups} row {osp.r.groups === 1 ? 'group' : 'groups'}) and {kb(osp.r.lookupBytes)} of the species names.
+        The OBIS mapper and checklist are for the place's box, not its boundary.</p>
+    {/if}
     <details class="repro">
       <summary>Reproduce</summary>
       <p><span class="muted">Values:</span> <a href={obis.r.url}>{obis.r.url}</a></p>
       <pre><code>{sql}</code></pre>
       <p><CopyButton text={sql} label="Copy DuckDB SQL" /></p>
+      {#if spSql}
+        <p><span class="muted">Species:</span> <a href={osp.r?.url}>{osp.r?.url}</a></p>
+        <pre><code>{spSql}</code></pre>
+        <p><CopyButton text={spSql} label="Copy species SQL" /></p>
+      {/if}
     </details>
   {/if}
 
@@ -108,6 +166,7 @@
 
 <style>
   h3 { margin: 12px 0 4px; font-size: 1rem; }
+  h4 { margin: 12px 0 4px; font-size: .95rem; }
   .scroll { overflow-x: auto; max-width: 100%; }
   .dec, .sp { font-size: 13px; }
   .dec { width: auto; }
@@ -115,6 +174,7 @@
   .dec td, .sp td { overflow-wrap: anywhere; }
   .sp { width: 100%; }
   .sp .n { white-space: nowrap; }
+  .osp .grp { display: block; }
   .repro { font-size: 12.5px; }
   .repro summary { cursor: pointer; color: var(--link); }
   .repro pre { white-space: pre-wrap; overflow-wrap: anywhere; }

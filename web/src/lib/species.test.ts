@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  bboxWkt, byGroup, cellAt, groupsHolding, inRings, obisColls, obisLine, obisLinks, obisSummary, parseCellSpecies, placeCells,
-  placeExactUrl, sdmCsv, sdmLine, sdmSpecies, tilesOf, type CellGrid, type MetaLike, type ObisRow,
+  bboxWkt, byGroup, cellAt, groupOf, groupsHolding, groupsHoldingText, inRings, obisColls, obisLine, obisLinks, obisSummary, parseCellSpecies, placeCells,
+  placeExactUrl, placeSpecies, placeSpeciesCsv, placeSpeciesUrl, sdmCsv, sdmLine, sdmSpecies, speciesCheck, speciesCountLine, speciesCounts,
+  speciesLookupUrl, tilesOf, type CellGrid, type MetaLike, type ObisLookupRow, type ObisRow, type PlaceSpeciesRow,
 } from './species'
 
 // ---- OBIS ----
@@ -157,5 +158,113 @@ describe('the AquaMaps species of the place', () => {
     expect([h.tileTemplate, h.lookupUrl, h.tileDeg, h.keyColumn]).toEqual(['https://x/atlas/aquamaps_eov/cell_species/tile={tile}/data_0.parquet', 'https://x/atlas/aquamaps_eov/species.parquet', 5, 'cell_id'])
     expect(parseCellSpecies({ 'atlas:cell_species': { ...c['atlas:cell_species'], layout: 'h3' }, assets: c.assets }, 'https://x/')).toBeNull()
     expect(parseCellSpecies({}, 'https://x/')).toBeNull()
+  })
+})
+
+// ---- OBIS exact: the species of the place ----
+
+// synthetic: place SYN:A has five aphiaids of four names (aphiaids 12 and 13 are one name, key 2); SYN:B is a neighbour in the file
+const spRows: PlaceSpeciesRow[] = [
+  { place_id: 'SYN:A', aphiaid: 11, name_key: 1, n: 500, year_min: 1990, year_max: 2024 },
+  { place_id: 'SYN:A', aphiaid: 12, name_key: 2, n: 30, year_min: 1950, year_max: 1999 },
+  { place_id: 'SYN:A', aphiaid: 13, name_key: 2, n: 70, year_min: 1970, year_max: 2011 },
+  { place_id: 'SYN:A', aphiaid: 14n, name_key: 3, n: 70n, year_min: 2021, year_max: 2021 },
+  { place_id: 'SYN:A', aphiaid: 15, name_key: 4, n: 1, year_min: null, year_max: null },
+  { place_id: 'SYN:B', aphiaid: 11, name_key: 1, n: 9, year_min: 2005, year_max: 2006 },
+]
+const spLookup: ObisLookupRow[] = [
+  { aphiaid: 11, species: 'Synthetica alpha', class: 'Teleostei' },
+  { aphiaid: 12, species: 'Synthetica beta', class: 'Aves' },
+  { aphiaid: 13n, species: 'Synthetica beta', class: 'Aves', eov: 'seabirds', redlist_code: 'EN' },
+  { aphiaid: 14, species: 'Synthetica gamma', class: null },
+]
+// the indicators of SYN:A as the release writes them: every year 4 species (the record without a year counts), the 2020s 2
+const spInd: ObisRow[] = [
+  { place_id: 'SYN:A', eov: 'all', decade: null, n: 601, sp: 4, es: 3 },
+  { place_id: 'SYN:A', eov: 'all', decade: 1990, n: 400, sp: 2, es: null },
+  { place_id: 'SYN:A', eov: 'all', decade: 2020, n: 570, sp: 2, es: null },
+]
+
+describe('OBIS exact: the species of the place', () => {
+  const list = placeSpecies(spRows, 'SYN:A', spLookup)
+
+  it('merges the aphiaids of one name, sums records and spans the years, most records first', () => {
+    expect(list.map((s) => [s.name, s.n, s.yearMin, s.yearMax])).toEqual([
+      ['Synthetica alpha', 500, 1990, 2024], ['Synthetica beta', 100, 1950, 2011], ['Synthetica gamma', 70, 2021, 2021], ['AphiaID 15', 1, null, null],
+    ])
+    expect(list[1]).toMatchObject({ nameKey: 2, aphiaId: 13, eov: 'seabirds', cls: 'Aves', redlist: 'EN' })
+    expect(list[1].worms).toBe('https://www.marinespecies.org/aphia.php?p=taxdetails&id=13')
+  })
+
+  it('leaves the other places of the file out, and has nothing for a place the file lacks', () => {
+    expect(placeSpecies(spRows, 'SYN:B', spLookup).map((s) => s.n)).toEqual([9])
+    expect(placeSpecies(spRows, 'SYN:Z', spLookup)).toEqual([])
+  })
+
+  it('breaks a tie in records by the name', () => {
+    const r: PlaceSpeciesRow[] = [{ place_id: 'P', aphiaid: 2, name_key: 2, n: 5, year_min: 2000, year_max: 2001 }, { place_id: 'P', aphiaid: 1, name_key: 1, n: 5, year_min: 2000, year_max: 2001 }]
+    expect(placeSpecies(r, 'P', [{ aphiaid: 1, species: 'Zeta' }, { aphiaid: 2, species: 'Alpha' }]).map((s) => s.name)).toEqual(['Alpha', 'Zeta'])
+  })
+
+  it('names the group by the EOV when the lookup gives it, else by the class, else "other"', () => {
+    expect(list.map(groupOf)).toEqual(['Teleostei', 'seabirds', 'other', 'other'])
+  })
+
+  // the rule: the species count of the list is the `sp` of the indicators row, every year and in the latest decade
+  it('counts N species (names) and M in the latest decade, and they equal the sp of the indicators row', () => {
+    const sum = obisSummary(spInd, 'SYN:A')!
+    const c = speciesCounts(list, sum.latest?.decade ?? null)
+    expect(c).toEqual({ all: 4, latest: { decade: 2020, n: 2 } })
+    expect(c.all).toBe(sum.all!.sp)
+    expect(c.latest!.n).toBe(sum.latest!.sp)
+    expect(speciesCheck(c, sum)).toBeNull()
+    expect(speciesCountLine(c)).toBe('4 species with records in the place (exact), 2 in the latest decade (the 2020s).')
+  })
+
+  it('counts aphiaids, not names, would be 5: richness is the names', () => {
+    expect(spRows.filter((r) => r.place_id === 'SYN:A').length).toBe(5)
+    expect(list.length).toBe(4)
+  })
+
+  it('warns when the live numbers disagree with the indicators row, naming both', () => {
+    const sum = obisSummary(spInd, 'SYN:A')!
+    const w = speciesCheck(speciesCounts(list.filter((s) => s.nameKey !== 3), 2020), sum)!
+    expect(w).toContain('3 species in the list against 4 in the indicators for every year')
+    expect(w).toContain('1 against 2 for the 2020s')   // the dropped species (gamma, 2021) was one of the two of the 2020s
+  })
+
+  it('says only the every-year count when the place has no decade, and does not warn without indicators', () => {
+    expect(speciesCountLine(speciesCounts(list, null))).toBe('4 species with records in the place (exact).')
+    expect(speciesCheck(speciesCounts(list, null), { all: null, latest: null })).toBeNull()
+  })
+
+  it('writes the list as CSV, quoting names with commas', () => {
+    const csv = placeSpeciesCsv('SYN:A', placeSpecies(spRows, 'SYN:A', [{ aphiaid: 11, species: 'Synthetica, alpha', class: 'Teleostei' }]))
+    expect(csv.split('\n')[0]).toBe('place_id,aphiaid,name_key,scientific_name,eov,class,redlist_code,records,year_min,year_max,worms_url')
+    expect(csv.split('\n')[1]).toBe('SYN:A,11,1,"Synthetica, alpha",,Teleostei,,500,1990,2024,https://www.marinespecies.org/aphia.php?p=taxdetails&id=11')
+  })
+
+  it('finds the files next to the release', () => {
+    expect(placeSpeciesUrl({ base: 'https://x/obis-h3/v1' }, 'places')).toBe('https://x/obis-h3/v1/place_exact/coll=places/species.parquet')
+    expect(speciesLookupUrl({ base: 'https://x/obis-h3/v1/' })).toBe('https://x/obis-h3/v1/species/species.parquet')
+  })
+})
+
+describe('the row groups that can hold a place (the file is sorted by place_id)', () => {
+  const meta = (g: [number, string, string][]): MetaLike => ({
+    row_groups: g.map(([n, lo, hi]) => ({ num_rows: n, columns: [{ meta_data: { path_in_schema: ['place_id'], statistics: { min_value: lo, max_value: hi } } }] })),
+  })
+  // a place may span two groups (the boundary one: MRGID:5694 ends the first group and starts the second)
+  const m = meta([[100, 'MRGID:21787', 'MRGID:5694'], [100, 'MRGID:5694', 'MRGID:8324'], [100, 'MRGID:8324', 'MRGID:8389']])
+
+  it('reads the one group, or the neighbours when the place spans them, adjacent ones as one read', () => {
+    expect(groupsHoldingText(m, 'place_id', 'MRGID:3000')).toEqual([{ rowStart: 0, rowEnd: 100 }])
+    expect(groupsHoldingText(m, 'place_id', 'MRGID:5694')).toEqual([{ rowStart: 0, rowEnd: 200 }])
+    expect(groupsHoldingText(m, 'place_id', 'MRGID:8389')).toEqual([{ rowStart: 200, rowEnd: 300 }])
+    expect(groupsHoldingText(m, 'place_id', 'MRGID:9')).toEqual([])
+  })
+
+  it('reads a group without string statistics', () => {
+    expect(groupsHoldingText({ row_groups: [{ num_rows: 7, columns: [] }] }, 'place_id', 'X')).toEqual([{ rowStart: 0, rowEnd: 7 }])
   })
 })

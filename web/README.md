@@ -78,8 +78,29 @@ per gazetteer id, the sections in this order, each a component that only draws, 
    - *OBIS records in the place*: the obis-h3 release (`obis-h3/latest.json` -> `place_exact/coll=<coll>/indicators.parquet`,
      the place's own collection first, then its copies'), the `eov='all'` rows: records `n`, species `sp` and ES(50) `es`
      for every year and by decade, the latest decade in the line, species by EOV group, with Reproduce (the file and a
-     DuckDB query). They are counted point-in-polygon on the place itself. The per-species list is not in the release: the
-     section links the OBIS mapper and the OBIS checklist API (JSON) for the place's box (`bboxWkt`, two boxes across ±180).
+     DuckDB query). They are counted point-in-polygon on the place itself.
+     **Species with records in the place** (since 2026-10-23): the same folder's `species.parquet` (`place_id, aphiaid,
+     name_key, n, year_min, year_max`, the exact per-place species of the same pass, all places of the collection in one
+     file sorted by `place_id`). `readPlaceSpeciesRows` reads the footer (the last 64 kB), then only the row groups whose
+     `place_id` min/max statistics can hold the place (`groupsHoldingText`; a place may span two), filtered by `place_id`;
+     a file under 1 MB is fetched once whole. Measured 2026-10-23 (release v20261012): the sanctuaries' file
+     (`coll=places`, 202 kB) is one row group, so the whole file, 202 kB a page (the same as no pruning); `coll=mr_eez`
+     (4.97 MB, 6 row groups of 122,880 rows) is 0.94 MB for a place in one group and 1.83 MB for one that spans two, against
+     4.97 MB whole; `coll=fao_high_seas` 510 kB (one group). The names come from the release's `species/species.parquet`
+     (one row per `aphiaid`; columns `aphiaid, species, class` read, 1.68 MB for a page, once per page load: two row groups,
+     so no pruning is possible). `placeSpecies` merges the rows of one `name_key` (richness counts names, not aphiaids: CINMS
+     has 2,266 aphiaids of 2,258 names), sums the records, spans first and last year, and ranks by records then name.
+     The table shows the first 20 ("Show all N"), species with a WoRMS link, the group (the EOV group when the lookup has
+     an `eov` column, else the OBIS class: the release's lookup has no `eov` or `redlist_code` column yet, so today it is the
+     class), records and first-last year; a CSV (`placeSpeciesCsv`); "Explore in OBIS" (the OBIS mapper) and the OBIS
+     checklist (JSON) for the place's box (`bboxWkt`, two boxes across +-180), which is a box, not the boundary.
+     **The count line** "N species with records in the place (exact), M in the latest decade (the 2020s)" is the list's own
+     count (`speciesCounts`: N names; M names whose last year is in or after the latest decade of the indicators), and it
+     must equal `sp` of the `indicators.parquet` row (`eov='all'`, decade null; the latest decade). `speciesCheck` writes
+     the warning line the page shows when they differ (two files of different releases). The rule held for all 318 places
+     of the four collections on 2026-10-23, checked with DuckDB, and is asserted on a synthetic fixture in
+     `species.test.ts` and `speciesRead.test.ts` (a tiny species.parquet written in the test with hyparquet-writer).
+     CINMS: 2,258 species, 668 in the 2020s; FGBNMS: 469, 160 (both equal `sp`).
    - *Species from AquaMaps*: the atlas collection `aquamaps_eov` declares `atlas:cell_species`, a cell -> species table in
      5° tiles of the 0.05° grid (not H3). The place's cells are the cells whose centre falls in its polygon (exact on the
      native grid; a part too small for a centre keeps the cell under it: `placeCells`), only the tiles' row groups whose

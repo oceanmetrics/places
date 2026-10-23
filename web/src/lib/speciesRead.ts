@@ -1,10 +1,12 @@
 // the Species section's reads (a lazy chunk: hyparquet with its ZSTD codec only when the section loads). the rules are
 // species.ts; this fetches and hands rows over.
-import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
+import { asyncBufferFromUrl, cachedAsyncBuffer, parquetMetadataAsync, parquetReadObjects, type AsyncBuffer } from 'hyparquet'
 import { compressors } from 'hyparquet-compressors'
 import {
-  groupsHolding, obisSummary, OBIS_LATEST, parseCellSpecies, placeCells, placeExactUrl, sdmSpecies, tilesOf,
-  type CellSpeciesHook, type MetaLike, type ObisRelease, type ObisRow, type ObisSummary, type SdmSpecies, type SpeciesLookupRow,
+  groupsHolding, groupsHoldingText, obisSummary, OBIS_LATEST, parseCellSpecies, placeCells, placeExactUrl, placeSpecies, placeSpeciesUrl, sdmSpecies,
+  speciesLookupUrl, tilesOf,
+  type CellSpeciesHook, type MetaLike, type ObisLookupRow, type ObisRelease, type ObisRow, type ObisSpecies, type ObisSummary, type PlaceSpeciesRow,
+  type SdmSpecies, type SpeciesLookupRow,
 } from './species'
 
 /** the AquaMaps EOV collection of the atlas (the bucket's path-style url) */
@@ -32,6 +34,83 @@ export async function readObis(placeId: string, colls: readonly string[]): Promi
     if (summary) return { release, coll, url, summary }
   }
   return null
+}
+
+// ---- OBIS, exact: the species of the place ----
+
+/** an AsyncBuffer that counts the bytes its slices return, for the "bytes read" line and the measurements */
+export function countBytes(b: AsyncBuffer): AsyncBuffer & { bytes: () => number; requests: () => number } {
+  let bytes = 0, requests = 0
+  return {
+    byteLength: b.byteLength,
+    slice: (start, end) => {
+      requests++
+      return Promise.resolve(b.slice(start, end)).then((ab) => { bytes += ab.byteLength; return ab })
+    },
+    bytes: () => bytes,
+    requests: () => requests,
+  }
+}
+
+/** the footer is a few kB: ask for the last 64 kB, not hyparquet's 512 kB, so a small file is not read whole for its footer */
+const FOOTER = 64 * 1024
+
+const groupsIn = (meta: MetaLike, ranges: { rowStart: number; rowEnd: number }[]) => {
+  let start = 0, n = 0
+  for (const rg of meta.row_groups) { const end = start + Number(rg.num_rows); if (ranges.some((r) => r.rowStart <= start && end <= r.rowEnd)) n++; start = end }
+  return n
+}
+
+export interface PlaceSpeciesRead { rows: PlaceSpeciesRow[]; groups: number; groupsRead: number; bytes: number; requests: number; fileBytes: number }
+
+/**
+ * the rows of one place from a species.parquet that holds a whole collection, sorted by place_id: only the row groups whose
+ * place_id statistics can hold the place are read (columns place_id, aphiaid, name_key, n, year_min, year_max), then filtered
+ */
+export async function readPlaceSpeciesRows(file: AsyncBuffer, placeId: string, wholeUnder = 1 << 20): Promise<PlaceSpeciesRead> {
+  const counted = countBytes(file)
+  // a file under `wholeUnder` (1 MB) is fetched once whole: the footer and the groups come from that one request
+  const buf = cachedAsyncBuffer(counted, { minSize: wholeUnder })
+  const metadata = await parquetMetadataAsync(buf, { initialFetchSize: FOOTER })
+  const meta = metadata as unknown as MetaLike
+  const ranges = groupsHoldingText(meta, 'place_id', placeId)
+  const rows: PlaceSpeciesRow[] = []
+  for (const g of ranges) {
+    const got = await parquetReadObjects({ file: buf, metadata, compressors, columns: ['place_id', 'aphiaid', 'name_key', 'n', 'year_min', 'year_max'], rowStart: g.rowStart, rowEnd: g.rowEnd })
+    for (const x of got) if (x.place_id === placeId) rows.push(x as unknown as PlaceSpeciesRow)
+  }
+  return { rows, groups: meta.row_groups.length, groupsRead: groupsIn(meta, ranges), bytes: counted.bytes(), requests: counted.requests(), fileBytes: file.byteLength }
+}
+
+const lookups = new Map<string, Promise<{ rows: ObisLookupRow[]; bytes: number }>>()
+
+/** the release's species lookup, the name columns only (aphiaid, species, class, and eov / redlist_code when the file has them), once a page load */
+export function readObisLookup(url: string): Promise<{ rows: ObisLookupRow[]; bytes: number }> {
+  const hit = lookups.get(url)
+  if (hit) return hit
+  const p = (async () => {
+    const counted = countBytes(await asyncBufferFromUrl({ url }))
+    const buf = cachedAsyncBuffer(counted, { minSize: 1 << 20 })
+    const metadata = await parquetMetadataAsync(buf, { initialFetchSize: FOOTER })
+    const have = new Set(metadata.schema.map((e) => e.name))
+    const columns = ['aphiaid', 'species', 'scientific_name', 'class', 'eov', 'redlist_code'].filter((c) => have.has(c))
+    const rows = (await parquetReadObjects({ file: buf, metadata, compressors, columns })) as unknown as ObisLookupRow[]
+    return { rows, bytes: counted.bytes() }
+  })()
+  lookups.set(url, p)
+  p.catch(() => lookups.delete(url))
+  return p
+}
+
+export interface ObisSpeciesResult { url: string; list: ObisSpecies[]; rowBytes: number; lookupBytes: number; groups: number; groupsRead: number; fileBytes: number }
+
+/** the place's species list of the release; null when the collection has no species.parquet (404, 403) */
+export async function readObisSpecies(release: ObisRelease, coll: string, placeId: string): Promise<ObisSpeciesResult | null> {
+  const url = placeSpeciesUrl(release, coll)
+  let rd: PlaceSpeciesRead
+  try { rd = await readPlaceSpeciesRows(await asyncBufferFromUrl({ url }), placeId) } catch (e) { if (/\b(404|403)\b/.test(String(e))) return null; throw e }
+  const lk = await readObisLookup(speciesLookupUrl(release))
+  return { url, list: placeSpecies(rd.rows, placeId, lk.rows), rowBytes: rd.bytes, lookupBytes: lk.bytes, groups: rd.groups, groupsRead: rd.groupsRead, fileBytes: rd.fileBytes }
 }
 
 export interface SdmResult { hook: CellSpeciesHook; cells: number; tiles: number; species: SdmSpecies[]; citation: string | null; license: string | null }

@@ -2,8 +2,12 @@
 //
 // - OBIS, exact: the obis-h3 release's `place_exact/coll=<coll>/indicators.parquet` holds one row per place x EOV x decade
 //   (decade null = every year) with records `n`, species `sp` and ES(50) `es`, computed point-in-polygon on the place
-//   itself (obisindicators). the per-species list is not in the release, so the section links the OBIS mapper and the
-//   OBIS checklist API for the place's box.
+//   itself (obisindicators). the same release's `place_exact/coll=<coll>/species.parquet` (place_id, aphiaid, name_key, n,
+//   year_min, year_max) is the exact per-place species list from the same pass; richness `sp` counts distinct species
+//   names (name_key), not aphiaids (some names carry several), so the list merges the rows of one name and its count
+//   must equal `sp` of the indicators row (a rule asserted in the tests, a warning on the page if the live numbers
+//   disagree). names come from the release's species lookup (one row per aphiaid). the OBIS mapper and checklist links
+//   stay as "Explore in OBIS".
 // - AquaMaps (SDM): the atlas collection `aquamaps_eov` declares `atlas:cell_species`, a cell -> species table tiled by
 //   5 degrees over the 0.05 degree grid (`cell_id` row-major from the north-west corner, 1-based). the place's cells are
 //   the cells whose centre falls inside its polygon (exact on the native grid, as the vision's "exact is the record" rule
@@ -95,6 +99,124 @@ export function bboxWkt(b: readonly number[]): string {
 export function obisLinks(bbox: readonly number[]): { mapper: string; checklist: string } {
   const g = encodeURIComponent(bboxWkt(bbox))
   return { mapper: `https://mapper.obis.org/?geometry=${g}`, checklist: `https://api.obis.org/v3/checklist?geometry=${g}&size=1000` }
+}
+
+// ---- OBIS, exact: the species of the place ----
+
+export const placeSpeciesUrl = (release: Pick<ObisRelease, 'base'>, coll: string) => `${release.base.replace(/\/?$/, '/')}place_exact/coll=${coll}/species.parquet`
+
+/** the release's species lookup (`species/species.parquet`, one row per aphiaid), next to the place_exact folder */
+export const speciesLookupUrl = (release: Pick<ObisRelease, 'base'>) => `${release.base.replace(/\/?$/, '/')}species/species.parquet`
+
+/** a row of `place_exact/coll=<coll>/species.parquet`: one place x aphiaid */
+export interface PlaceSpeciesRow { place_id: string; aphiaid: number | bigint; name_key: number | bigint | null; n: number | bigint | null; year_min: number | null; year_max: number | null }
+
+/** the lookup columns the list reads; the EOV group and the red list code only when the lookup has them */
+export interface ObisLookupRow { aphiaid: number | bigint; species?: string | null; scientific_name?: string | null; class?: string | null; eov?: string | null; redlist_code?: string | null }
+
+export interface ObisSpecies {
+  /** the name's key: richness counts these */
+  nameKey: number
+  /** the aphiaid with the most records among those of the name (the link to WoRMS) */
+  aphiaId: number
+  name: string
+  /** the EOV group when the lookup gives it, else null */
+  eov: string | null
+  /** the OBIS class of the lookup, the group the table shows when there is no EOV */
+  cls: string | null
+  redlist: string | null
+  n: number
+  yearMin: number | null
+  yearMax: number | null
+  worms: string
+}
+
+export const wormsUrl = (aphiaId: number) => `https://www.marinespecies.org/aphia.php?p=taxdetails&id=${aphiaId}`
+
+/**
+ * the place's species, each name once: the rows of the place merged by name_key (records summed, first and last year over
+ * them), named by the lookup, most records first and then the name. `rows` may hold other places (the file holds a
+ * collection); only `placeId` counts
+ */
+export function placeSpecies(rows: readonly PlaceSpeciesRow[], placeId: string, lookup: readonly ObisLookupRow[]): ObisSpecies[] {
+  const info = new Map(lookup.map((l) => [Number(l.aphiaid), l]))
+  const by = new Map<number, { key: number; best: number; bestN: number; n: number; lo: number | null; hi: number | null }>()
+  for (const r of rows) {
+    if (r.place_id !== placeId) continue
+    const id = Number(r.aphiaid), n = num(r.n) ?? 0
+    // a row without a name_key stands for its own aphiaid (no other row can carry the same name)
+    const key = r.name_key == null ? -id : Number(r.name_key)
+    const a = by.get(key) ?? by.set(key, { key, best: id, bestN: -1, n: 0, lo: null, hi: null }).get(key)!
+    a.n += n
+    if (n > a.bestN) { a.best = id; a.bestN = n }
+    const lo = num(r.year_min), hi = num(r.year_max)
+    if (lo != null) a.lo = a.lo == null ? lo : Math.min(a.lo, lo)
+    if (hi != null) a.hi = a.hi == null ? hi : Math.max(a.hi, hi)
+  }
+  return [...by.values()].map((a) => {
+    const l = info.get(a.best)
+    return {
+      nameKey: a.key, aphiaId: a.best, name: l?.scientific_name ?? l?.species ?? `AphiaID ${a.best}`, eov: l?.eov ?? null, cls: l?.class ?? null,
+      redlist: l?.redlist_code ?? null, n: a.n, yearMin: a.lo, yearMax: a.hi, worms: wormsUrl(a.best),
+    }
+  }).sort((x, y) => y.n - x.n || x.name.localeCompare(y.name) || x.aphiaId - y.aphiaId)
+}
+
+export interface ObisSpeciesCounts {
+  /** species (names) with records in the place, every year */
+  all: number
+  /** species with a record in the latest decade, null when the place has no decade */
+  latest: { decade: number; n: number } | null
+}
+
+/** the counts the line says: every year, and those whose last year falls in the latest decade or after it */
+export function speciesCounts(list: readonly Pick<ObisSpecies, 'yearMax'>[], latestDecade: number | null): ObisSpeciesCounts {
+  return { all: list.length, latest: latestDecade == null ? null : { decade: latestDecade, n: list.filter((s) => s.yearMax != null && s.yearMax >= latestDecade).length } }
+}
+
+/** "2,258 species with records in the place (exact), 668 in the latest decade (the 2020s)." */
+export function speciesCountLine(c: ObisSpeciesCounts): string {
+  return `${int(c.all)} species with records in the place (exact)${c.latest ? `, ${int(c.latest.n)} in the latest decade (the ${c.latest.decade}s)` : ''}.`
+}
+
+/** the list against the indicators row of the same release: the sentence to warn with when they differ, else null (also null with nothing to compare) */
+export function speciesCheck(c: ObisSpeciesCounts, s: Pick<ObisSummary, 'all' | 'latest'>): string | null {
+  const bad: string[] = []
+  if (s.all && s.all.sp !== c.all) bad.push(`${int(c.all)} species in the list against ${int(s.all.sp)} in the indicators for every year`)
+  if (s.latest && c.latest && s.latest.decade === c.latest.decade && s.latest.sp !== c.latest.n) bad.push(`${int(c.latest.n)} against ${int(s.latest.sp)} for the ${s.latest.decade}s`)
+  return bad.length ? `The species list and the counts above disagree (${bad.join('; ')}): the two files may be from different releases.` : null
+}
+
+/** the group the table shows: the EOV group when the lookup gives one, else the OBIS class, else "other" */
+export const groupOf = (s: Pick<ObisSpecies, 'eov' | 'cls'>) => (s.eov ? eovLabel(s.eov) : s.cls ?? 'other')
+
+/** the list as CSV, one row per species name */
+export function placeSpeciesCsv(placeId: string, list: readonly ObisSpecies[]): string {
+  const head = ['place_id', 'aphiaid', 'name_key', 'scientific_name', 'eov', 'class', 'redlist_code', 'records', 'year_min', 'year_max', 'worms_url']
+  const rows = list.map((s) => [placeId, s.aphiaId, s.nameKey, s.name, s.eov, s.cls, s.redlist, s.n, s.yearMin, s.yearMax, s.worms])
+  return [head, ...rows].map((r) => r.map(csvCell).join(',')).join('\n') + '\n'
+}
+
+/**
+ * the row ranges of the row groups whose `key` statistics (strings) can hold `value`: a file sorted by place keeps a place
+ * in one group or a few neighbours; a group without usable statistics always counts. adjacent ranges are one read
+ */
+export function groupsHoldingText(meta: MetaLike, key: string, value: string): { rowStart: number; rowEnd: number }[] {
+  const out: { rowStart: number; rowEnd: number }[] = []
+  let start = 0
+  for (const rg of meta.row_groups) {
+    const n = Number(rg.num_rows)
+    const st = rg.columns.find((c) => c.meta_data?.path_in_schema.join('.') === key)?.meta_data?.statistics
+    const lo = st?.min_value ?? st?.min, hi = st?.max_value ?? st?.max
+    const usable = typeof lo === 'string' && typeof hi === 'string'
+    if (!usable || (lo <= value && value <= hi)) out.push({ rowStart: start, rowEnd: start + n })
+    start += n
+  }
+  return out.reduce<{ rowStart: number; rowEnd: number }[]>((acc, r) => {
+    const last = acc.at(-1)
+    if (last && last.rowEnd === r.rowStart) last.rowEnd = r.rowEnd; else acc.push({ ...r })
+    return acc
+  }, [])
 }
 
 // ---- AquaMaps: the place's cells on the 0.05 degree grid ----
