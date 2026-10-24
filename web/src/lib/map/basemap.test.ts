@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { BASEMAP_URL, DEFAULT_TILES } from '@oceanmetrics/map'
+import { BASEMAP_URL, BASEMAP_VERSION, DEFAULT_TILES } from '@oceanmetrics/map'
 import { BASEMAP_BUCKET, placesBeforeId, styleCredit, tilesAt, themeOf } from './basemap'
 
 describe('the basemap tiers', () => {
-  it('reads every tier from the bucket\'s path-style url until the storage host serves basemap/', () => {
+  it('reads every tier from the storage host, under the versioned basemap keys (map 0.3.5)', () => {
     const t = tilesAt(DEFAULT_TILES, BASEMAP_URL)
     for (const u of [t.core, t.far, t.contours, t.names, t.land, ...(t.regional ?? [])]) expect(u?.startsWith(BASEMAP_BUCKET)).toBe(true)
-    expect(t.core).toBe(`${BASEMAP_BUCKET}gebco/core.pmtiles`)
+    expect(t.core).toBe(`${BASEMAP_BUCKET}gebco/v${BASEMAP_VERSION}/core.pmtiles`)
   })
 
   it('leaves a tier elsewhere and a null tier as they are', () => {
