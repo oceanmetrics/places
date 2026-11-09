@@ -3,7 +3,7 @@ import type { Env, KeyConfig } from './env'
 import { applyCors, originAllowed } from './cors'
 import { classify, creditsKey, GENERIC_TYPES, guessContentType, isImmutable, LICENSE_LINK, SERVED_MESSAGE, target } from './paths'
 import { conditionalStatus, ifRangeAllows, parseRange, preconditionStatus, resolveRange, type ByteRange } from './range'
-import { CACHE_STATUS_HEADER, EDGE_CACHE_MAX_BYTES, IMMUTABLE_CACHE_CONTROL, lookup, SIZE_HEADER, storeCopy, type Edge } from './edge'
+import { CACHE_STATUS_HEADER, EDGE_CACHE_MAX_BYTES, IMMUTABLE_CACHE_CONTROL, lookup, objectResponse, SIZE_HEADER, storeCopy, type Edge } from './edge'
 import { evaluateCap, getUsage, rollupUsage, secondsToNextMonth, writeMetric, type Metric } from './meter'
 
 const KEY_RE        = /^[A-Za-z0-9_-]{8,64}$/
@@ -63,7 +63,7 @@ export async function handle(request: Request, env: Env, now: Date = new Date(),
 
   // finish a response: CORS on every response, one metric row
   const finish = (res: Response, bytes = 0): Response => {
-    const r = new Response(res.body, res)
+    const r = objectResponse(res.body, { status: res.status, statusText: res.statusText, headers: res.headers })
     applyCors(r.headers, allowOrigin)
     m.status = r.status
     m.bytes  = bytes
@@ -219,7 +219,7 @@ async function fromCopy(request: Request, copy: Response, objKey: string, m: Met
   const drop = async () => { await copy.body?.cancel() }
 
   const pre = conditionalStatus(request.headers, etag, lastModified)
-  if (pre) { await drop(); h.delete('content-length'); return { res: new Response(null, { status: pre, headers: h }), bytes: 0 } }
+  if (pre) { await drop(); h.delete('content-length'); return { res: objectResponse(null, { status: pre, headers: h }), bytes: 0 } }
 
   let range = parseRange(request.headers.get('range'))
   if (range && !ifRangeAllows(request.headers, etag, lastModified)) range = null
@@ -228,16 +228,17 @@ async function fromCopy(request: Request, copy: Response, objKey: string, m: Met
     const r = resolveRange(range, size)
     if (r === 'unsatisfiable') { await drop(); return unsatisfiable(size) }
     const len = r.end - r.start + 1
+    // a range of an encoded object is a range of the stored bytes, with the stored Content-Encoding (as R2/S3 serve it)
     h.set('content-range', `bytes ${r.start}-${r.end}/${size}`)
     h.set('content-length', String(len))
-    if (isHead) { await drop(); return { res: new Response(null, { status: 206, headers: h }), bytes: 0 } }
+    if (isHead) { await drop(); return { res: objectResponse(null, { status: 206, headers: h }), bytes: 0 } }
     const buf = await copy.arrayBuffer()
-    return { res: new Response(buf.slice(r.start, r.end + 1), { status: 206, headers: h }), bytes: len }
+    return { res: objectResponse(buf.slice(r.start, r.end + 1), { status: 206, headers: h }), bytes: len }
   }
   h.set('content-length', String(size))
-  if (isHead) { await drop(); return { res: new Response(null, { status: 200, headers: h }), bytes: 0 } }
+  if (isHead) { await drop(); return { res: objectResponse(null, { status: 200, headers: h }), bytes: 0 } }
   flagFullFile(m, env, objKey, size, h)
-  return { res: new Response(copy.body, { status: 200, headers: h }), bytes: size }
+  return { res: objectResponse(copy.body, { status: 200, headers: h }), bytes: size }
 }
 
 async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metric, env: Env, link: string | null,
@@ -266,17 +267,17 @@ async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metr
     const h = baseHeaders(obj, objKey, link, immutable)
     if (immutable) { h.set(CACHE_STATUS_HEADER, cacheStatus(obj.size)); fillLater(obj, h) }
     const pre = preconditionStatus(request.headers, obj.httpEtag)
-    if (pre) return { res: new Response(null, { status: pre, headers: h }), bytes: 0 }
+    if (pre) return { res: objectResponse(null, { status: pre, headers: h }), bytes: 0 }
     if (range && !ifRangeAllows(request.headers, obj.httpEtag, obj.uploaded.toUTCString())) range = null
     if (range) {
       const r = resolveRange(range, obj.size)
       if (r === 'unsatisfiable') return unsatisfiable(obj.size)
       h.set('content-range', `bytes ${r.start}-${r.end}/${obj.size}`)
       h.set('content-length', String(r.end - r.start + 1))
-      return { res: new Response(null, { status: 206, headers: h }), bytes: 0 }
+      return { res: objectResponse(null, { status: 206, headers: h }), bytes: 0 }
     }
     h.set('content-length', String(obj.size))
-    return { res: new Response(null, { status: 200, headers: h }), bytes: 0 }
+    return { res: objectResponse(null, { status: 200, headers: h }), bytes: 0 }
   }
 
   // If-Range: R2 does not evaluate it, so a ranged request carrying one checks the validator first
@@ -301,7 +302,7 @@ async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metr
   if (!('body' in obj)) {
     // precondition failed inside R2: say which one
     const pre = preconditionStatus(request.headers, obj.httpEtag) ?? 304
-    return { res: new Response(null, { status: pre, headers: h }), bytes: 0 }
+    return { res: objectResponse(null, { status: pre, headers: h }), bytes: 0 }
   }
 
   if (range) {
@@ -310,10 +311,11 @@ async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metr
       : resolveRange(range, obj.size)
     if (r === 'unsatisfiable') return unsatisfiable(obj.size)
     const len = r.end - r.start + 1
+    // a range of an encoded object is a range of the stored bytes, with the stored Content-Encoding (as R2/S3 serve it)
     h.set('content-range', `bytes ${r.start}-${r.end}/${obj.size}`)
     h.set('content-length', String(len))
     if (immutable) fillLater(obj, h)
-    return { res: new Response(obj.body, { status: 206, headers: h }), bytes: len }
+    return { res: objectResponse(obj.body, { status: 206, headers: h }), bytes: len }
   }
 
   h.set('content-length', String(obj.size))
@@ -325,7 +327,7 @@ async function serve(request: Request, bucket: R2Bucket, objKey: string, m: Metr
     body = toClient
     storeCopy(edge, objKey, h, obj.size, toCache)
   }
-  return { res: new Response(body, { status: 200, headers: h }), bytes: obj.size }
+  return { res: objectResponse(body, { status: 200, headers: h }), bytes: obj.size }
 }
 
 export default {

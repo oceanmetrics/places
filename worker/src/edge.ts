@@ -7,6 +7,23 @@ export const EDGE_CACHE_MAX_BYTES = 8 * 1024 * 1024
 /** the response header of an immutable key (`isImmutable` in paths.ts) */
 export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable'
 
+/** the init of a Response that serves object bytes: `encodeBody` is a workerd extension of ResponseInit */
+export type ObjectInit = ResponseInit & { encodeBody?: 'automatic' | 'manual' }
+
+/** a Response over stored object bytes. When the headers carry Content-Encoding (an object put with gzip metadata, such
+ *  as marine-atlas/v7/app/boot.json) the bytes are already encoded, so the runtime must send them as they are
+ *  (`encodeBody: 'manual'`); left automatic it gzips them again and the client gets gzip inside gzip. Every Response
+ *  that carries object bytes or object headers goes through here: R2 answers, edge-cache copies (stored and served),
+ *  and the final CORS copy in `handle`. A Range of an encoded object is a range of the stored (encoded) bytes and keeps
+ *  the stored header, as R2 and S3 serve it. */
+export function objectResponse(body: BodyInit | null, init: { status?: number, statusText?: string, headers?: HeadersInit } = {}): Response {
+  const headers = new Headers(init.headers)
+  const out: ObjectInit = { status: init.status ?? 200, headers }
+  if (init.statusText) out.statusText = init.statusText
+  if (headers.has('content-encoding')) out.encodeBody = 'manual'
+  return new Response(body, out)
+}
+
 /** cache keys live on the production host whatever host served the request, so a purge by URL is the public URL */
 export const EDGE_ORIGIN = 'https://storage.oceanmetrics.io'
 
@@ -48,7 +65,7 @@ export function storeCopy(edge: Edge, objKey: string, headers: Headers, size: nu
   const job = (async () => {
     const stream = typeof body === 'function' ? await body() : body
     if (!stream) return
-    await edge.cache.put(edgeCacheKey(objKey), new Response(stream, { status: 200, headers: h }))
+    await edge.cache.put(edgeCacheKey(objKey), objectResponse(stream, { status: 200, headers: h }))
   })().catch(e => console.log('edge cache put', objKey, String(e))).finally(() => filling.delete(objKey))
   edge.waitUntil(job)
 }

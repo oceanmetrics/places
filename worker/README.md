@@ -59,6 +59,12 @@ once per isolate per 10 minutes), and the root files none. `Content-Type` is the
 and html and 300 s otherwise; an immutable key (next section) always gets `public, max-age=31536000, immutable`.
 `If-Range` (since 2026-10-23): a Range with an `If-Range` that is not the current strong ETag or the exact
 `Last-Modified` date is answered with the whole 200.
+`Content-Encoding` (since 2026-11-09): an object stored with an encoding (`marine-atlas/v7/app/boot.json`, put with
+`Content-Encoding: gzip`) is served as stored, one layer, with that header, from R2 and from the edge copy alike: every
+Response over object bytes is built by `objectResponse()` (`src/edge.ts`), which sets workerd's `encodeBody: "manual"`
+when the headers carry `Content-Encoding` (left automatic, the runtime gzips the gzip again and `JSON.parse` fails after
+the browser's one decode). A Range of an encoded object is a range of the stored gzip bytes with the stored header, as R2
+and S3 serve it. Tests: `test/encoding.test.ts`, through the real entrypoint (`SELF`, raw wire bytes).
 
 Keys are low-grade, rotatable attribution keys, not secrets: they sit in URLs, history and logs.
 
