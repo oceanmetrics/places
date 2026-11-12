@@ -55,7 +55,7 @@ async function seedPrefixes(): Promise<void> {
 beforeAll(async () => { await seed(); await seedPrefixes() })
 
 describe('target(): the allow-list', () => {
-  const cases: [string, { store: 'public' | 'unlisted', key: string, prefix: string } | null][] = [
+  const cases: [string, { store: 'public' | 'unlisted', key: string, prefix: string, folder?: string } | null][] = [
     ['/gazetteer/catalog.json',                    { store: 'public', key: 'gazetteer/catalog.json', prefix: 'gazetteer' }],
     ['/indicators/coverage.parquet',               { store: 'public', key: 'indicators/coverage.parquet', prefix: 'indicators' }],
     ['/atlas/aquamaps_eov/collection.json',        { store: 'public', key: 'atlas/aquamaps_eov/collection.json', prefix: 'atlas' }],
@@ -65,11 +65,11 @@ describe('target(): the allow-list', () => {
     ['/issues/apps-8/walrus.jpg',                  { store: 'public', key: 'issues/apps-8/walrus.jpg', prefix: 'issues' }],
     ['/atlas-restricted/coll/data.parquet',        { store: 'public', key: 'atlas-restricted/coll/data.parquet', prefix: 'atlas-restricted' }],
     ['/unlisted/gazetteer/mr_eez/places.parquet',  { store: 'unlisted', key: 'gazetteer/mr_eez/places.parquet', prefix: 'unlisted' }],
-    // folder urls read index.html under them
-    ['/marine-atlas/',                             { store: 'public', key: 'marine-atlas/index.html', prefix: 'marine-atlas' }],
-    ['/marine-atlas/cog/',                         { store: 'public', key: 'marine-atlas/cog/index.html', prefix: 'marine-atlas' }],
-    ['/gazetteer/',                                { store: 'public', key: 'gazetteer/index.html', prefix: 'gazetteer' }],
-    ['/',                                          { store: 'public', key: 'index.html', prefix: 'root' }],
+    // folder urls read index.html under them, and carry the list prefix for a listing when there is none
+    ['/marine-atlas/',                             { store: 'public', key: 'marine-atlas/index.html', prefix: 'marine-atlas', folder: 'marine-atlas/' }],
+    ['/marine-atlas/cog/',                         { store: 'public', key: 'marine-atlas/cog/index.html', prefix: 'marine-atlas', folder: 'marine-atlas/cog/' }],
+    ['/gazetteer/',                                { store: 'public', key: 'gazetteer/index.html', prefix: 'gazetteer', folder: 'gazetteer/' }],
+    ['/',                                          { store: 'public', key: 'index.html', prefix: 'root', folder: '' }],
     // root files
     ['/index.html',                                { store: 'public', key: 'index.html', prefix: 'root' }],
     ['/README.md',                                 { store: 'public', key: 'README.md', prefix: 'root' }],
@@ -189,7 +189,8 @@ describe('every published prefix through handle()', () => {
     { path: '/README.md',                             status: 200, cls: 'other', tier: 'open', prefix: 'root', type: 'text/markdown; charset=utf-8' },
     { path: '/marine-atlas/',                         status: 200, cls: 'other', tier: 'open', prefix: 'marine-atlas', type: 'text/html' },
     { path: '/marine-atlas/cog/',                     status: 200, cls: 'other', tier: 'open', prefix: 'marine-atlas' },
-    { path: '/indicators/',                           status: 404, cls: 'other', tier: 'open', prefix: 'indicators', error: 'not_found' },
+    // no stored index.html: a generated listing, metered class listing through the anonymous limiter (test/listing.test.ts)
+    { path: '/indicators/',                           status: 200, cls: 'listing', tier: 'anonymous', prefix: 'indicators', type: 'text/html; charset=utf-8' },
     // gazetteer unchanged: Link on its data
     { path: '/gazetteer/mpa/places.parquet',          range: 'bytes=0-99', status: 206, cls: 'parquet', tier: 'anonymous', prefix: 'gazetteer', link: GAZ_LINK },
   ]

@@ -2,8 +2,9 @@
 
 /** metric class (blob3): `stac` any json; `parquet`, `pmtiles`, `tif` by extension; `data` other data files
  *  (duckdb, zip, gz, fgb, unknown extensions); `other` keyless metadata (md, html, images, txt, csv, `credits`);
- *  `unlisted` the unlisted bucket and `atlas-restricted/` */
-export type PathClass = 'stac' | 'parquet' | 'pmtiles' | 'tif' | 'data' | 'other' | 'unlisted'
+ *  `unlisted` the unlisted bucket and `atlas-restricted/` (their folder listings included); `listing` a generated
+ *  folder listing of a public prefix */
+export type PathClass = 'stac' | 'parquet' | 'pmtiles' | 'tif' | 'data' | 'other' | 'unlisted' | 'listing'
 
 /** which R2 bucket a path reads: `BUCKET` (the public catalog) or `UNLISTED` (copies kept out of the catalog) */
 export type Store = 'public' | 'unlisted'
@@ -30,12 +31,14 @@ export const SERVED_MESSAGE = 'served prefixes: ' +
   [...PUBLIC_PREFIXES.map(p => `/${p}/`), '/unlisted/gazetteer/ (key)', ...RESTRICTED_PREFIXES.map(p => `/${p}/ (key)`),
     ...ROOT_FILES.map(f => `/${f}`)].join(', ')
 
-/** a resolved request path: bucket, R2 object key and the metric prefix (first segment, `root` for root files) */
-export interface Target { store: Store, key: string, prefix: string }
+/** a resolved request path: bucket, R2 object key and the metric prefix (first segment, `root` for root files).
+ *  `folder` is set for a folder URL (ending in `/`, or the bare `/`): the R2 list prefix under it (`''` for the bucket
+ *  root, `marine-atlas/v11/tables/`), listed when no `index.html` is stored there (`src/listing.ts`). */
+export interface Target { store: Store, key: string, prefix: string, folder?: string }
 
 /** bucket and R2 object key for a request path, or null when the path is outside the served prefixes or is unsafe.
  *  A folder URL (ending in `/`, or the bare `/`) reads `index.html` under it (the old Caddy's `/marine-atlas/` rewrite);
- *  it is a 404 later when that object does not exist. Both buckets use the same `gazetteer/...` key layout. */
+ *  when that object does not exist `handle` lists the folder instead (`folder`, `src/listing.ts`). Both buckets use the same `gazetteer/...` key layout. */
 export function target(pathname: string): Target | null {
   let p: string
   try { p = decodeURIComponent(pathname) } catch { return null }
@@ -45,14 +48,16 @@ export function target(pathname: string): Target | null {
     store = 'unlisted'; p = p.slice(UNLISTED_PREFIX.length)
     if (!p.startsWith('gazetteer/')) return null
   }
-  if (p === '' || p.endsWith('/')) p += 'index.html'
+  const isFolder = p === '' || p.endsWith('/')
+  const folder   = isFolder ? { folder: p } : {}
+  if (isFolder) p += 'index.html'
   const segs = p.split('/')
   if (segs.some(seg => seg === '..' || seg === '.' || seg === '')) return null
-  if (segs.length === 1) return store === 'public' && ROOT_FILES.includes(p) ? { store, key: p, prefix: 'root' } : null
+  if (segs.length === 1) return store === 'public' && ROOT_FILES.includes(p) ? { store, key: p, prefix: 'root', ...folder } : null
   const first = segs[0]
-  if (store === 'unlisted') return { store, key: p, prefix: 'unlisted' }
+  if (store === 'unlisted') return { store, key: p, prefix: 'unlisted', ...folder }
   if (!PUBLIC_PREFIXES.includes(first) && !RESTRICTED_PREFIXES.includes(first)) return null
-  return { store, key: p, prefix: first }
+  return { store, key: p, prefix: first, ...folder }
 }
 
 /** R2 object key for a public request path (see `target`), or null. */
@@ -145,7 +150,7 @@ const VERSION_DIR = /^v\d+$/
  *  `issues/`, the root files, `atlas-restricted/` and the unlisted bucket. The contract this sets for publishers: a key
  *  that matches is never rewritten with other bytes (an amendment adds files or starts a new version folder). */
 export function isImmutable(key: string, store: Store = 'public'): boolean {
-  if (store !== 'public') return false
+  if (store !== 'public' || key === '' || key.endsWith('/')) return false   // never a folder (a listing changes)
   const segs = key.split('/')
   if (segs.length < 3 || segs.some(s => s === '' || s === '_history')) return false
   if (!IMMUTABLE_EXT.has(extOf(key))) return false

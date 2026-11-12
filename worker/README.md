@@ -22,7 +22,7 @@ Which paths are served (`target()` in `src/paths.ts`):
 |---|---|
 | `/gazetteer/...`, `/indicators/...`, `/atlas/...`, `/obis-h3/...`, `/basemap/...`, `/marine-atlas/...`, `/issues/...` | served from `BUCKET` (`oceanmetrics-io-public-enam`), gated by type (next table) |
 | `/index.html`, `/README.md` (and `/`, which reads `index.html`) | served, keyless; every other root object (`nc.parquet`, `indicators.pmtiles`) is a 404 |
-| a folder URL ending in `/` (`/marine-atlas/`, `/marine-atlas/cog/`) | serves `index.html` under it when that object exists, else 404 (the old Caddy's `/marine-atlas/` rewrite) |
+| a folder URL ending in `/` (`/marine-atlas/`, `/marine-atlas/cog/`) | serves `index.html` under it when that object exists (the old Caddy's `/marine-atlas/` rewrite), else a generated listing of the folder (see Listings), or 404 when nothing is under it |
 | `/atlas-restricted/...` (restricted atlas collections, not linked from `catalog.json`) | served from `BUCKET` like `/unlisted/`: every file (json included) needs a valid key, **no anonymous tier**, metric class `unlisted`; keyless is 403 `key_required` |
 | `/unlisted/gazetteer/...` | served from `UNLISTED` (below) |
 | `/backups/...` and anything else | 404 JSON `{error:"not_found", message:"served prefixes: ..."}`, key or not (the multi-GB database dump must never be reachable: this is the old Caddy's allow-list) |
@@ -67,6 +67,45 @@ the browser's one decode). A Range of an encoded object is a range of the stored
 and S3 serve it. Tests: `test/encoding.test.ts`, through the real entrypoint (`SELF`, raw wire bytes).
 
 Keys are low-grade, rotatable attribution keys, not secrets: they sit in URLs, history and logs.
+
+## Listings
+
+Since 2026-11-13 (Ben, Marine Sensitivity R2 migration) directory listings come from the Worker, not from static
+`index.html` objects (`scripts/build_browse_pages.py`, the MST notebooks' per-directory pages, which stop being written).
+`src/listing.ts`, wired in `handle()`; tests `test/listing.test.ts`.
+
+- **When**: a request path ending in `/` (or the bare `/`, the bucket root) whose `index.html` is not stored. A stored
+  `index.html` at that key still wins and is served as before (the root `/` keeps its static page). A first page with
+  nothing under the folder is a 404 as before.
+- **What**: one page of `BUCKET.list({ prefix, delimiter: '/', cursor, limit: 1000 })` (the `UNLISTED` bucket for
+  `/unlisted/gazetteer/...`): the subfolders (`delimitedPrefixes`) first, sorted, then the objects sorted by key, with size,
+  `uploaded` and ETag. A folder marker object (key = the prefix) is not a row. At the root only the served public prefixes
+  and root files appear (`backups/`, `atlas-restricted/`, `nc.parquet` never do).
+- **HTML** by default: plain, one table, relative links (each segment percent-encoded), a `..` link (not at the root or at
+  `/unlisted/gazetteer/`), the title the prefix, a `next page` link `?cursor=<cursor>` when the page is truncated, and a
+  footer naming the Worker and the page cursor. No script, no inline data beyond the listing.
+- **JSON** with `Accept: application/json` (an Accept that also names `text/html`, as a browser's does, gets the page) or
+  `?format=json` (`?format=html` forces the page):
+  `{ "prefix": "marine-atlas/v11/tables/", "folders": ["sub/"], "objects": [{ "key": "marine-atlas/v11/tables/x.csv", "size": 123, "uploaded": "2026-11-13T00:00:00.000Z", "etag": "<R2 etag, unquoted>" }], "cursor": null }`.
+  `prefix` and every `key` are request paths without the leading `/` (`unlisted/gazetteer/...` for the unlisted bucket),
+  so `https://storage.oceanmetrics.io/<key>` reads the object; `folders` are names relative to `prefix`; `cursor` is the
+  next page's `?cursor=`, `null` on the last page.
+- **Paging**: `?cursor=` is R2's `cursor` (given while `truncated`); a cursor R2 refuses is a 400 `bad_cursor`.
+- **Headers**: `Cache-Control: public, max-age=60`, `Vary: Accept`, `Content-Length`, CORS as on objects; HEAD answers the
+  same headers with no body.
+- **Tiers, as an object read**: under `/unlisted/gazetteer/` and `/atlas-restricted/` a listing needs a valid key (403
+  `key_required` without, `invalid_key` / `origin_not_allowed` as usual); elsewhere it is the anonymous tier through
+  `ANON_LIMITER` (429 over the limit) or a key. `backups/` and every unserved path stay 404. `?key=` is never echoed into
+  the page, its links or the JSON (so a next-page link from a keyed listing drops the key).
+- **Metering**: one data point like a read: class `listing` (`unlisted` under the two key-only prefixes), the folder path
+  in `blob7`, the body bytes (0 for HEAD).
+- **Not cached at the edge**: `isImmutable` never matches a folder key (a listing changes as files are added).
+
+```sh
+curl -s https://storage.oceanmetrics.io/marine-atlas/v11/tables/                                    # HTML
+curl -s -H 'Accept: application/json' https://storage.oceanmetrics.io/marine-atlas/v11/tables/      # JSON
+curl -s 'https://storage.oceanmetrics.io/marine-atlas/v11/tables/?format=json&cursor=<cursor>'      # next page
+```
 
 ## Edge cache
 
@@ -123,7 +162,7 @@ One Analytics Engine data point per request (every response, errors included):
 | field | content |
 |---|---|
 | `index1` | key id, or `anon` |
-| `blob1`..`blob7` | key id (`''` if keyless), app, class (`stac`/`parquet`/`pmtiles`/`tif`/`data`/`other`/`fullfile`/`unlisted`), Origin, tier (`anonymous`, `open` for keyless content, else the key's tier), method, object path (prefixed `unlisted/` for the unlisted bucket) |
+| `blob1`..`blob7` | key id (`''` if keyless), app, class (`stac`/`parquet`/`pmtiles`/`tif`/`data`/`other`/`fullfile`/`unlisted`/`listing`), Origin, tier (`anonymous`, `open` for keyless content, else the key's tier), method, object path (prefixed `unlisted/` for the unlisted bucket) |
 | `blob8` | prefix, so usage reads per catalog: the first segment of the object path (`gazetteer`, `indicators`, `atlas`, `obis-h3`, `basemap`, `marine-atlas`, `issues`, `atlas-restricted`, `unlisted`), `root` for the root files, or the request path's first segment when the path is not served (`backups` shows probing) |
 | `double1`, `double2` | response bytes (the declared body length: a ranged GET is its range, HEAD/304/errors are 0), HTTP status |
 
@@ -140,13 +179,13 @@ Consequence: a cap is enforced with up to ~15 minutes of lag, and it is a billin
 ```sh
 cd worker
 npm install
-npm test            # vitest + @cloudflare/vitest-plugin (workerd via miniflare), 221 tests
+npm test            # vitest + @cloudflare/vitest-plugin (workerd via miniflare), 252 tests
 npm run typecheck
 ```
 
 Tests use the real local R2 and KV from `wrangler.toml` with fake Analytics Engine and rate-limit bindings.
 `test/prefixes.test.ts` is the table per prefix and type (keyless metadata, public data keyed and anonymous, restricted
-keyed, `backups/` 404, the root files, the folder index rewrite). In a sandbox
+keyed, `backups/` 404, the root files, the folder index rewrite); `test/listing.test.ts` the folder listings. In a sandbox
 where the default temp dir is read-only, run with `TMPDIR=<writable dir> npm test`. The tests need no Cloudflare login.
 (`@cloudflare/vitest-pool-workers` is deprecated and renamed `@cloudflare/vitest-plugin`; this uses the new one.)
 

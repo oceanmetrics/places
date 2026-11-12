@@ -5,6 +5,7 @@ import { classify, creditsKey, GENERIC_TYPES, guessContentType, isImmutable, LIC
 import { conditionalStatus, ifRangeAllows, parseRange, preconditionStatus, resolveRange, type ByteRange } from './range'
 import { CACHE_STATUS_HEADER, EDGE_CACHE_MAX_BYTES, IMMUTABLE_CACHE_CONTROL, lookup, objectResponse, SIZE_HEADER, storeCopy, type Edge } from './edge'
 import { evaluateCap, getUsage, rollupUsage, secondsToNextMonth, writeMetric, type Metric } from './meter'
+import { BadCursor, LIST_LIMIT, LISTING_CACHE_CONTROL, listFolder, listingHtml, wantsJson } from './listing'
 
 const KEY_RE        = /^[A-Za-z0-9_-]{8,64}$/
 const FULLFILE_DEFAULT = 16 * 1024 * 1024
@@ -41,6 +42,8 @@ function firstSegment(pathname: string): string {
 export interface HandleOptions {
   ctx?:   Pick<ExecutionContext, 'waitUntil'>
   cache?: Cache | null
+  /** folder listing page size (default and R2 maximum 1000; tests page with less) */
+  listLimit?: number
 }
 
 /** the edge cache for this request, or null: off without a ctx or Cache API, and on the workers.dev preview (its Cache
@@ -90,8 +93,16 @@ export async function handle(request: Request, env: Env, now: Date = new Date(),
   const linkP  = licenseLink(env, t.store, t.prefix, now.getTime())   // cached; runs alongside the key lookup
   if (!bucket) return err(404, { error: 'not_found' })
 
-  const { cls, gate } = classify(objKey, t.store)
+  // a folder URL with no stored index.html is a listing (a stored one still wins and is served below as before). A listing
+  // is gated like a data read: key-only under `unlisted/` and `atlas-restricted/` (exactly as an object read there),
+  // elsewhere the anonymous tier through the limiter, or a key
+  let listing = false
+  if (t.folder !== undefined) listing = (await bucket.head(objKey)) === null
+  const c = classify(objKey, t.store)
+  const cls  = listing ? (c.cls === 'unlisted' ? 'unlisted' : 'listing') : c.cls
+  const gate = listing ? (c.gate === 'key' ? 'key' : 'anonymous') : c.gate
   m.cls = cls
+  if (listing) m.path = (t.store === 'unlisted' ? 'unlisted/' : '') + t.folder
 
   // key resolution ----
   const keyId = url.searchParams.get('key') ?? ''
@@ -147,6 +158,13 @@ export async function handle(request: Request, env: Env, now: Date = new Date(),
     if (usage.state === 'soft') usageHeader = `used=${usage.used}; cap=${usage.cap}; pct=${usage.pct}; state=soft`
   }
 
+  if (listing) {
+    const out = await listResponse(request, url, bucket, t.store, t.folder!, opts.listLimit ?? LIST_LIMIT)
+    if (!out) return err(400, { error: 'bad_cursor', message: 'the ?cursor= is not one this listing gave out' })
+    if (usageHeader) out.res.headers.set('x-om-usage', usageHeader)
+    return finish(out.res, out.bytes)
+  }
+
   // object (serve() reclassifies m.cls to `fullfile` for a flagged un-ranged parquet read) ----
   // immutable keys (public data whose key names its content) go through the edge cache; key and limit checks are above,
   // so a copy is only ever served to a request that passed them, and the unlisted bucket is never cached
@@ -169,6 +187,26 @@ export async function handle(request: Request, env: Env, now: Date = new Date(),
 }
 
 interface Served { res: Response, bytes: number }
+
+/** one listing page as HTML (default) or JSON, HEAD without the body; 404 for an empty folder; null for a cursor R2 refuses */
+async function listResponse(request: Request, url: URL, bucket: R2Bucket, store: 'public' | 'unlisted', folder: string,
+  limit: number): Promise<Served | null> {
+  const cursor = url.searchParams.get('cursor') || null
+  let l
+  try { l = await listFolder(bucket, store, folder, cursor, limit) } catch (e) { if (e instanceof BadCursor) return null; throw e }
+  // a first page with nothing in it is a folder that does not exist: 404 as before (S3 would answer an empty list)
+  if (!cursor && l.folders.length === 0 && l.objects.length === 0) return notFound()
+  const json = wantsJson(request, url)
+  const body = new TextEncoder().encode(json ? JSON.stringify(l) : listingHtml(l, cursor))
+  const h = new Headers({
+    'content-type':   json ? 'application/json; charset=utf-8' : 'text/html; charset=utf-8',
+    'cache-control':  LISTING_CACHE_CONTROL,
+    'content-length': String(body.byteLength),
+    'vary':           'Accept',
+  })
+  if (request.method === 'HEAD') return { res: new Response(null, { status: 200, headers: h }), bytes: 0 }
+  return { res: new Response(body, { status: 200, headers: h }), bytes: body.byteLength }
+}
 
 function baseHeaders(obj: R2Object, objKey: string, link: string | null, immutable = false): Headers {
   const h = new Headers()
