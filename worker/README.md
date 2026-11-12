@@ -74,9 +74,12 @@ Since 2026-11-13 (Ben, Marine Sensitivity R2 migration) directory listings come 
 `index.html` objects (`scripts/build_browse_pages.py`, the MST notebooks' per-directory pages, which stop being written).
 `src/listing.ts`, wired in `handle()`; tests `test/listing.test.ts`.
 
-- **When**: a request path ending in `/` (or the bare `/`, the bucket root) whose `index.html` is not stored. A stored
-  `index.html` at that key still wins and is served as before (the root `/` keeps its static page). A first page with
-  nothing under the folder is a 404 as before.
+- **When**: a request path ending in `/` (or the bare `/`, the bucket root) that asks for JSON explicitly
+  (`Accept: application/json` or `?format=json`), or whose `index.html` is not stored. A stored `index.html` wins for HTML
+  requests only (a browser's Accept, no Accept, `?format=html`) and is served as before, so the root `/` keeps its static
+  page and the ~3,944 `marine-atlas/` folders with a stored page (`marine-atlas/cog/global05/`) keep it in a browser, while
+  a JSON request there gets the listing, with `index.html` as one of its objects (since 2026-11-13, the msens session).
+  HEAD follows the same rule. A first page with nothing under the folder is a 404 as before.
 - **What**: one page of `BUCKET.list({ prefix, delimiter: '/', cursor, limit: 1000 })` (the `UNLISTED` bucket for
   `/unlisted/gazetteer/...`): the subfolders (`delimitedPrefixes`) first, sorted, then the objects sorted by key, with size,
   `uploaded` and ETag. A folder marker object (key = the prefix) is not a row. At the root only the served public prefixes
@@ -179,7 +182,7 @@ Consequence: a cap is enforced with up to ~15 minutes of lag, and it is a billin
 ```sh
 cd worker
 npm install
-npm test            # vitest + @cloudflare/vitest-plugin (workerd via miniflare), 252 tests
+npm test            # vitest + @cloudflare/vitest-plugin (workerd via miniflare), 256 tests
 npm run typecheck
 ```
 

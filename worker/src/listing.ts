@@ -1,4 +1,4 @@
-// folder listings: a folder URL with no stored index.html lists the bucket under it ----
+// folder listings: a folder URL lists the bucket under it when JSON is asked for or no index.html is stored ----
 import { PUBLIC_PREFIXES, ROOT_FILES, type Store } from './paths'
 
 /** R2's page limit; one listing page holds at most this many folders plus objects */

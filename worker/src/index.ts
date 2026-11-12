@@ -93,11 +93,12 @@ export async function handle(request: Request, env: Env, now: Date = new Date(),
   const linkP  = licenseLink(env, t.store, t.prefix, now.getTime())   // cached; runs alongside the key lookup
   if (!bucket) return err(404, { error: 'not_found' })
 
-  // a folder URL with no stored index.html is a listing (a stored one still wins and is served below as before). A listing
-  // is gated like a data read: key-only under `unlisted/` and `atlas-restricted/` (exactly as an object read there),
-  // elsewhere the anonymous tier through the limiter, or a key
+  // a folder URL is a listing when JSON is asked for explicitly (`wantsJson`: Accept: application/json or ?format=json),
+  // or when no index.html is stored there; a stored one still wins for HTML requests and is served below as before.
+  // A listing is gated like a data read: key-only under `unlisted/` and `atlas-restricted/` (exactly as an object read
+  // there), elsewhere the anonymous tier through the limiter, or a key
   let listing = false
-  if (t.folder !== undefined) listing = (await bucket.head(objKey)) === null
+  if (t.folder !== undefined) listing = wantsJson(request, url) || (await bucket.head(objKey)) === null
   const c = classify(objKey, t.store)
   const cls  = listing ? (c.cls === 'unlisted' ? 'unlisted' : 'listing') : c.cls
   const gate = listing ? (c.gate === 'key' ? 'key' : 'anonymous') : c.gate

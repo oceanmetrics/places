@@ -1,4 +1,4 @@
-// folder listings: a folder URL with no stored index.html lists the bucket under it ----
+// folder listings: a folder URL lists the bucket under it when JSON is asked for or no index.html is stored ----
 import { beforeAll, describe, expect, it } from 'vitest'
 import { env } from 'cloudflare:test'
 import { handle } from '../src/index'
@@ -176,18 +176,71 @@ describe('the root and a stored index.html', () => {
     expect(html).not.toContain('atlas-restricted')
   })
 
-  it('a stored index.html still wins: the root and a subfolder serve it as before (class other, open tier)', async () => {
+  it('a stored index.html still wins for HTML: the root, a browser Accept and ?format=html serve it (class other, open tier)', async () => {
     await env.BUCKET.put('index.html', '<html>root page</html>')
     const r = rig()
     const root = await run(r, get('/', anon()))
     expect(root.status).toBe(200)
     expect(await root.text()).toBe('<html>root page</html>')
-    const v11 = await run(r, get('/marine-atlas/v11/', anon({ headers: { accept: 'application/json' } })))
-    expect(v11.status).toBe(200)
-    expect(await v11.text()).toBe('<html>v11 page</html>')
-    expect(r.points.map(p => p.blobs[2])).toEqual(['other', 'other'])
-    expect(r.points.map(p => p.blobs[4])).toEqual(['open', 'open'])
+    const browser = await run(r, get('/marine-atlas/v11/', anon({ headers: { accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8' } })))
+    expect(browser.status).toBe(200)
+    expect(await browser.text()).toBe('<html>v11 page</html>')
+    const forced = await run(r, get('/marine-atlas/v11/?format=html', anon({ headers: { accept: 'application/json' } })))
+    expect(await forced.text()).toBe('<html>v11 page</html>')
+    expect(r.points.map(p => p.blobs[2])).toEqual(['other', 'other', 'other'])
+    expect(r.points.map(p => p.blobs[4])).toEqual(['open', 'open', 'open'])
     expect(r.limited.anon).toEqual([])
+  })
+
+  it('an explicit JSON request lists a folder even when index.html is stored (Accept and ?format=json), index.html a row', async () => {
+    const r = rig()
+    const v11 = (await env.BUCKET.head('marine-atlas/v11/index.html'))!
+    const want = (await env.BUCKET.head('marine-atlas/v11/release.json'))!
+    const row = (o: R2Object) => ({ key: o.key, size: o.size, uploaded: o.uploaded.toISOString(), etag: o.etag })
+    const body = { prefix: 'marine-atlas/v11/', folders: ['tables/'], objects: [row(v11), row(want)], cursor: null }
+    for (const req of [get('/marine-atlas/v11/', anon(JSON_ACCEPT)), get('/marine-atlas/v11/?format=json', anon())]) {
+      const res = await run(r, req)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8')
+      expect(res.headers.get('cache-control')).toBe(LISTING_CACHE_CONTROL)
+      expect(await res.json()).toEqual(body)
+    }
+    expect(r.points.map(p => p.blobs[2])).toEqual(['listing', 'listing'])
+    expect(r.limited.anon).toEqual([IP, IP])                                     // listings go through the limiter
+    // the root too: JSON lists it, the page still serves the stored index.html
+    const root = await run(rig(), get('/?format=json'))
+    expect((await root.json() as Listing).objects.map(o => o.key)).toEqual(['README.md', 'index.html'])
+  })
+
+  it('HEAD follows the same rule: the stored page for HTML, the listing headers for JSON', async () => {
+    const page = await run(rig(), get('/marine-atlas/v11/', { method: 'HEAD' }))
+    expect(page.status).toBe(200)
+    expect(page.headers.get('content-length')).toBe(String('<html>v11 page</html>'.length))
+    expect(page.headers.get('cache-control')).toBe('public, max-age=60')
+    expect(page.headers.get('etag')).toBeTruthy()                                 // the object's headers
+    const json = await run(rig(), get('/marine-atlas/v11/', { method: 'HEAD', headers: { accept: 'application/json' } }))
+    expect(json.status).toBe(200)
+    expect(json.headers.get('content-type')).toBe('application/json; charset=utf-8')
+    expect(json.headers.get('etag')).toBeNull()
+    expect(await json.text()).toBe('')
+  })
+
+  it('fault: a JSON listing of a folder with a stored index.html keeps the listing tiers (429 over the anonymous limit, 400 bad cursor), the page does not', async () => {
+    const r = rig({ anonOk: false })
+    const json = await run(r, get('/marine-atlas/v11/?format=json', anon()))
+    expect(json.status).toBe(429)
+    expect((await json.json() as { error: string }).error).toBe('rate_limited')
+    const page = await run(r, get('/marine-atlas/v11/', anon()))
+    expect(page.status).toBe(200)
+    expect(await page.text()).toBe('<html>v11 page</html>')
+    const r2 = rig()
+    const real = r2.env.BUCKET
+    r2.env.BUCKET = new Proxy(real, { get: (t, k) => k === 'list'
+      ? (o: R2ListOptions) => o.cursor ? Promise.reject(new Error('list: invalid cursor')) : t.list(o)
+      : (t[k as keyof R2Bucket] as Function).bind(t) }) as R2Bucket
+    const bad = await run(r2, get('/marine-atlas/v11/?format=json&cursor=nope'))
+    expect(bad.status).toBe(400)
+    expect((await bad.json() as { error: string }).error).toBe('bad_cursor')
   })
 
   it('fault: a folder with nothing under it is a 404, as before', async () => {
@@ -218,6 +271,16 @@ describe('tiers: unlisted, restricted, backups', () => {
     expect(r.points.map(p => p.blobs[2])).toEqual(['unlisted', 'unlisted', 'unlisted', 'unlisted'])
     expect(r.points[2].blobs.slice(0, 2)).toEqual([GOOD_KEY, 'erddap-places'])
     expect(r.points[2].blobs[6]).toBe('unlisted/gazetteer/')
+  })
+
+  it('/atlas-restricted/ with a stored index.html: JSON without a key 403, with the key the listing', async () => {
+    await env.BUCKET.put('atlas-restricted/coll/index.html', '<html>restricted</html>')
+    const no = await run(rig(), get('/atlas-restricted/coll/?format=json'))
+    expect(no.status).toBe(403)
+    expect((await no.json() as { error: string }).error).toBe('key_required')
+    const yes = await run(rig(), get(`/atlas-restricted/coll/?format=json&key=${GOOD_KEY}`))
+    expect((await yes.json() as Listing).objects.map(o => o.key)).toEqual(['atlas-restricted/coll/data.parquet', 'atlas-restricted/coll/index.html'])
+    await env.BUCKET.delete('atlas-restricted/coll/index.html')
   })
 
   it('/atlas-restricted/ without a key: 403; with the key: 200', async () => {
